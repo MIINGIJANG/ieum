@@ -63,6 +63,7 @@ export class SignAvatar {
     this._slimTorso();
     this._captureRest();
     this._dressUp();
+    this._tightTop();
     this._shortenSleeves();
     this._eyeColor();
     this._bareHands();
@@ -246,6 +247,67 @@ export class SignAvatar {
     }
   }
 
+  // 몸에 붙는 상의: 윗옷 꼭짓점을 가장 가까운 몸(피부) 표면 바로 바깥으로 당기고, 그 몸 부분과 같은 뼈를 따르게 함
+  // (몸이 없는 곳 — 옷에 가려 지워진 부분 — 은 가까운 뼈 축 쪽으로 줄임)
+  _tightTop(gap = 0.007, keep = 0.12) {
+    const V = THREE.Vector3;
+    this.vrm.update(0); this.vrm.scene.updateMatrixWorld(true);
+    const body = [];                                   // [pos, normal, skinIndex4, skinWeight4, mesh]
+    let tops = null;
+    this.vrm.scene.traverse((o) => {
+      if (!o.isSkinnedMesh) return;
+      const n = [].concat(o.material).map((m) => m.name).join(" ");
+      if (/Tops/i.test(n)) tops = o;
+      if (!/Body.*SKIN/i.test(n)) return;
+      const g = o.geometry, pos = g.attributes.position, nor = g.attributes.normal, si = g.attributes.skinIndex, sw = g.attributes.skinWeight;
+      const nm = new THREE.Matrix3().getNormalMatrix(o.matrixWorld);
+      for (let k = 0; k < pos.count; k++) {
+        body.push({ p: o.getVertexPosition(k, new V()).applyMatrix4(o.matrixWorld),
+                    n: new V().fromBufferAttribute(nor, k).applyMatrix3(nm).normalize(),
+                    bones: [0, 1, 2, 3].map((j) => o.skeleton.bones[si.getComponent(k, j)]),
+                    w: [0, 1, 2, 3].map((j) => sw.getComponent(k, j)) });
+      }
+    });
+    if (!tops || !body.length) return;
+    const cell = 0.02, key = (p) => `${Math.floor(p.x / cell)},${Math.floor(p.y / cell)},${Math.floor(p.z / cell)}`;
+    const grid = new Map();
+    body.forEach((b, i) => { const k = key(b.p); (grid.get(k) || grid.set(k, []).get(k)).push(i); });
+    const nearest = (p) => {
+      let best = -1, bd = Infinity;
+      const cx = Math.floor(p.x / cell), cy = Math.floor(p.y / cell), cz = Math.floor(p.z / cell);
+      for (let dx = -3; dx <= 3; dx++) for (let dy = -3; dy <= 3; dy++) for (let dz = -3; dz <= 3; dz++) {
+        const l = grid.get(`${cx + dx},${cy + dy},${cz + dz}`);
+        if (l) for (const i of l) { const d = body[i].p.distanceToSquared(p); if (d < bd) { bd = d; best = i; } }
+      }
+      return best < 0 ? null : { b: body[best], d: Math.sqrt(bd) };
+    };
+    const g = tops.geometry, pos = g.attributes.position, si = g.attributes.skinIndex, sw = g.attributes.skinWeight;
+    const bones = tops.skeleton.bones, inv = tops.matrixWorld.clone().invert();
+    let moved = 0;
+    for (let k = 0; k < pos.count; k++) {
+      const p = tops.getVertexPosition(k, new V()).applyMatrix4(tops.matrixWorld);
+      const hit = nearest(p);
+      if (!hit || hit.d > keep) continue;
+      const { b } = hit;
+      const out = p.clone().sub(b.p).dot(b.n);          // 몸 표면 바깥쪽 거리
+      if (out < gap) continue;                          // 이미 붙어 있음
+      // 몸에서 떨어진 거리를 줄이되 비율로 줄여서 겹친 옷(안쪽 셔츠·바깥 점퍼)의 순서는 유지
+      const target = b.p.clone().addScaledVector(b.n, gap + (out - gap) * 0.42).add(p.clone().sub(b.p).projectOnPlane(b.n));
+      const local = target.applyMatrix4(inv);
+      pos.setXYZ(k, local.x, local.y, local.z);
+      // 붙은 몸 부분과 같은 뼈를 따르게 (팔·몸을 움직여도 옷이 피부를 뚫지 않음)
+      const idx = b.bones.map((bn) => bones.indexOf(bn));
+      if (idx.every((x, j) => x >= 0 || b.w[j] === 0)) {
+        si.setXYZW(k, ...idx.map((x) => Math.max(0, x)));
+        sw.setXYZW(k, ...b.w);
+      }
+      moved++;
+    }
+    pos.needsUpdate = true; si.needsUpdate = true; sw.needsUpdate = true;
+    g.computeVertexNormals(); g.computeBoundingSphere();
+    this._tightMoved = [moved, pos.count];
+  }
+
   // 소매 줄이기: 손목을 덮는 소매·장갑 부분을 손목 조금 위에서 끝나게 → 손 모양이 다 보임
   // (쉰 자세에서 아래팔 축을 따라 손목 쪽 85% 지점 너머의 옷 꼭짓점을 그 지점으로 당기고, 손 대신 아래팔 뼈를 따르게)
   _shortenSleeves(end = 0.85) {
@@ -338,13 +400,14 @@ export class SignAvatar {
       for (let k = 0; k < d.length; k += 4 * 13) if (d[k + 3] > 8) L.push(0.299 * d[k] + 0.587 * d[k + 1] + 0.114 * d[k + 2]);
       L.sort((a, b) => a - b);
       const lo = L[Math.floor(L.length * 0.02)] || 0, hi = L[Math.floor(L.length * 0.98)] || 255;
-      const dark = [40, 52, 72], light = [104, 122, 148];          // 작업복 남색 (그늘 ~ 밝은 면)
+      const dark = [36, 48, 68], light = [92, 110, 136];           // 작업복 남색 (그늘 ~ 밝은 면)
       for (let k = 0; k < d.length; k += 4) {
         if (d[k + 3] <= 8) continue;
         const l = 0.299 * d[k] + 0.587 * d[k + 1] + 0.114 * d[k + 2];
         const sat = Math.max(d[k], d[k + 1], d[k + 2]) - Math.min(d[k], d[k + 1], d[k + 2]);
-        if (sat > 60) continue;                                   // 색 있는 장식(끈 등)은 그대로
-        const t = Math.min(1, Math.max(0, (l - lo) / Math.max(1, hi - lo)));
+        // 원래 옷의 배색(밝은 판·어두운 판)과 장식은 없애고 주름 명암만 살짝 남김 → 한 가지 색 작업복
+        const t0 = Math.min(1, Math.max(0, (l - lo) / Math.max(1, hi - lo)));
+        const t = 0.5 + (t0 - 0.5) * 0.22;
         for (let c = 0; c < 3; c++) d[k + c] = dark[c] + (light[c] - dark[c]) * t;
       }
       // 2) 반사띠: 가슴 높이 띠 + 양팔 아래팔 띠. 삼각형을 텍스처 위에 픽셀 단위로 그려가며
