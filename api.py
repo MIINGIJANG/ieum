@@ -49,9 +49,8 @@ pipe = SafetySignPipeline(
 )
 
 
-# 번역 모델(torch)은 서버가 뜬 뒤 뒤에서 미리 불러둠 → 서버는 바로 열리고, 첫 문장 번역도 기다리지 않음
-import threading  # noqa: E402
-threading.Thread(target=lambda: pipe.tr, daemon=True).start()
+# 번역 모델(torch)은 처음 문장을 번역할 때 불러옴 (서버 시작 빠르게).
+# 주의: 별도 스레드에서 미리 불러오면 Mac 의 파이썬에서 서버가 메시지 없이 꺼지는 경우가 있어 쓰지 않음
 
 
 class Ask(BaseModel):

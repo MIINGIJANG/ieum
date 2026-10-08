@@ -8,3 +8,6 @@ export KSL_CKPT="${KSL_CKPT:-checkpoints/test/best.pt}"
 ( until curl -s localhost:8000/health >/dev/null; do sleep 1; done; open "http://localhost:8000" ) &
 echo "이음 서버를 켜는 중... 브라우저가 자동으로 열립니다. (끄려면 이 창을 닫으세요)"
 python -m uvicorn api:app --port 8000
+echo ""
+echo "이음 서버가 꺼졌습니다. 위에 나온 메시지를 확인하세요. (아무 키나 누르면 창이 닫힙니다)"
+read -k 1
