@@ -80,10 +80,10 @@
   }
   form.query button svg { width: 22px; height: 22px; }
   form.query button:disabled { opacity: .5; cursor: wait; }
-  /* 예시 질문: 모든 화면에서 한 줄에 1개씩 3줄, 버튼 폭은 전체 예시 중 가장 긴 질문에 맞춰 모두 같게 (--ex-w, JS가 계산) */
+  /* 예시 질문: 모든 화면에서 한 줄에 1개씩 3줄, 버튼 폭은 질문 길이에 맞춤 */
   .examples { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; }
   .examples button {
-    width: min(100%, var(--ex-w, auto)); text-align: center;
+    max-width: 100%; text-align: center;
     border: 1px solid var(--line); background: var(--surface); border-radius: 999px;
     padding: 4px 12px; font-size: 1rem; cursor: pointer; color: var(--ink); margin: 0;
   }
@@ -329,16 +329,6 @@ function renderExamples() {
     $("examples").append(b);
   });
 }
-// 버튼 폭 통일: 예시 전체(POOL) 중 가장 긴 질문의 버튼 폭을 재서 모든 버튼에 적용 (바뀌어도 들쭉날쭉하지 않게)
-function sizeExamples() {
-  const box = $("examples"), probe = document.createElement("button");
-  probe.type = "button"; probe.style.cssText = "position:absolute;visibility:hidden;width:auto;white-space:nowrap";
-  box.append(probe);
-  let w = 0;
-  for (const e of POOL) { probe.textContent = e.question; w = Math.max(w, probe.getBoundingClientRect().width); }
-  probe.remove();
-  if (w) box.style.setProperty("--ex-w", `${Math.ceil(w) + 2}px`);
-}
 $("form").onsubmit = (e) => { e.preventDefault(); run(); };
 
 async function run() {
@@ -554,9 +544,7 @@ $("replay").onclick = () => data && play();
 renderExamples();
 examplesReady.then(list => {
   if (list.length) { POOL = shuffle(list); shown = []; renderExamples(); }
-  sizeExamples();
-  if (document.fonts) document.fonts.ready.then(sizeExamples);   // 글꼴이 바뀌면 폭 다시 계산
-}).catch(() => sizeExamples());
+}).catch(() => {});
 </script>
 </body>
 </html>
