@@ -161,8 +161,9 @@
   /* 첫 로딩 화면: 아바타·출처 이미지·번역 모델을 모두 준비한 뒤 사라짐 (사용 중에는 기다림 없음) */
   .boot { position: fixed; inset: 0; z-index: 1000; background: var(--concrete); transition: opacity .4s ease; }
   /* 제목 '이음'은 첫 화면 제목과 같은 글꼴·크기·위치 (위치는 JS 가 첫 화면 제목에 맞춤) → 로딩이 끝나도 제목이 안 움직임 */
-  .boot .in { position: absolute; left: 0; right: 0; top: 40%; display: flex; flex-direction: column; align-items: center; gap: var(--block-gap); }
+  .boot .in { visibility: hidden; position: absolute; left: 0; right: 0; top: 40%; display: flex; flex-direction: column; align-items: center; gap: var(--block-gap); }
   .boot.done { opacity: 0; pointer-events: none; }
+  .boot .in.placed { visibility: visible; }   /* 첫 화면 제목 위치를 잰 뒤에만 보임 (가운데에 떴다가 튀어오르지 않게) */
   .boot h1 { margin: 0; font-size: clamp(2.4rem, 8vw, 3.2rem); font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
   .boot .bar { width: min(240px, 60vw); height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
   .boot .bar i { display: block; height: 100%; width: 0; background: var(--ink); border-radius: 3px; transition: width .3s ease; }
@@ -252,9 +253,8 @@ const API = location.protocol.startsWith("http") ? "" : "http://localhost:8000";
 // 로딩 화면 제목을 첫 화면 제목과 같은 높이에
 function placeBoot() {
   const inn = document.getElementById("bootIn"), h = document.querySelector(".hero h1");
-  if (inn && h) inn.style.top = `${h.getBoundingClientRect().top}px`;
+  if (inn && h) { inn.style.top = `${h.getBoundingClientRect().top}px`; inn.classList.add("placed"); }
 }
-placeBoot();
 addEventListener("resize", placeBoot);
 if (document.fonts) document.fonts.ready.then(placeBoot);
 const boot = (() => {
@@ -553,6 +553,7 @@ function play() {
 $("replay").onclick = () => data && play();
 
 renderExamples();
+placeBoot();   // 예시 질문까지 그려진 첫 화면 기준으로 로딩 제목 위치를 잡고 보이게
 examplesReady.then(list => {
   if (list.length) { POOL = shuffle(list); shown = []; renderExamples(); }
   placeBoot();
