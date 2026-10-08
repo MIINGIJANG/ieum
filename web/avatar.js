@@ -60,7 +60,9 @@ export class SignAvatar {
     vrm.scene.traverse((o) => { o.frustumCulled = false; });
     this.scene.add(vrm.scene);
     this.vrm = vrm;
+    this._slimTorso();
     this._captureRest();
+    this._dressUp();
     this._addHandColliders();
     this._styleMaterials();
     this._frameCamera();
@@ -105,6 +107,88 @@ export class SignAvatar {
     this._measureBodyFront(pos("hips").y, pos("neck").y);
   }
 
+  // 상체를 살짝 슬림하게: 가슴 뼈의 폭·두께를 줄이고, 그 아래 달린 목·어깨는 원래 크기로 되돌림
+  _slimTorso(sx = 0.9, sz = 0.92) {
+    const h = this.vrm.humanoid;
+    const chest = h.getRawBoneNode("chest");
+    if (!chest) return;
+    chest.scale.set(sx, 1, sz);
+    for (const n of ["neck", "leftShoulder", "rightShoulder"]) {
+      const b = h.getRawBoneNode(n);
+      if (b) b.scale.set(1 / sx, 1, 1 / sz);
+    }
+  }
+
+  // 작업 복장: 안전모 + 형광 안전조끼 (모델 파일은 그대로 두고 화면에서만 입힘)
+  _dressUp() {
+    const h = this.vrm.humanoid;
+    this.vrm.update(0);
+    this.vrm.scene.updateMatrixWorld(true);
+    let tops = null, face = new THREE.Box3(), hair = new THREE.Box3();
+    this.vrm.scene.traverse((o) => {
+      if (!o.isMesh) return;
+      const mats = [].concat(o.material).map((m) => m.name).join(" ");
+      if (/Tops/i.test(mats) && o.isSkinnedMesh) tops = o;
+      if (/Face_00_SKIN/i.test(mats)) face.expandByObject(o);
+      if (/Hair_00_HAIR/i.test(mats)) hair.expandByObject(o);
+    });
+    const head = h.getRawBoneNode("head");
+
+    // ---- 안전모: 실제 안전모 비율(둥근 셸 + 앞으로 더 나온 챙), 캐릭터 화풍에 맞춘 툰 재질 + 외곽선
+    if (head && !face.isEmpty()) {
+      const fc = face.getCenter(new THREE.Vector3()), fs = face.getSize(new THREE.Vector3());
+      const top = hair.isEmpty() ? face.max.y + 0.03 : Math.min(hair.max.y, face.max.y + 0.06);
+      // 눈썹 높이: 눈 뼈 + 약간 (없으면 얼굴 상단에서 추정)
+      const eye = this.vrm.humanoid.getRawBoneNode("leftEye");
+      const brow = eye ? eye.getWorldPosition(new THREE.Vector3()).y + fs.y * 0.17 : face.max.y - fs.y * 0.3;
+      const R = Math.max(fs.x * 0.56, 0.08);                    // 셸 반지름 (머리+머리카락 폭)
+      const Hh = Math.max(R * 0.8, top - brow + 0.012);                                        // 셸 높이 (공사장 안전모처럼 높게)
+      const grad = new THREE.DataTexture(new Uint8Array([90, 170, 255]), 3, 1, THREE.RedFormat);
+      grad.minFilter = grad.magFilter = THREE.NearestFilter; grad.needsUpdate = true;
+      const toon = new THREE.MeshToonMaterial({ color: 0xf5b800, gradientMap: grad });
+      const toon2 = toon.clone(); toon2.side = THREE.DoubleSide;
+      const ink = new THREE.MeshBasicMaterial({ color: 0x3a2a12, side: THREE.BackSide });
+      const shellPts = [];
+      for (let i = 0; i <= 24; i++) {                            // 아래 테두리 → 꼭대기
+        const t = (i / 24) * Math.PI / 2;
+        shellPts.push(new THREE.Vector2(Math.max(R * Math.cos(t), 0.0005), Hh * Math.pow(Math.sin(t), 0.8)));
+      }
+      const hat = new THREE.Group();
+      const shell = new THREE.Mesh(new THREE.LatheGeometry(shellPts, 64), toon);
+      const shellInk = new THREE.Mesh(shell.geometry, ink);
+      shell.scale.set(1, 1, 1.15); shellInk.scale.set(1.03, 1.03, 1.15 * 1.03);
+      // 앞챙: 앞쪽 140°만 길게 나온 차양 (뒤·옆은 얇은 테두리만)
+      const visor = new THREE.Mesh(new THREE.LatheGeometry([
+        new THREE.Vector2(R * 0.98, 0.006), new THREE.Vector2(R * 1.2, -0.008),
+        new THREE.Vector2(R * 1.2, -0.013), new THREE.Vector2(R * 0.98, -0.002),
+      ], 48, -Math.PI * 0.39, Math.PI * 0.78), toon2);
+      visor.scale.set(1, 1, 1.15);
+      const lip = new THREE.Mesh(new THREE.TorusGeometry(R * 1.01, 0.006, 8, 64), toon);
+      lip.rotation.x = Math.PI / 2; lip.scale.set(1, 1.15, 1);
+      // 꼭대기 앞뒤로 지나는 보강 능선 3줄 (셸과 같은 색, 살짝 솟음)
+      for (const ang of [-0.32, 0, 0.32]) {
+        const pts = [];
+        for (let i = 0; i <= 20; i++) {
+          const t = 0.18 * Math.PI + (i / 20) * 0.64 * Math.PI;   // 앞쪽 일부 ~ 뒤쪽 일부
+          const r = R * Math.cos(ang) * 1.0, y = Hh * Math.pow(Math.sin(t), 0.8);
+          const rr = Math.sqrt(Math.max(0, 1 - Math.pow(Math.cos(t), 2))) ;
+          pts.push(new THREE.Vector3(Math.sin(ang) * R * rr * 0.98, y * (0.985 + 0.02 * Math.cos(ang)) + 0.002, -Math.cos(t) * R * 1.15 * 0.99));
+        }
+        const rib = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 32, R * 0.035, 6, false), toon);
+        hat.add(rib);
+      }
+      hat.add(shellInk, shell, visor, lip);
+      // 이마 위를 덮도록 낮게 씀
+      hat.rotation.x = 0.1;                                      // 앞이 살짝 내려간 각도
+      // 앞 테두리가 눈썹 바로 위에 오도록
+      hat.position.set(fc.x, brow + R * 1.15 * Math.sin(0.1), fc.z - fs.z * 0.02);
+      this.scene.add(hat);
+      hat.updateMatrixWorld(true);
+      head.attach(hat);                                          // 머리 뼈를 따라 움직이도록
+    }
+
+  }
+
   // 머리카락(스프링 본)이 팔·손을 통과하지 않고 밀려나도록 팔뚝·손에 충돌체를 붙임
   _addHandColliders() {
     const sm = this.vrm.springBoneManager;
@@ -130,7 +214,7 @@ export class SignAvatar {
       if (!o.isMesh) return;
       for (const m of [].concat(o.material)) {
         if ("outlineWidthFactor" in m && m.outlineWidthFactor > 0) {
-          m.outlineWidthFactor *= 2.2;
+          m.outlineWidthFactor *= /SKIN/i.test(m.name) ? 1.8 : 1.3;
           if (m.outlineColorFactor) m.outlineColorFactor.set(0x2a2220);
         }
         if (/Tops/i.test(m.name) && m.color) {

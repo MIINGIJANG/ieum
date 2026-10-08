@@ -43,7 +43,8 @@ KSL_LEXICON=data/lexicon.csv KSL_MOTION=data/motions uvicorn api:app --host 0.0.
     "frames": [ {"body": [[x,y] x8], "rh": [[x,y] x21] | null, "lh": [...] | null}, ... ],
     "segments": [{"gloss": "있다", "start": 0, "end": 24, "has_motion": true}, ...]   // 프레임 번호
   },
-  "sources": [{"doc": "A-G-12-2026", "page": 4, "score": 0.20, "text": "..."}]  // 출처 표시
+  "sources": [{"doc": "A-G-12-2026", "title": "개인보호구의 사용 및 관리에 관한 기술지원규정",
+               "page": 4, "score": 0.20, "text": "문장1\n문장2"}]  // 출처: 같은 쪽은 합침, 앞 번호 표시 제거 (제목은 data/kosha/titles.json)
 }
 ```
 

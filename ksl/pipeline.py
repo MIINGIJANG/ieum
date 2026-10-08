@@ -16,14 +16,46 @@ from .rag import SafetyRAG
 from .translate import Translator, split_sentences
 
 _norm = lambda t: re.sub(r"[\s.,!?·]", "", t)
+# 문단 앞 번호 표시: 1.  (1)  ①  가.  (가)  -  ·  O
+_MARK = re.compile(r"^\s*(?:\(?\d{1,2}[.)]|\(\d{1,2}\)|[\u2460-\u2473]|\(?[가-하][.)]|\([가-하]\)|[-·•O○]\s)\s*")
+
+
+_HEADNUM = re.compile(r"^\d{1,2}(?=[가-힣])(?!(?:미터|시간|개월|년|월|일|명|회|종|층|개|번|차|분|초))")   # '2안전화의 종류' 같은 절 번호
+
+
+def strip_marks(text):
+    return "\n".join(_HEADNUM.sub("", _MARK.sub("", ln)).strip() for ln in text.split("\n") if ln.strip())
+
+
+def merge_sources(hits, titles):
+    """같은 문서·쪽은 하나로 합치고(겹치는 문장 제거) 번호 표시를 뗀 전체 문장으로."""
+    out = {}
+    for h in hits:
+        key = (h["doc"], h["page"])
+        if key not in out:
+            out[key] = {"doc": h["doc"], "title": titles.get(h["doc"], h["doc"]), "page": h["page"],
+                        "score": h["score"], "lines": []}
+        out[key]["lines"] += [ln for ln in strip_marks(h["text"]).split("\n")]
+    res = []
+    for o in out.values():
+        lines = []
+        for ln in o.pop("lines"):
+            if any(ln == x or x.startswith(ln) for x in lines):        # 중복·잘린 앞부분
+                continue
+            lines = [x for x in lines if not ln.startswith(x)] + [ln]   # 더 긴 문장으로 교체
+        o["text"] = "\n".join(lines)
+        res.append(o)
+    return res
 
 
 class SafetySignPipeline:
-    def __init__(self, ckpt, index, lexicon=None, motion_dir=None, sentences=None, k=3, demo_threshold=0.45):
+    def __init__(self, ckpt, index, lexicon=None, motion_dir=None, sentences=None, k=3, demo_threshold=0.45,
+                 titles="data/kosha/titles.json"):
         self.tr = Translator(ckpt, lexicon)
         self.rag = SafetyRAG.load(index)
         self.motion = MotionDict(motion_dir) if motion_dir and Path(motion_dir).exists() else None
         self.k = k
+        self.titles = json.loads(Path(titles).read_text(encoding="utf-8")) if titles and Path(titles).exists() else {}
         self.demo = []
         if sentences and Path(sentences).exists():
             self.demo = json.loads(Path(sentences).read_text(encoding="utf-8"))
@@ -85,6 +117,7 @@ class SafetySignPipeline:
             texts, mode = [demo["korean"]], "demo"           # 준비된 안내 문장으로 답변
         else:
             texts, mode = self.rag.answer(question, hits)
+            texts = [" ".join(strip_marks(t).split("\n")) for t in texts]
         sents = [self.translate_one(p, beam) for t in texts for p in (split_sentences(t) or [t])]
         return {
             "question": question,
@@ -92,6 +125,5 @@ class SafetySignPipeline:
             "answer_text": " ".join(texts),
             "sentences": sents,                        # 문장별 글로스 + 타임라인
             "motion": self.motion_for([g for s in sents for g in s["gloss"]]),   # 전체 문장 이어붙인 동작
-            "sources": [{"doc": h["doc"], "page": h["page"], "score": h["score"],
-                         "text": h["text"]} for h in hits],   # 출처 표시용
+            "sources": merge_sources(hits, self.titles),   # 출처: 문서 제목·쪽·전체 문장
         }

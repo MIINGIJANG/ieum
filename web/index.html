@@ -39,40 +39,48 @@
     display: grid;
     gap: 20px;
   }
-  .app, .ask { grid-template-columns: minmax(0, 1fr); }
+  .app { grid-template-columns: minmax(0, 1fr); position: relative; }
   .app > * { min-width: 0; }
-  header h1 {
-    margin: 0;
-    font-size: 1.25rem;
-    font-weight: 700;
-    letter-spacing: -0.01em;
-  }
-  header p { margin: 2px 0 0; color: var(--muted); font-size: .9rem; }
-  header h1 { font-size: 1.6rem; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-  header h1 .tag { font-size: 1rem; font-weight: 500; color: var(--muted); }
 
-  /* ---------- 질문 입력 ---------- */
-  .ask { display: grid; gap: 10px; }
-  form.query { display: flex; gap: 8px; }
+  /* ---------- 첫 화면: 가운데 입력창 → 결과 화면: 위로 ---------- */
+  body.landing { overflow: hidden; }
+  .hero { display: grid; gap: 14px; align-content: center; justify-items: center; }
+  body.landing .hero { min-height: calc(100svh - 68px); }
+  .hero h1 { margin: 0 0 6px; font-size: clamp(2.4rem, 8vw, 3.2rem); font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
+  body.result .hero h1, body.result .examples { display: none; }
+  form.query { position: relative; width: min(100%, 640px); }
   form.query input {
-    flex: 1; min-width: 0;
-    padding: 14px 16px;
+    width: 100%;
+    padding: 15px 64px 15px 20px;
     border: 2px solid var(--ink);
-    border-radius: 12px;
+    border-radius: 999px;
     background: var(--surface);
     font-size: 1.05rem;
   }
   form.query button {
-    border: 0; border-radius: 12px; padding: 0 20px;
-    background: var(--ink); color: #fff; font-weight: 700; cursor: pointer; white-space: nowrap;
+    position: absolute; right: 7px; top: 50%; transform: translateY(-50%);
+    width: 42px; height: 42px; border: 0; border-radius: 50%;
+    background: var(--ink); color: #fff; cursor: pointer;
+    display: grid; place-items: center; padding: 0;
   }
+  form.query button svg { width: 22px; height: 22px; }
   form.query button:disabled { opacity: .5; cursor: wait; }
-  .examples { display: flex; flex-wrap: wrap; gap: 6px; }
+  .examples { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; width: min(100%, 640px); }
   .examples button {
     border: 1px solid var(--line); background: var(--surface); border-radius: 999px;
     padding: 4px 12px; font-size: .88rem; cursor: pointer; color: var(--ink);
   }
   .examples button:hover { border-color: var(--sign-blue); }
+
+  /* 결과: 아래에서 올라옴 (그 사이 아바타는 미리 불러와 둠) */
+  .results { display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr); }
+  .results > * { min-width: 0; }
+  body.landing .results { visibility: hidden; opacity: 0; transform: translateY(100vh); position: absolute; left: 0; right: 0; top: 0; pointer-events: none; }
+  body.result .results { animation: rise .6s cubic-bezier(.2,.8,.2,1) .12s both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(60vh); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    body.result .results { animation: none; }
+  }
 
   /* ---------- 수어 표지판 무대 ---------- */
   .stage-wrap { display: grid; justify-items: center; gap: 14px; width: 100%; }
@@ -128,52 +136,50 @@
     border-left: 4px solid var(--caution); background: #fffaea; padding: 8px 12px; border-radius: 0 8px 8px 0;
     font-size: .92rem; margin: 0 0 12px;
   }
-  details.src { border-top: 1px solid var(--line); padding-top: 10px; }
-  details.src summary { cursor: pointer; font-weight: 500; }
-  details.src ol { margin: 8px 0 0; padding-left: 1.2rem; font-size: .9rem; color: var(--muted); }
-  details.src li { margin-bottom: 8px; }
-  details.src b { color: var(--ink); font-weight: 500; }
+  .src { border-top: 1px solid var(--line); padding-top: 10px; }
+  .src h3 { font-size: .95rem; margin: 0 0 6px; font-weight: 500; }
+  .src ul { list-style: none; margin: 0; padding: 0; font-size: .9rem; color: var(--muted); }
+  .src li { margin-bottom: 12px; }
+  .src li p { margin: 2px 0 0; }
+  .src b { color: var(--ink); font-weight: 500; }
   .empty { color: var(--muted); }
   .error { color: #9b1c1c; }
 
   @media (min-width: 860px) {
-    .app { grid-template-columns: 440px 1fr; column-gap: 40px; align-items: start; padding-top: 32px; }
-    header, .ask { grid-column: 1 / -1; }
+    .results { grid-template-columns: 440px 1fr; column-gap: 40px; align-items: start; }
     .stage-wrap { position: sticky; top: 24px; }
   }
 </style>
 </head>
-<body>
+<body class="landing">
 <main class="app">
-  <header>
-    <h1>이음 <span class="tag">작업 안전 수어 안내</span></h1>
-    <p>질문하면 안전 문서에서 답을 찾고, 문장을 넣으면 그대로 한국수어로 보여줍니다.</p>
-  </header>
-
-  <section class="ask" aria-label="검색">
+  <section class="hero" aria-label="검색">
+    <h1>이음</h1>
     <form class="query" id="form">
-      <input id="q" name="q" autocomplete="off" placeholder="궁금한 안전 수칙을 묻거나, 수어로 볼 문장을 입력하세요" aria-label="질문 또는 문장 입력">
-      <button id="go" type="submit">수어로 보기</button>
+      <input id="q" name="q" autocomplete="off" placeholder="어떤 도움을 드릴까요?" aria-label="질문 또는 문장 입력">
+      <button id="go" type="submit" aria-label="수어로 보기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg>
+      </button>
     </form>
     <div class="examples" id="examples"></div>
   </section>
 
-  <section class="stage-wrap" aria-label="수어 재생">
-    <div class="stage" id="stage">
-      <canvas id="av" aria-label="수어 아바타"></canvas>
-      <span class="loading" id="loading"></span>
-      <div class="fs" id="fs"></div>
-    </div>
-    <div class="now" id="now" aria-live="polite"></div>
-    <div class="controls">
-      <button type="button" id="replay">다시 보기</button>
-    </div>
-    <ol class="glosses" id="glosses" aria-label="수어 순서"></ol>
-  </section>
+  <div class="results" id="results">
+    <section class="stage-wrap" aria-label="수어 재생">
+      <div class="stage" id="stage">
+        <canvas id="av" aria-label="수어 아바타"></canvas>
+        <span class="loading" id="loading"></span>
+        <div class="fs" id="fs"></div>
+      </div>
+      <div class="now" id="now" aria-live="polite"></div>
+      <ol class="glosses" id="glosses" aria-label="수어 순서"></ol>
+      <div class="controls">
+        <button type="button" id="replay">다시 보기</button>
+      </div>
+    </section>
 
-  <section class="answer" id="answer" aria-live="polite">
-    <p class="empty">질문하면 여기에 답변과 근거 문서가 나옵니다.</p>
-  </section>
+    <section class="answer" id="answer" aria-live="polite"></section>
+  </div>
 </main>
 
 <script type="importmap">
@@ -198,6 +204,7 @@ import { SignAvatar } from "./avatar.js";
 try {
   window.avatar = await new SignAvatar(document.getElementById("av")).load("./models/avatar.vrm");
   document.getElementById("stage").classList.add("three");
+  window.dispatchEvent(new Event("avatar-ready"));
 } catch (e) {
   console.warn("3D 아바타를 불러오지 못했습니다:", e);
   const el = document.getElementById("loading");
@@ -207,7 +214,15 @@ try {
 </script>
 <script>
 const API = location.protocol.startsWith("http") ? "" : "http://localhost:8000";
-let EXAMPLES = ["보안경은 언제 써야 하나요?", "낙하물은 어떻게 조심해요?", "위험한 곳에서는 작업을 중지하세요."];
+// 질문 예시: 앞 5개는 조원이 확정한 안내 문장(수어 동작 있음)으로 답이 나오고, 마지막은 문서에서 답을 찾음
+const EXAMPLES = [
+  "위험한 곳에서는 어떻게 해야 하나요?",
+  "낙하물은 어떻게 조심해요?",
+  "작업할 때 안전모 써야 해?",
+  "감전 위험이 있으면 뭘 착용해야 해요?",
+  "보호구에 이상이 있는지 어떻게 확인해요?",
+  "정화통은 언제 교체해요?",
+];
 
 const $ = (id) => document.getElementById(id);
 let data = null, motion = null, items = [], frameF = 0, raf = 0, lastT = 0;
@@ -238,12 +253,26 @@ async function run() {
       throw new Error("서버가 예전 버전입니다. 터미널에서 Ctrl+C로 끄고 다시 실행하세요");
     if (!res.ok) throw new Error(`서버 응답 ${res.status}`);
     data = await res.json();
+    showResults();
     render();
   } catch (err) {
+    showResults();
     $("answer").innerHTML = `<p class="error">서버에 연결하지 못했습니다. 터미널에서 api 서버가 켜져 있는지 확인하세요. (${err.message})</p>`;
   } finally {
     $("go").disabled = false;
   }
+}
+
+// 첫 화면 → 결과 화면: 입력창은 제자리에서 위로 미끄러지고(FLIP), 결과는 아래에서 올라옴
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+function showResults() {
+  if (document.body.classList.contains("result")) return;
+  const form = $("form"), y0 = form.getBoundingClientRect().top;
+  document.body.classList.replace("landing", "result");
+  if (reduce) return;
+  const dy = y0 - form.getBoundingClientRect().top;
+  form.animate([{ transform: `translateY(${dy}px)` }, { transform: "none" }],
+               { duration: 550, easing: "cubic-bezier(.2,.8,.2,1)" });
 }
 
 // ---------- 결과 표시 ----------
@@ -278,18 +307,20 @@ function render() {
   const a = $("answer");
   if (data.mode === "ask") {
     const src = (data.sources || []).map(s =>
-      `<li><b>${esc(s.doc)} ${esc(s.page)}쪽</b><br>${esc(s.text.slice(0, 140))}${s.text.length > 140 ? "…" : ""}</li>`).join("");
+      `<li><b>${esc(s.title || s.doc)} ${esc(s.page)}쪽</b>${s.text.split("\n").map(t => `<p>${esc(t)}</p>`).join("")}</li>`).join("");
     a.innerHTML = `
       <h2>답변</h2>
       <p class="text">${esc(data.answer_text || "문서에서 관련 내용을 찾지 못했습니다.")}</p>
       ${unverified.length ? `<p class="warn">${unverified.map(esc).join(", ")}: 아직 수어 표현이 확인되지 않아 지문자로 표시합니다.</p>` : ""}
       ${partial}
-      <details class="src" open><summary>근거 문서 ${data.sources.length}건</summary><ol>${src}</ol></details>`;
+      ${src ? `<div class="src"><h3>출처</h3><ul>${src}</ul></div>` : ""}`;
   } else {
     a.innerHTML = `<h2>번역한 문장</h2><p class="text">${sents.map(s => esc(s.korean)).join(" ")}</p>
       ${unverified.length ? `<p class="warn">${unverified.map(esc).join(", ")}: 아직 수어 표현이 확인되지 않아 지문자로 표시합니다.</p>` : ""}${partial}`;
   }
-  play();
+  // 결과가 다 올라온 뒤 재생 (아바타가 아직이면 준비되는 대로)
+  const start = () => setTimeout(play, reduce ? 0 : 650);
+  if (window.avatar) start(); else addEventListener("avatar-ready", start, { once: true });
 }
 
 // ---------- 재생 ----------
@@ -336,12 +367,6 @@ function play() {
 $("replay").onclick = () => data && play();
 
 renderExamples();
-fetch(`${API}/demo_sentences`).then(r => r.ok ? r.json() : []).then(list => {
-  if (!list.length) return;
-  // 질문 예시 2개 + 확정 안내 문장 (조원이 정리한 5문장)
-  EXAMPLES = ["위험한 곳에서는 어떻게 해야 하나요?", "정화통은 언제 교체해요?", ...list.map(d => d.korean)];
-  renderExamples();
-}).catch(() => {});
 </script>
 </body>
 </html>
