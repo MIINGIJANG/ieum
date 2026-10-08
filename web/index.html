@@ -17,6 +17,7 @@
     --line: #d5d9d2;
     --caution: #f2b705;        /* 경고 표지 노랑 */
     --caution-ink: #3d2e00;
+    --block-gap: 44px;         /* 입력창–아바타, 아바타–출처 간격 (같게) */
     --font: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
   }
   * { box-sizing: border-box; }
@@ -37,7 +38,7 @@
     margin: 0 auto;
     padding: 20px 16px 48px;
     display: grid;
-    gap: 20px;
+    gap: var(--block-gap);
   }
   .app { grid-template-columns: minmax(0, 1fr); position: relative; }
   .app > * { min-width: 0; }
@@ -76,8 +77,9 @@
   .examples button:hover { border-color: var(--sign-blue); }
 
   /* 결과: 아래에서 올라옴 (그 사이 아바타는 미리 불러와 둠) */
-  .results { display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr); }
+  .results { display: grid; gap: var(--block-gap); grid-template-columns: minmax(0, 1fr); }
   .results > * { min-width: 0; }
+  .results .stage-wrap { margin-top: -9px; }   /* 캔버스 위 빈 여백만큼 당겨서 두 간격을 눈으로도 같게 */
   body.landing .results { visibility: hidden; opacity: 0; transform: translateY(100vh); position: absolute; left: 0; right: 0; top: 0; pointer-events: none; }
   body.result .results { animation: rise .6s cubic-bezier(.2,.8,.2,1) .12s both; }
   @keyframes rise { from { opacity: 0; transform: translateY(60vh); } to { opacity: 1; transform: none; } }
