@@ -159,10 +159,11 @@
   .error { color: #9b1c1c; }
 
   /* 첫 로딩 화면: 아바타·출처 이미지·번역 모델을 모두 준비한 뒤 사라짐 (사용 중에는 기다림 없음) */
-  .boot { position: fixed; inset: 0; z-index: 1000; background: var(--concrete); display: flex; flex-direction: column;
-          align-items: center; justify-content: center; gap: var(--block-gap); transition: opacity .4s ease; }
+  .boot { position: fixed; inset: 0; z-index: 1000; background: var(--concrete); transition: opacity .4s ease; }
+  /* 제목 '이음'은 첫 화면 제목과 같은 글꼴·크기·위치 (위치는 JS 가 첫 화면 제목에 맞춤) → 로딩이 끝나도 제목이 안 움직임 */
+  .boot .in { position: absolute; left: 0; right: 0; top: 40%; display: flex; flex-direction: column; align-items: center; gap: var(--block-gap); }
   .boot.done { opacity: 0; pointer-events: none; }
-  .boot h1 { margin: 0; font-size: 2.6rem; font-weight: 700; letter-spacing: -.02em; }
+  .boot h1 { margin: 0; font-size: clamp(2.4rem, 8vw, 3.2rem); font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
   .boot .bar { width: min(240px, 60vw); height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
   .boot .bar i { display: block; height: 100%; width: 0; background: var(--ink); border-radius: 3px; transition: width .3s ease; }
   .boot p { margin: 0; color: var(--muted); font-size: 1rem; min-height: 1.6em; }
@@ -174,9 +175,11 @@
 </head>
 <body class="landing">
 <div class="boot" id="boot" role="status" aria-live="polite">
-  <h1>이음</h1>
-  <div class="bar" aria-hidden="true"><i id="bootBar"></i></div>
-  <p id="bootMsg">준비하는 중…</p>
+  <div class="in" id="bootIn">
+    <h1>이음</h1>
+    <div class="bar" aria-hidden="true"><i id="bootBar"></i></div>
+    <p id="bootMsg">준비하는 중…</p>
+  </div>
 </div>
 <main class="app">
   <section class="hero" aria-label="검색">
@@ -246,6 +249,14 @@ const API = location.protocol.startsWith("http") ? "" : "http://localhost:8000";
 
 // ---------- 첫 로딩: 처음 쓸 때 생기는 지연을 여기서 모두 미리 처리 ----------
 // 아바타(내려받기·옷 입히기), 출처 쪽 이미지, 서버(번역 모델·검색), 예시 질문, 글꼴
+// 로딩 화면 제목을 첫 화면 제목과 같은 높이에
+function placeBoot() {
+  const inn = document.getElementById("bootIn"), h = document.querySelector(".hero h1");
+  if (inn && h) inn.style.top = `${h.getBoundingClientRect().top}px`;
+}
+placeBoot();
+addEventListener("resize", placeBoot);
+if (document.fonts) document.fonts.ready.then(placeBoot);
 const boot = (() => {
   const steps = [];
   let done = 0;
@@ -544,6 +555,7 @@ $("replay").onclick = () => data && play();
 renderExamples();
 examplesReady.then(list => {
   if (list.length) { POOL = shuffle(list); shown = []; renderExamples(); }
+  placeBoot();
 }).catch(() => {});
 </script>
 </body>
