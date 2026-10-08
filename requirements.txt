@@ -1,0 +1,13 @@
+torch>=2.2
+numpy
+scikit-learn
+sacrebleu>=2.4
+pypdf
+fastapi
+uvicorn
+httpx
+# 선택: 임베딩 검색 비교용
+# sentence-transformers
+# 선택: 사전 영상 → 관절 좌표
+# mediapipe
+# opencv-python

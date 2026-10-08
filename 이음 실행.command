@@ -1,0 +1,9 @@
+#!/bin/zsh
+# 이음 실행: 더블클릭하면 서버를 켜고 브라우저를 엽니다. 끌 때는 이 창을 닫으세요.
+cd "$(dirname "$0")"
+source ~/.zshrc 2>/dev/null                       # anaconda 파이썬 사용
+lsof -ti tcp:8000 | xargs kill 2>/dev/null        # 이미 켜진 이음 서버가 있으면 종료
+export KSL_CKPT="${KSL_CKPT:-checkpoints/test/best.pt}"
+( until curl -s localhost:8000/health >/dev/null; do sleep 1; done; open "http://localhost:8000" ) &
+echo "이음 서버를 켜는 중... 브라우저가 자동으로 열립니다. (끄려면 이 창을 닫으세요)"
+python -m uvicorn api:app --port 8000

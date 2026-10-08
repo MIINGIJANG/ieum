@@ -1,0 +1,105 @@
+"""이음 FastAPI 서버 — 웹 화면(React/Three.js 또는 web/index.html)과 붙는 지점.
+
+KSL_CKPT=checkpoints/run1/best.pt KSL_INDEX=checkpoints/kosha_index.pkl \
+KSL_LEXICON=data/lexicon.csv KSL_MOTION=data/motions KSL_SENTENCES=data/demo_sentences.json \
+uvicorn api:app --port 8000
+
+브라우저: http://localhost:8000        (시연용 웹 화면)
+          http://localhost:8000/docs   (API 테스트)
+명세: docs/API.md
+"""
+import os
+from pathlib import Path
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+
+from ksl.pipeline import SafetySignPipeline
+
+ROOT = Path(__file__).resolve().parent
+app = FastAPI(title="이음 — 산업안전 수어 안내 API", version="0.3.0")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+INDEX = os.environ.get("KSL_INDEX", "checkpoints/kosha_index.pkl")
+
+
+def _ensure_index(path):
+    """KOSHA 인덱스가 없거나(처음 실행) 이 컴퓨터의 라이브러리 버전으로 못 읽으면 data/kosha/*.pdf 로 새로 만듦."""
+    from ksl.rag import SafetyRAG
+    try:
+        SafetyRAG.load(path)
+        return
+    except Exception:
+        pass
+    pdfs = sorted(str(p) for p in (ROOT / "data" / "kosha").glob("*.pdf"))
+    if pdfs:
+        print(f"[이음] KOSHA 인덱스 생성: {pdfs}")
+        SafetyRAG.build(pdfs, max_chars=300).save(path)
+
+
+_ensure_index(INDEX)
+pipe = SafetySignPipeline(
+    os.environ.get("KSL_CKPT", "checkpoints/run1/best.pt"),
+    INDEX,
+    os.environ.get("KSL_LEXICON", "data/lexicon.csv"),
+    os.environ.get("KSL_MOTION", "data/motions"),
+    os.environ.get("KSL_SENTENCES", "data/demo_sentences.json"),
+)
+
+
+class Ask(BaseModel):
+    question: str
+    beam: int = 4
+
+
+class Text(BaseModel):
+    text: str
+    beam: int = 4
+
+
+class Glosses(BaseModel):
+    glosses: list[str]
+
+
+@app.get("/health")
+def health():
+    return {"ok": True, "chunks": len(pipe.rag.chunks), "gloss_vocab": len(pipe.tr.tgt),
+            "motion_glosses": len(pipe.motion.index) if pipe.motion else 0}
+
+
+@app.post("/ask")
+def ask(req: Ask):
+    return pipe.ask(req.question, req.beam)
+
+
+class Query(BaseModel):
+    text: str
+    beam: int = 4
+
+
+@app.post("/query")
+def query(req: Query):
+    """검색창 하나: 질문이면 /ask, 문장이면 /translate 처럼 동작. 응답의 mode 로 구분."""
+    return pipe.query(req.text, req.beam)
+
+
+@app.post("/translate")
+def translate(req: Text):
+    return pipe.translate_text(req.text, req.beam)
+
+
+@app.get("/demo_sentences")
+def demo_sentences():
+    """조원이 확정한 안내 문장 목록 (웹 예시 버튼용)."""
+    return [{"korean": d["korean"], "gloss": d["gloss"], "complete": d.get("complete", True)} for d in pipe.demo]
+
+
+@app.post("/motion")
+def motion(req: Glosses):
+    return pipe.motion_for(req.glosses) or {"fps": 30, "frames": [], "segments": []}
+
+
+# 웹 화면 (web/index.html, 3D 모델·라이브러리 포함). API 경로보다 뒤에 둬야 함
+app.mount("/", StaticFiles(directory=ROOT / "web", html=True), name="web")
