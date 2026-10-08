@@ -126,11 +126,6 @@
   .answer { background: var(--surface); border-radius: 14px; padding: 18px; border: 1px solid var(--line); }
   .answer h2 { font-size: 1rem; margin: 0 0 6px; color: var(--muted); font-weight: 500; }
   .answer .text { font-size: 1rem; margin: 0 0 12px; }
-  .signinfo { display: grid; gap: 8px; justify-items: center; text-align: center; width: 100%; }
-  .signinfo:empty { display: none; }
-  .signinfo p { margin: 0; }
-  .signinfo .sign { color: var(--muted); font-size: 1rem; }
-  .signinfo .warn { margin: 0; text-align: left; }
   .answer .hint { color: var(--muted); font-size: 1rem; margin: -4px 0 0; }
   .answer > :last-child { margin-bottom: 0; }
   .warn {
@@ -177,7 +172,6 @@
         <span class="loading" id="loading"></span>
       </div>
       <ol class="glosses" id="glosses" aria-label="수어 순서"></ol>
-      <div class="signinfo" id="signinfo"></div>
       <div class="controls" id="controls">
         <button type="button" id="replay">다시 보기</button>
       </div>
@@ -317,7 +311,9 @@ const label = (g) => (g.startsWith("FS:") ? g.slice(3) : g).replace(/[_\-]?\d+#?
 function sourceImg(s) {
   const [x0, y0, x1, y1] = s.region;
   const q = new URLSearchParams({ doc: s.doc, page: s.page, x0, y0, x1, y1 });
+  // 이미지를 못 만들면(서버에 PDF 라이브러리 없음 등) 같은 내용을 글·표로 대신 보여줌
   return `<img class="pdf" src="${API}/source_image?${q}" alt="${esc(s.text)}" loading="lazy"
+           onerror="this.nextElementSibling.hidden = false; this.remove()"
            style="aspect-ratio: ${(x1 - x0).toFixed(1)} / ${(y1 - y0).toFixed(1)}">`;
 }
 
@@ -346,7 +342,7 @@ function tableHTML(rows) {
 // 문서에 근거가 없으면 답하지 않음 (엉뚱한 답·수어 대신 안내만)
 function renderNone() {
   motion = null; items = [];
-  $("glosses").innerHTML = ""; $("signinfo").innerHTML = ""; 
+  $("glosses").innerHTML = ""; 
   $("controls").hidden = true; $("sources").hidden = true;
   $("answer").innerHTML = `<h2>답변</h2>
     <p class="text">문서에서 관련 내용을 찾지 못했습니다.</p>
@@ -360,8 +356,6 @@ function render() {
   $("controls").hidden = false;
   motion = data.motion;
   const sents = data.sentences || [];
-  const unverified = [...new Set(sents.flatMap(s => s.unverified_terms || []))];
-  const partial = "";   // 동작 준비 상태 안내는 입력창 위에 항상 표시 (.notice)
 
   // 글로스 순서 (문장 사이 구분)
   items = [];
@@ -380,19 +374,14 @@ function render() {
     });
   });
 
-  // 아바타 영역: 수어 표현이 확인 안 된 단어 안내
-  $("signinfo").innerHTML = `
-    ${unverified.length ? `<p class="warn">${unverified.map(esc).join(", ")}: 아직 수어 표현이 확인되지 않아 지문자로 표시합니다.</p>` : ""}
-    ${partial}`;
-
   // 답변
   const a = $("answer");
   if (data.mode === "ask") {
     // 출처: 쪽 번호 순
     const src = [...(data.sources || [])].sort((x, y) => x.page - y.page).map(s =>
-      `<li><b>${esc(s.title || s.doc)} ${esc(s.page)}쪽</b>${s.region ? sourceImg(s) :
-        (s.blocks || s.text.split("\n").map(t => ({type: "text", text: t})))
-        .map(b => b.type === "table" ? tableHTML(b.rows) : `<p>${esc(b.text)}</p>`).join("")}</li>`).join("");
+      `<li><b>${esc(s.title || s.doc)} ${esc(s.page)}쪽</b>${s.region ? sourceImg(s) : ""}
+        <div class="srctext"${s.region ? " hidden" : ""}>${(s.blocks || s.text.split("\n").map(t => ({type: "text", text: t})))
+        .map(b => b.type === "table" ? tableHTML(b.rows) : `<p>${esc(b.text)}</p>`).join("")}</div></li>`).join("");
     a.innerHTML = `
       <h2>답변</h2>
       <p class="text">${esc(data.answer_text || "문서에서 관련 내용을 찾지 못했습니다.")}</p>
@@ -425,8 +414,11 @@ function currentItem(f) {
   for (let i = 0; i < tl.length; i++) { acc += tl[i].duration; if (t < acc) return items[i]; }
   return items[items.length - 1];
 }
+let playId = 0;
+const HOLD_MS = 600, LOWER_MS = 350;   // 마지막 손 모양 유지 → 손 내리기 (이 동안도 마지막 단어 강조 유지)
 function play() {
   cancelAnimationFrame(raf);
+  const id = ++playId;
   frameF = 0; lastT = performance.now();
   const loop = (now) => {
     const fps = motion?.fps || 30;
@@ -439,8 +431,12 @@ function play() {
     items.forEach(x => x.li.classList.toggle("active", x === it));
     if (frameF < n) raf = requestAnimationFrame(loop);
     else {
-      items.forEach(x => x.li.classList.remove("active")); 
-      setTimeout(() => { if (window.avatar) window.avatar.setFrame(null); }, 600);   // 끝나면 손 내리기
+      // 동작이 화면에서 완전히 끝난 뒤(마지막 손 모양 유지 + 손 내리기)에 강조를 끔
+      setTimeout(() => {
+        if (id !== playId) return;               // 그 사이 다시 보기·새 질문이면 무시
+        if (window.avatar) window.avatar.setFrame(null);
+        setTimeout(() => { if (id === playId) items.forEach(x => x.li.classList.remove("active")); }, LOWER_MS);
+      }, HOLD_MS);
     }
   };
   raf = requestAnimationFrame(loop);

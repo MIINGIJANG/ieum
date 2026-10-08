@@ -4,6 +4,8 @@ scikit-learn
 sacrebleu>=2.4
 pypdf
 pdfplumber            # 출처에 원문 표 표시
+pypdfium2             # 출처를 원본 PDF 이미지로
+pillow
 fastapi
 uvicorn
 httpx

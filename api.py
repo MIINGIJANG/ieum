@@ -101,7 +101,8 @@ def source_image(doc: str, page: int, x0: float, y0: float, x1: float, y1: float
     """출처 영역을 원본 PDF 모양 그대로 잘라낸 PNG."""
     try:
         png = pipe.images.render(doc, page, (x0, y0, x1, y1))
-    except Exception:
+    except Exception as e:                       # 보통 pypdfium2/pillow 미설치 → 터미널에 이유 출력
+        print(f"[이음] 출처 이미지 실패: {type(e).__name__}: {e}  (pip install -U pypdfium2 pillow)")
         png = None
     if not png:
         raise HTTPException(404)
