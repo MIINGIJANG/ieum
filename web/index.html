@@ -80,8 +80,9 @@
   }
   form.query button svg { width: 22px; height: 22px; }
   form.query button:disabled { opacity: .5; cursor: wait; }
-  /* 예시 질문: 모든 화면에서 한 줄에 1개씩 2줄, 버튼 폭은 질문 길이에 맞춤 */
+  /* 예시 질문 2개: 휴대폰은 한 줄에 1개씩 2줄, PC 는 한 줄에 2개. 버튼 폭은 질문 길이에 맞춤 */
   .examples { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; }
+  @media (min-width: 761px) { .examples { flex-direction: row; flex-wrap: wrap; justify-content: center; } }   /* PC: 한 줄에 2개 */
   .examples button {
     max-width: 100%; text-align: center;
     border: 1px solid var(--line); background: var(--surface); border-radius: 999px;
@@ -187,7 +188,7 @@
     <h1>이음</h1>
     <p class="notice">일부 단어의 수어 동작만 준비되어 있습니다.</p>
     <form class="query" id="form">
-      <input id="q" name="q" autocomplete="off" placeholder="어떤 도움을 드릴까요?" aria-label="질문 또는 문장 입력">
+      <input id="q" name="q" autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" placeholder="어떤 도움을 드릴까요?" aria-label="질문 또는 문장 입력">
       <button id="go" type="submit" aria-label="수어로 보기">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg>
       </button>
@@ -331,12 +332,13 @@ const $ = (id) => document.getElementById(id);
 let data = null, motion = null, items = [], frameF = 0, raf = 0, lastT = 0;
 
 // ---------- 입력 ----------
+const touch = matchMedia("(pointer: coarse)").matches;   // 휴대폰·태블릿: 입력창을 직접 누를 때만 키보드
 function renderExamples() {
   $("examples").innerHTML = "";
   visibleExamples().forEach(e => {
     const b = document.createElement("button");
     b.type = "button"; b.textContent = e.question;
-    b.onclick = () => { $("q").value = e.question; $("q").focus(); };   // 입력창에만 넣고, 화살표를 눌러야 넘어감
+    b.onclick = () => { $("q").value = e.question; if (!touch) $("q").focus(); };   // 입력창에만 넣고, 화살표를 눌러야 넘어감 (휴대폰은 키보드 안 올림)
     $("examples").append(b);
   });
 }
@@ -345,6 +347,7 @@ $("form").onsubmit = (e) => { e.preventDefault(); run(); };
 async function run() {
   const q = $("q").value.trim();
   if (!q) { $("q").focus(); return; }
+  if (touch) $("q").blur();                     // 질문을 보내면 휴대폰 키보드 내림 (결과가 가려지지 않게)
   $("go").disabled = true;
   try {
     // 서버가 질문인지(문서 검색) 문장인지(바로 번역) 판단 → data.mode
