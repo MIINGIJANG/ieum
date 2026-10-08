@@ -17,10 +17,11 @@
     --line: #d5d9d2;
     --caution: #f2b705;        /* 경고 표지 노랑 */
     --caution-ink: #3d2e00;
-    --block-gap: 44px;         /* 입력창–아바타, 아바타–출처 간격 (같게) */
+    --block-gap: 32px;         /* 입력창–아바타, 아바타–출처 간격 (같게) */
     --font: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   html, body { margin: 0; }
   body {
     background: var(--concrete);
@@ -48,7 +49,10 @@
   .hero { display: grid; gap: 14px; align-content: center; justify-items: center; }
   body.landing .hero { min-height: calc(100svh - 68px); }
   .hero h1 { margin: 0 0 6px; font-size: clamp(2.4rem, 8vw, 3.2rem); font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
-  body.result .hero h1, body.result .examples { display: none; }
+  body.result .hero h1 { display: none; }
+  .notice { display: none; margin: 0; font-size: .88rem; color: var(--caution-ink); background: #fff6d6;
+            border: 1px solid #f0d77a; border-radius: 999px; padding: 3px 14px; }
+  body.result .notice { display: block; }
   form.query { position: relative; width: min(100%, 640px); }
   form.query input {
     width: 100%;
@@ -67,7 +71,7 @@
   }
   form.query button svg { width: 22px; height: 22px; }
   form.query button:disabled { opacity: .5; cursor: wait; }
-  .examples { display: flex; flex-wrap: wrap; gap: 0 6px; justify-content: center; width: min(100%, 800px); }
+  .examples { display: flex; flex-wrap: wrap; gap: 0 6px; justify-content: center; width: min(100%, 880px); }
   .examples .br { flex-basis: 100%; height: 0; }   /* 넓은 화면: 3개 / 2개 두 줄 */
   @media (max-width: 760px) { .examples .br { display: none; } }
   .examples button {
@@ -79,7 +83,7 @@
   /* 결과: 아래에서 올라옴 (그 사이 아바타는 미리 불러와 둠) */
   .results { display: grid; gap: var(--block-gap); grid-template-columns: minmax(0, 1fr); }
   .results > * { min-width: 0; }
-  .results .stage-wrap { margin-top: -9px; }   /* 캔버스 위 빈 여백만큼 당겨서 두 간격을 눈으로도 같게 */
+  .results .stage-wrap { margin-top: -17px; }   /* 캔버스 위 빈 여백만큼 당겨서 두 간격을 눈으로도 같게 */
   body.landing .results { visibility: hidden; opacity: 0; transform: translateY(100vh); position: absolute; left: 0; right: 0; top: 0; pointer-events: none; }
   body.result .results { animation: rise .6s cubic-bezier(.2,.8,.2,1) .12s both; }
   @keyframes rise { from { opacity: 0; transform: translateY(60vh); } to { opacity: 1; transform: none; } }
@@ -92,7 +96,7 @@
   .stage {
     position: relative;
     width: min(100%, 460px);
-    aspect-ratio: 1;
+    aspect-ratio: 1.45;                 /* 배 아래는 잘라서 답변이 화면 안에 들어오도록 */
   }
   .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   .stage #av { opacity: 0; transition: opacity .5s; }
@@ -100,14 +104,15 @@
   .stage .loading { position: absolute; inset: auto 0 45% 0; text-align: center; color: var(--muted); font-size: .9rem; display: none; }
   .stage .loading.on { display: block; }
   .stage .fs {
-    position: absolute; left: 50%; bottom: 17%; transform: translateX(-50%);
+    position: absolute; left: 50%; top: 3%; transform: translateX(-50%);
     background: var(--caution); color: var(--caution-ink);
     padding: 6px 14px; border-radius: 8px; font-weight: 700; white-space: nowrap; display: none;
   }
   .stage .fs.on { display: block; }
   .now {
-    min-height: 2.6rem;
-    font-size: clamp(1.7rem, 6vw, 2.3rem);
+    position: absolute; left: 0; right: 0; bottom: 3%;
+    text-shadow: 0 0 6px var(--concrete), 0 0 12px var(--concrete);
+    font-size: clamp(1.5rem, 5vw, 2rem);
     font-weight: 700;
     letter-spacing: -0.02em;
     text-align: center;
@@ -142,6 +147,7 @@
   .signinfo p { margin: 0; }
   .signinfo .sign { color: var(--muted); font-size: .92rem; }
   .signinfo .warn { margin: 0; text-align: left; }
+  .answer .hint { color: var(--muted); font-size: .92rem; margin: -4px 0 0; }
   .answer > :last-child { margin-bottom: 0; }
   .warn {
     border-left: 4px solid var(--caution); background: #fffaea; padding: 8px 12px; border-radius: 0 8px 8px 0;
@@ -169,6 +175,7 @@
 <main class="app">
   <section class="hero" aria-label="검색">
     <h1>이음</h1>
+    <p class="notice">일부 단어의 수어 동작만 준비되어 있습니다.</p>
     <form class="query" id="form">
       <input id="q" name="q" autocomplete="off" placeholder="어떤 도움을 드릴까요?" aria-label="질문 또는 문장 입력">
       <button id="go" type="submit" aria-label="수어로 보기">
@@ -184,11 +191,11 @@
         <canvas id="av" aria-label="수어 아바타"></canvas>
         <span class="loading" id="loading"></span>
         <div class="fs" id="fs"></div>
+        <div class="now" id="now" aria-live="polite"></div>
       </div>
-      <div class="now" id="now" aria-live="polite"></div>
       <ol class="glosses" id="glosses" aria-label="수어 순서"></ol>
       <div class="signinfo" id="signinfo"></div>
-      <div class="controls">
+      <div class="controls" id="controls">
         <button type="button" id="replay">다시 보기</button>
       </div>
     </section>
@@ -232,14 +239,27 @@ try {
 </script>
 <script>
 const API = location.protocol.startsWith("http") ? "" : "http://localhost:8000";
-// 질문 예시: 앞 4개는 조원이 확정한 안내 문장(수어 동작 있음)으로 답이 나오고, 마지막은 문서에서 답을 찾음
-const EXAMPLES = [
+// 예시 질문: 서버(/examples)의 목록에서 무작위로 5개. 이번 접속에서 이미 한 질문과
+// 주제가 같거나(같은 안내 문장·같은 문서 문단으로 답이 감) 글자가 비슷하면 숨김. 새로고침하면 다시 무작위.
+let POOL = [
   "위험한 곳에서는 어떻게 해야 하나요?",
   "낙하물은 어떻게 조심해요?",
   "감전 위험이 있으면 뭘 착용해야 해요?",
   "보호구에 이상이 있는지 어떻게 확인해요?",
   "정화통은 언제 교체해요?",
-];
+].map(q => ({ question: q, topic: null }));
+const SHOW = 4;   // 2개씩 2줄
+const asked = { texts: [], topics: new Set() };
+const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const bigrams = (t) => { const s = t.replace(/[\s?.!,~]/g, ""), g = new Set(); for (let i = 0; i < s.length - 1; i++) g.add(s.slice(i, i + 2)); return g; };
+function similar(a, b) {                       // 글자 2개 단위 겹침 비율 (짧은 쪽 기준)
+  const A = bigrams(a), B = bigrams(b); let n = 0;
+  A.forEach(x => { if (B.has(x)) n++; });
+  return n / Math.max(1, Math.min(A.size, B.size));
+}
+const visibleExamples = () => POOL.filter(e =>
+  !(e.topic && asked.topics.has(e.topic)) && !asked.texts.some(t => similar(t, e.question) >= 0.6)).slice(0, SHOW);
+shuffle(POOL);
 
 const $ = (id) => document.getElementById(id);
 let data = null, motion = null, items = [], frameF = 0, raf = 0, lastT = 0;
@@ -247,8 +267,9 @@ let data = null, motion = null, items = [], frameF = 0, raf = 0, lastT = 0;
 // ---------- 입력 ----------
 function renderExamples() {
   $("examples").innerHTML = "";
-  EXAMPLES.forEach((t, i) => {
-    if (i === Math.ceil(EXAMPLES.length / 2)) { const br = document.createElement("span"); br.className = "br"; $("examples").append(br); }
+  const list = visibleExamples().map(e => e.question);
+  list.forEach((t, i) => {
+    if (i === Math.ceil(list.length / 2)) { const br = document.createElement("span"); br.className = "br"; $("examples").append(br); }
     const b = document.createElement("button");
     b.type = "button"; b.textContent = t;
     b.onclick = () => { $("q").value = t; $("q").focus(); };   // 입력창에만 넣고, 화살표를 눌러야 넘어감
@@ -271,6 +292,9 @@ async function run() {
       throw new Error("서버가 예전 버전입니다. 터미널에서 Ctrl+C로 끄고 다시 실행하세요");
     if (!res.ok) throw new Error(`서버 응답 ${res.status}`);
     data = await res.json();
+    asked.texts.push(q);                       // 한 질문(과 같은 주제)은 예시에서 빼기
+    if (data.topic) asked.topics.add(data.topic);
+    renderExamples();
     showResults();
     render();
   } catch (err) {
@@ -321,12 +345,25 @@ function tableHTML(rows) {
   return `<div class="tbl"><table>${body}</table></div>`;
 }
 
+// 문서에 근거가 없으면 답하지 않음 (엉뚱한 답·수어 대신 안내만)
+function renderNone() {
+  motion = null; items = [];
+  $("glosses").innerHTML = ""; $("signinfo").innerHTML = ""; $("now").textContent = "";
+  $("controls").hidden = true; $("sources").hidden = true;
+  $("answer").innerHTML = `<h2>답변</h2>
+    <p class="text">문서에서 관련 내용을 찾지 못했습니다.</p>
+    <p class="hint">보호구 착용·관리처럼 산업안전 문서에 있는 내용을 질문하거나, 안전 안내 문장을 입력해 주세요.</p>`;
+  cancelAnimationFrame(raf);
+  if (window.avatar) window.avatar.setFrame(null);
+}
+
 function render() {
+  if (data.mode === "none") return renderNone();
+  $("controls").hidden = false;
   motion = data.motion;
   const sents = data.sentences || [];
   const unverified = [...new Set(sents.flatMap(s => s.unverified_terms || []))];
-  const partial = sents.filter(s => s.complete === false).length
-    ? `<p class="warn">아직 일부 단어의 수어 동작만 준비되어 있어, 준비된 단어만 보여줍니다.</p>` : "";
+  const partial = "";   // 동작 준비 상태 안내는 입력창 위에 항상 표시 (.notice)
 
   // 글로스 순서 (문장 사이 구분)
   items = [];
@@ -417,6 +454,9 @@ function play() {
 $("replay").onclick = () => data && play();
 
 renderExamples();
+fetch(`${API}/examples`).then(r => r.ok ? r.json() : []).then(list => {
+  if (list.length) { POOL = shuffle(list); renderExamples(); }
+}).catch(() => {});
 </script>
 </body>
 </html>

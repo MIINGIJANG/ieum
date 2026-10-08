@@ -56,11 +56,18 @@ def merge_sources(hits, titles, order=None, tables=None):
 
 class SafetySignPipeline:
     def __init__(self, ckpt, index, lexicon=None, motion_dir=None, sentences=None, k=3, demo_threshold=0.45,
-                 titles="data/kosha/titles.json", answers="data/kosha/answers.json"):
+                 titles="data/kosha/titles.json", answers="data/kosha/answers.json", min_score=0.11,
+                 domain_terms="data/kosha/domain_terms.txt"):
         self.tr = Translator(ckpt, lexicon)
         self.rag = SafetyRAG.load(index)
         self.motion = MotionDict(motion_dir) if motion_dir and Path(motion_dir).exists() else None
         self.k = k
+        # 답변 거절 기준: 문서 검색 1위 점수가 이보다 낮으면 '관련 내용 없음' (환각 방지, docs/환각방지.md)
+        self.min_score = min_score
+        # 문장 번역 거절 기준: 산업안전 핵심어가 하나도 없으면 번역하지 않음 (번역 모델이 아무 문장이나 안전 수어로 바꾸는 것 방지)
+        dt = Path(domain_terms) if domain_terms else None
+        self.domain_terms = [w.strip() for w in dt.read_text(encoding="utf-8").splitlines()
+                             if w.strip() and not w.startswith("#")] if dt and dt.exists() else []
         # 안내 문장별 문서 근거 답변 (수어 문장은 짧은 안내, 화면 답변은 문서 내용)
         self.answers = json.loads(Path(answers).read_text(encoding="utf-8")) if answers and Path(answers).exists() else {}
         from .tables import PageTables
@@ -111,22 +118,61 @@ class SafetySignPipeline:
 
     _Q = re.compile(r"(\?|까|나요|니까|어떻게|언제|어디|무엇|뭐|뭘|왜|누가|알려|궁금|어떤|되나|하나|해요\??$|돼요\??$)")
 
+    NO_ANSWER = "문서에서 관련 내용을 찾지 못했습니다."
+
+    def _abstain(self, text, score):
+        """근거가 약하면 답하지 않음: 답변·수어·출처 모두 비움."""
+        return {"mode": "none", "question": text, "answer_mode": "none", "answer_text": "",
+                "sign_text": "", "sentences": [], "motion": None, "sources": [], "top_score": round(score, 4)}
+
     def query(self, text, beam=4):
-        """검색창 하나로: 확정 문장이면 그대로 번역, 질문처럼 보이면 문서 검색 후 답변, 아니면 문장 번역."""
+        r = self._query(text, beam)
+        r["topic"] = self.topic(text) if r.get("mode") != "none" else None
+        return r
+
+    def _query(self, text, beam=4):
+        """검색창 하나로: 확정 문장이면 그대로 번역, 질문처럼 보이면 문서 검색 후 답변, 아니면 문장 번역.
+        안전 문서와 관련이 없는 입력(인사·잡담·문서 밖 주제)은 답하지 않음."""
         if _norm(text) in self._memory:
             return {"mode": "translate", **self.translate_text(text, beam)}
         t = text.strip()
         is_sentence = re.search(r"(다|요|세요|시오)[.!]?$", t) is not None   # 완결된 안내 문장
         if self._Q.search(t) or not is_sentence:                              # 질문 또는 '감전 위험' 같은 키워드
-            return {"mode": "ask", **self.ask(text, beam)}
+            r = self.ask(text, beam)
+            return r if r.get("mode") == "none" else {"mode": "ask", **r}
+        if not self.in_domain(t):
+            return self._abstain(text, 0.0)
         return {"mode": "translate", **self.translate_text(text, beam)}
+
+    def topic(self, text):
+        """질문의 '주제' 키: 같은 안내 문장 또는 같은 문서 쪽으로 답이 가면 같은 주제 (예시 질문 중복 제거용)."""
+        hit = self._memory.get(_norm(text))
+        if hit:
+            return "demo:" + hit["korean"]
+        demo, score = self.best_demo(text)
+        if self._demo_ok(text, demo, score):
+            return "demo:" + demo["korean"]
+        h = self.rag.search(text, 1)
+        if h and h[0]["score"] >= self.min_score:
+            return f"chunk:{self._order.get(h[0]['text'], h[0]['page'])}"   # 같은 문단으로 답이 가면 같은 주제
+        return None
+
+    def in_domain(self, text):
+        """산업안전 핵심어가 하나라도 들어 있는지 (핵심어 목록이 없으면 항상 True)."""
+        t = re.sub(r"\s", "", text)
+        return not self.domain_terms or any(w in t for w in self.domain_terms)
+
+    def _demo_ok(self, question, demo, score):
+        """준비된 안내 문장으로 답해도 되는지: 유사도 기준 + 핵심어가 질문에 있어야 함."""
+        if not demo or score < self.demo_threshold:
+            return False
+        kws = self.answers.get(demo["korean"], {}).get("keywords")
+        return not kws or any(k in re.sub(r"\s", "", question) for k in kws)
 
     def ask(self, question, beam=4):
         hits = self.rag.search(question, self.k)
         demo, score = self.best_demo(question)
-        kws = self.answers.get(demo["korean"], {}).get("keywords") if demo else None
-        on_topic = not kws or any(k in re.sub(r"\s", "", question) for k in kws)   # 핵심어가 있어야 준비된 문장으로 답함
-        if demo and score >= self.demo_threshold and on_topic:
+        if self._demo_ok(question, demo, score):
             # 수어: 조원이 확정한 안내 문장 / 화면 답변: 그 문장의 문서 근거 답변
             texts, mode = [demo["korean"]], "demo"
             a = self.answers.get(demo["korean"])
@@ -138,8 +184,13 @@ class SafetySignPipeline:
                 found, _ = self.rag.answer(question, hits)
                 answer_text = " ".join(" ".join(strip_marks(t).split("\n")) for t in found)
         else:
+            top = hits[0]["score"] if hits else 0.0
+            if top < self.min_score:                       # 근거 약함 → 답하지 않음
+                return self._abstain(question, top)
             texts, mode = self.rag.answer(question, hits)
             texts = [" ".join(strip_marks(t).split("\n")) for t in texts]
+            if not texts:
+                return self._abstain(question, top)
             answer_text = " ".join(texts)
         sents = [self.translate_one(p, beam) for t in texts for p in (split_sentences(t) or [t])]
         return {

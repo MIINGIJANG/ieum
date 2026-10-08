@@ -96,6 +96,21 @@ def demo_sentences():
     return [{"korean": d["korean"], "gloss": d["gloss"], "complete": d.get("complete", True)} for d in pipe.demo]
 
 
+_EXAMPLES = None
+
+
+@app.get("/examples")
+def examples():
+    """예시 질문 목록 + 주제 키. 화면은 이 중 무작위로 보여주고, 이미 한 질문과 주제가 같으면 숨김."""
+    global _EXAMPLES
+    if _EXAMPLES is None:
+        import json
+        f = ROOT / "data" / "kosha" / "example_questions.json"
+        qs = json.loads(f.read_text(encoding="utf-8")) if f.exists() else []
+        _EXAMPLES = [{"question": q, "topic": pipe.topic(q)} for q in qs]
+    return _EXAMPLES
+
+
 @app.post("/motion")
 def motion(req: Glosses):
     return pipe.motion_for(req.glosses) or {"fps": 30, "frames": [], "segments": []}

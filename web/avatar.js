@@ -185,6 +185,7 @@ export class SignAvatar {
       this.scene.add(hat);
       hat.updateMatrixWorld(true);
       head.attach(hat);                                          // 머리 뼈를 따라 움직이도록
+      this._hat = hat;
     }
 
   }
@@ -269,11 +270,18 @@ export class SignAvatar {
     return [E, S.clone().add(dir.multiplyScalar(d))];
   }
 
+  // 화면: 안전모 위 ~ 배(골반 바로 위)까지. 수어 동작 중 손은 골반보다 위에 있음(전 동작 확인: 손 최저 ≈ 골반 + 0.15)
   _frameCamera() {
-    const y = (this.neckY + this.headY) / 2 - 0.02;
-    const dist = this.shoulderW * 7.2;               // 머리 위까지 여유 있게
-    this.camera.position.set(0, y - this.shoulderW * 0.35, dist);
-    this.camera.lookAt(0, y - this.shoulderW * 0.35, 0);
+    const V = THREE.Vector3;
+    const hips = this.vrm.humanoid.getRawBoneNode("hips").getWorldPosition(new V()).y;
+    const top = this._hat ? new THREE.Box3().setFromObject(this._hat).max.y : this.headY + 0.18;
+    const bottom = hips + 0.02;
+    const pad = 0.025, span = top - bottom + pad * 2;
+    const half = THREE.MathUtils.degToRad(this.camera.fov / 2);
+    const dist = span / 2 / Math.tan(half);
+    const cy = (top + bottom) / 2;
+    this.camera.position.set(0, cy, dist);
+    this.camera.lookAt(0, cy, 0);
   }
 
   _resize() {
