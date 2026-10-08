@@ -27,7 +27,7 @@ def strip_marks(text):
     return "\n".join(_HEADNUM.sub("", _MARK.sub("", ln)).strip() for ln in text.split("\n") if ln.strip())
 
 
-def merge_sources(hits, titles, order=None, tables=None):
+def merge_sources(hits, titles, order=None, tables=None, images=None):
     """같은 문서·쪽은 하나로 합치고(겹치는 문장 제거, 문서 순서대로) 번호 표시를 뗀 전체 문장으로."""
     out = {}
     rank = {}
@@ -50,6 +50,12 @@ def merge_sources(hits, titles, order=None, tables=None):
         o["text"] = "\n".join(lines)
         o["blocks"] = (tables.blocks(o["doc"], o["page"], lines) if tables
                        else [{"type": "text", "text": ln} for ln in lines])   # 원문 표는 표로
+        if images:   # 원본 PDF에서 잘라 보여줄 영역(pt): 표 밖 문장 + 표 테두리
+            text_lines = [b["text"] for b in o["blocks"] if b["type"] == "text"]
+            boxes = [b["bbox"] for b in o["blocks"] if b["type"] == "table"]
+            o["region"] = images.region(o["doc"], o["page"], text_lines, boxes)
+        else:
+            o["region"] = None
         res.append(o)
     return sorted(res, key=lambda o: (o["doc"], o["page"]))     # 출처는 쪽 번호 순
 
@@ -70,8 +76,10 @@ class SafetySignPipeline:
                              if w.strip() and not w.startswith("#")] if dt and dt.exists() else []
         # 안내 문장별 문서 근거 답변 (수어 문장은 짧은 안내, 화면 답변은 문서 내용)
         self.answers = json.loads(Path(answers).read_text(encoding="utf-8")) if answers and Path(answers).exists() else {}
+        from .pageimage import PageImages
         from .tables import PageTables
         self.tables = PageTables(Path(titles).parent if titles else "data/kosha")
+        self.images = PageImages(Path(titles).parent if titles else "data/kosha")
         self._order = {c["text"]: i for i, c in enumerate(self.rag.chunks)}
         self.titles = json.loads(Path(titles).read_text(encoding="utf-8")) if titles and Path(titles).exists() else {}
         self.demo = []
@@ -200,5 +208,5 @@ class SafetySignPipeline:
             "sign_text": " ".join(texts),              # 아바타가 수어로 보여주는 문장
             "sentences": sents,                        # 문장별 글로스 + 타임라인
             "motion": self.motion_for([g for s in sents for g in s["gloss"]]),   # 전체 문장 이어붙인 동작
-            "sources": merge_sources(hits, self.titles, self._order, self.tables),   # 출처: 문서 제목·쪽·전체 문장
+            "sources": merge_sources(hits, self.titles, self._order, self.tables, self.images),   # 출처: 문서 제목·쪽·전체 문장
         }

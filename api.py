@@ -11,7 +11,7 @@ uvicorn api:app --port 8000
 import os
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -94,6 +94,18 @@ def translate(req: Text):
 def demo_sentences():
     """조원이 확정한 안내 문장 목록 (웹 예시 버튼용)."""
     return [{"korean": d["korean"], "gloss": d["gloss"], "complete": d.get("complete", True)} for d in pipe.demo]
+
+
+@app.get("/source_image")
+def source_image(doc: str, page: int, x0: float, y0: float, x1: float, y1: float):
+    """출처 영역을 원본 PDF 모양 그대로 잘라낸 PNG."""
+    try:
+        png = pipe.images.render(doc, page, (x0, y0, x1, y1))
+    except Exception:
+        png = None
+    if not png:
+        raise HTTPException(404)
+    return Response(png, media_type="image/png", headers={"Cache-Control": "max-age=86400"})
 
 
 _EXAMPLES = None

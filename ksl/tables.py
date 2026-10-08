@@ -41,7 +41,7 @@ class PageTables:
                         continue
                     text = " ".join(c for r in rows for c in r if c)
                     flat = _ws.sub("", "".join(c for r in rows for c in r if c))   # 행 순서로 이어붙인 글자
-                    out.append({"rows": rows, "grams": _grams(text), "flat": flat})
+                    out.append({"rows": rows, "grams": _grams(text), "flat": flat, "bbox": list(t.bbox)})
                 return out
         except Exception:
             return []
@@ -61,5 +61,5 @@ class PageTables:
                 out.append({"type": "text", "text": ln})
             elif hit not in used:
                 used.add(hit)
-                out.append({"type": "table", "rows": tables[hit]["rows"]})
+                out.append({"type": "table", "rows": tables[hit]["rows"], "bbox": tables[hit]["bbox"]})
         return out
