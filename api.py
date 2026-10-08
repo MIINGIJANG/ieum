@@ -105,6 +105,29 @@ def demo_sentences():
 _EXAMPLES = None
 
 
+_WARM = {"done": False}
+
+
+@app.post("/warmup")
+def warmup():
+    """첫 화면 로딩 중에 한 번 호출: 번역 모델 불러오기·검색·동작 합치기를 미리 한 번씩 돌려 둠
+    → 사용자가 처음 질문하거나 문장을 넣을 때 기다림이 없게."""
+    import time
+    t0 = time.time()
+    if not _WARM["done"]:
+        try:
+            pipe.translate_one("작업 전에 보호구를 점검하세요.")       # 번역 모델(torch) 불러오기
+        except Exception as e:                                         # 모델이 없어도 질문 답변은 되게
+            print("[이음] 번역 모델 미리 불러오기 실패:", e)
+        try:
+            examples()
+            pipe.ask("낙하물은 어떻게 조심해요?")                      # 검색·출처·동작 합치기
+        except Exception as e:
+            print("[이음] 미리 실행 실패:", e)
+        _WARM["done"] = True
+    return {"ok": True, "ms": round((time.time() - t0) * 1000)}
+
+
 @app.get("/pages")
 def pages():
     """출처용 쪽 이미지 목록 (화면이 미리 받아 두어 출처가 바로 뜨게)."""

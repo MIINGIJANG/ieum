@@ -73,12 +73,12 @@
   }
   form.query button svg { width: 22px; height: 22px; }
   form.query button:disabled { opacity: .5; cursor: wait; }
-  .examples { display: flex; flex-wrap: wrap; gap: 0 6px; justify-content: center; width: min(100%, 880px); margin: -3px 0; }   /* 버튼 위아래 3px 여백 상쇄 */
-  .examples .br { flex-basis: 100%; height: 0; }   /* 넓은 화면: 3개 / 2개 두 줄 */
-  @media (max-width: 760px) { .examples .br { display: none; } }
+  /* 예시 질문: 모든 화면에서 한 줄에 1개씩 3줄, 버튼 폭은 전체 예시 중 가장 긴 질문에 맞춰 모두 같게 (--ex-w, JS가 계산) */
+  .examples { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; }
   .examples button {
+    width: min(100%, var(--ex-w, auto)); text-align: center;
     border: 1px solid var(--line); background: var(--surface); border-radius: 999px;
-    padding: 4px 12px; font-size: 1rem; cursor: pointer; color: var(--ink); margin: 3px 0;
+    padding: 4px 12px; font-size: 1rem; cursor: pointer; color: var(--ink); margin: 0;
   }
   .examples button:hover { border-color: var(--sign-blue); }
 
@@ -151,11 +151,26 @@
   .empty { color: var(--muted); }
   .error { color: #9b1c1c; }
 
+  /* 첫 로딩 화면: 아바타·출처 이미지·번역 모델을 모두 준비한 뒤 사라짐 (사용 중에는 기다림 없음) */
+  .boot { position: fixed; inset: 0; z-index: 1000; background: var(--concrete); display: flex; flex-direction: column;
+          align-items: center; justify-content: center; gap: var(--block-gap); transition: opacity .4s ease; }
+  .boot.done { opacity: 0; pointer-events: none; }
+  .boot h1 { margin: 0; font-size: 2.6rem; font-weight: 700; letter-spacing: -.02em; }
+  .boot .bar { width: min(240px, 60vw); height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+  .boot .bar i { display: block; height: 100%; width: 0; background: var(--ink); border-radius: 3px; transition: width .3s ease; }
+  .boot p { margin: 0; color: var(--muted); font-size: 1rem; min-height: 1.6em; }
+  @media (prefers-reduced-motion: reduce) { .boot, .boot .bar i { transition: none; } }
+
   /* 화면이 넓어도 위아래 배치 (입력창 폭에 맞춤) */
   .results { width: min(100%, 640px); margin: 0 auto; }
 </style>
 </head>
 <body class="landing">
+<div class="boot" id="boot" role="status" aria-live="polite">
+  <h1>👷 이음</h1>
+  <div class="bar" aria-hidden="true"><i id="bootBar"></i></div>
+  <p id="bootMsg">준비하는 중…</p>
+</div>
 <main class="app">
   <section class="hero" aria-label="검색">
     <h1>이음</h1>
@@ -211,10 +226,8 @@ try {
   window.avatar = await new SignAvatar(document.getElementById("av")).load("./models/avatar.vrm");
   document.getElementById("stage").classList.add("three");
   window.dispatchEvent(new Event("avatar-ready"));
-  // 아바타가 뜬 뒤 출처용 쪽 이미지를 미리 받아 둠 (첫 답변의 출처가 바로 뜨게, 약 2MB)
-  const idle = window.requestIdleCallback || ((f) => setTimeout(f, 300));
-  idle(() => fetch(`${API}/pages`).then(r => r.ok ? r.json() : []).then(list => list.forEach(u => { const i = new Image(); i.src = u; })).catch(() => {}));
 } catch (e) {
+  window.dispatchEvent(new Event("avatar-failed"));
   console.warn("3D 아바타를 불러오지 못했습니다:", e);
   const el = document.getElementById("loading");
   el.textContent = "아바타를 불러오지 못했습니다. 서버를 다시 켠 뒤 새로고침하세요.";
@@ -223,6 +236,49 @@ try {
 </script>
 <script>
 const API = location.protocol.startsWith("http") ? "" : "http://localhost:8000";
+
+// ---------- 첫 로딩: 처음 쓸 때 생기는 지연을 여기서 모두 미리 처리 ----------
+// 아바타(내려받기·옷 입히기), 출처 쪽 이미지, 서버(번역 모델·검색), 예시 질문, 글꼴
+const boot = (() => {
+  const steps = [];
+  let done = 0;
+  const bar = document.getElementById("bootBar"), msg = document.getElementById("bootMsg");
+  const add = (label, p) => {
+    steps.push(label);
+    const t0 = performance.now();
+    return Promise.resolve(p).catch(() => {}).finally(() => {
+      (window.bootTimes ||= {})[label] = Math.round(performance.now() - t0);
+      done++;
+      bar.style.width = `${Math.round(done / steps.length * 100)}%`;
+    });
+  };
+  const show = (t) => { msg.textContent = t; };
+  return { add, show };
+})();
+const avatarReady = new Promise((res) => {
+  if (window.avatar) return res();
+  addEventListener("avatar-ready", res, { once: true });
+  addEventListener("avatar-failed", res, { once: true });
+});
+const preloadPages = fetch(`${API}/pages`).then(r => r.ok ? r.json() : []).then(list =>
+  Promise.all(list.map(u => new Promise((res) => { const i = new Image(); i.onload = i.onerror = res; i.src = u; }))));
+const warmServer = fetch(`${API}/warmup`, { method: "POST" });
+const examplesReady = fetch(`${API}/examples`).then(r => r.ok ? r.json() : []);
+boot.show("아바타를 준비하는 중…");
+avatarReady.then(() => boot.show("답변을 준비하는 중…"));
+const bootAll = Promise.all([
+  boot.add("avatar", avatarReady),
+  boot.add("pages", preloadPages),
+  boot.add("server", warmServer),
+  boot.add("examples", examplesReady),
+  boot.add("fonts", Promise.race([document.fonts ? document.fonts.ready : null, new Promise(r => setTimeout(r, 3000))])),  // 글꼴은 3초까지만 기다림
+]);
+// 너무 오래 걸리면(느린 망) 60초 뒤에는 그냥 시작 (남은 준비는 뒤에서 계속)
+Promise.race([bootAll, new Promise(r => setTimeout(r, 60000))]).then(() => {
+  const el = document.getElementById("boot");
+  el.classList.add("done");
+  setTimeout(() => el.remove(), 500);
+});
 // 예시 질문: 서버(/examples)의 목록에서 무작위로 5개. 이번 접속에서 이미 한 질문과
 // 주제가 같거나(같은 안내 문장·같은 문서 문단으로 답이 감) 글자가 비슷하면 숨김. 새로고침하면 다시 무작위.
 let POOL = [
@@ -232,7 +288,7 @@ let POOL = [
   "보호구에 이상이 있는지 어떻게 확인해요?",
   "정화통은 언제 교체해요?",
 ].map(q => ({ question: q, topic: null }));
-const SHOW = 4;   // 2개씩 2줄
+const SHOW = 3;   // 한 줄에 1개씩 3줄
 const asked = { texts: [], topics: new Set() };
 const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const bigrams = (t) => { const s = t.replace(/[\s?.!,~]/g, ""), g = new Set(); for (let i = 0; i < s.length - 1; i++) g.add(s.slice(i, i + 2)); return g; };
@@ -258,14 +314,22 @@ let data = null, motion = null, items = [], frameF = 0, raf = 0, lastT = 0;
 // ---------- 입력 ----------
 function renderExamples() {
   $("examples").innerHTML = "";
-  const list = visibleExamples().map(e => e.question);
-  list.forEach((t, i) => {
-    if (i === Math.ceil(list.length / 2)) { const br = document.createElement("span"); br.className = "br"; $("examples").append(br); }
+  visibleExamples().forEach(e => {
     const b = document.createElement("button");
-    b.type = "button"; b.textContent = t;
-    b.onclick = () => { $("q").value = t; $("q").focus(); };   // 입력창에만 넣고, 화살표를 눌러야 넘어감
+    b.type = "button"; b.textContent = e.question;
+    b.onclick = () => { $("q").value = e.question; $("q").focus(); };   // 입력창에만 넣고, 화살표를 눌러야 넘어감
     $("examples").append(b);
   });
+}
+// 버튼 폭 통일: 예시 전체(POOL) 중 가장 긴 질문의 버튼 폭을 재서 모든 버튼에 적용 (바뀌어도 들쭉날쭉하지 않게)
+function sizeExamples() {
+  const box = $("examples"), probe = document.createElement("button");
+  probe.type = "button"; probe.style.cssText = "position:absolute;visibility:hidden;width:auto;white-space:nowrap";
+  box.append(probe);
+  let w = 0;
+  for (const e of POOL) { probe.textContent = e.question; w = Math.max(w, probe.getBoundingClientRect().width); }
+  probe.remove();
+  if (w) box.style.setProperty("--ex-w", `${Math.ceil(w) + 2}px`);
 }
 $("form").onsubmit = (e) => { e.preventDefault(); run(); };
 
@@ -481,9 +545,11 @@ function play() {
 $("replay").onclick = () => data && play();
 
 renderExamples();
-fetch(`${API}/examples`).then(r => r.ok ? r.json() : []).then(list => {
+examplesReady.then(list => {
   if (list.length) { POOL = shuffle(list); shown = []; renderExamples(); }
-}).catch(() => {});
+  sizeExamples();
+  if (document.fonts) document.fonts.ready.then(sizeExamples);   // 글꼴이 바뀌면 폭 다시 계산
+}).catch(() => sizeExamples());
 </script>
 </body>
 </html>
