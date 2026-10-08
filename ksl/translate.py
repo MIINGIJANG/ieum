@@ -1,9 +1,6 @@
 """학습된 모델로 한국어 문장 → 수어 글로스(+아바타용 동작 시간) 변환."""
 import re
 
-import torch
-
-from .model import Ko2Gloss
 from .oov import Lexicon, norm_gloss
 from .tokenizer import Vocab, tokenize_ko
 
@@ -20,6 +17,9 @@ def split_sentences(text):
 
 class Translator:
     def __init__(self, ckpt_path, lexicon_path=None, device=None):
+        import torch                                   # 무거운 라이브러리라 실제로 번역할 때만 불러옴 (서버 시작 빠르게)
+        from .model import Ko2Gloss
+        self.torch = torch
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         ck = torch.load(ckpt_path, map_location=self.device, weights_only=True)
         self.cfg = ck["cfg"]
@@ -35,7 +35,7 @@ class Translator:
 
     def _raw(self, text, beam=4):
         ids = self.src.encode(tokenize_ko(text))[: self.cfg["max_src_len"]]
-        src = torch.tensor([ids], device=self.device)
+        src = self.torch.tensor([ids], device=self.device)
         if beam and beam > 1:
             out = self.model.beam(src, self.tgt.bos, self.tgt.eos, beam, self.cfg["max_tgt_len"])
         else:

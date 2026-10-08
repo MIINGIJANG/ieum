@@ -49,6 +49,11 @@ pipe = SafetySignPipeline(
 )
 
 
+# 번역 모델(torch)은 서버가 뜬 뒤 뒤에서 미리 불러둠 → 서버는 바로 열리고, 첫 문장 번역도 기다리지 않음
+import threading  # noqa: E402
+threading.Thread(target=lambda: pipe.tr, daemon=True).start()
+
+
 class Ask(BaseModel):
     question: str
     beam: int = 4
@@ -65,7 +70,7 @@ class Glosses(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"ok": True, "chunks": len(pipe.rag.chunks), "gloss_vocab": len(pipe.tr.tgt),
+    return {"ok": True, "chunks": len(pipe.rag.chunks), "gloss_vocab": len(pipe._tr.tgt) if pipe._tr else None,
             "motion_glosses": len(pipe.motion.index) if pipe.motion else 0}
 
 

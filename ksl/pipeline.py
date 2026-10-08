@@ -104,7 +104,7 @@ class SafetySignPipeline:
     def __init__(self, ckpt, index, lexicon=None, motion_dir=None, sentences=None, k=3, demo_threshold=0.45,
                  titles="data/kosha/titles.json", answers="data/kosha/answers.json", min_score=0.11,
                  domain_terms="data/kosha/domain_terms.txt"):
-        self.tr = Translator(ckpt, lexicon)
+        self._tr, self._tr_args = None, (ckpt, lexicon)       # 번역 모델은 처음 필요할 때 불러옴 (서버 시작 빠르게)
         self.rag = SafetyRAG.load(index)
         self.motion = MotionDict(motion_dir) if motion_dir and Path(motion_dir).exists() else None
         self.k = k
@@ -205,6 +205,12 @@ class SafetySignPipeline:
         if not self.in_domain(t):
             return self._abstain(text, 0.0)
         return {"mode": "translate", **self.translate_text(text, beam)}
+
+    @property
+    def tr(self):
+        if self._tr is None:
+            self._tr = Translator(*self._tr_args)
+        return self._tr
 
     def topic(self, text):
         """질문의 '주제' 키: 같은 안내 문장 또는 같은 문서 쪽으로 답이 가면 같은 주제 (예시 질문 중복 제거용)."""

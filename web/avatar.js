@@ -53,7 +53,9 @@ export class SignAvatar {
   async load(url) {
     const loader = new GLTFLoader();
     loader.register((parser) => new VRMLoaderPlugin(parser));
+    const t0 = performance.now();
     const gltf = await loader.loadAsync(url);
+    this._loadMs = Math.round(performance.now() - t0);
     const vrm = gltf.userData.vrm;
     VRMUtils.removeUnnecessaryVertices(gltf.scene);
     VRMUtils.combineSkeletons(gltf.scene);
@@ -61,19 +63,22 @@ export class SignAvatar {
     vrm.scene.traverse((o) => { o.frustumCulled = false; });
     this.scene.add(vrm.scene);
     this.vrm = vrm;
-    this._slimTorso();
-    this._captureRest();
-    this._dressUp();
-    this._tightTop();
-    this._hideCoveredBody();
-    this._shortenSleeves();
-    this._eyeColor();
-    this._bareHands();
-    this._workwear();
-    this._buzzCut();
-    this._measureBodyFront(this._hipsY, this.neckY);   // 옷을 몸에 붙인 뒤 몸 앞면 다시 측정 (손이 너무 앞으로 나가지 않게)
-    this._addHandColliders();
-    this._styleMaterials();
+    // 단계별 소요 시간(ms) 기록: window.avatar.timings
+    this.timings = {};
+    const step = (name, fn) => { const t = performance.now(); fn(); this.timings[name] = Math.round(performance.now() - t); };
+    step("slimTorso", () => this._slimTorso());
+    step("captureRest", () => this._captureRest());
+    step("dressUp", () => this._dressUp());
+    step("tightTop", () => this._tightTop());
+    step("hideCoveredBody", () => this._hideCoveredBody());
+    step("shortenSleeves", () => this._shortenSleeves());
+    step("eyeColor", () => this._eyeColor());
+    step("bareHands", () => this._bareHands());
+    step("workwear", () => this._workwear());
+    step("buzzCut", () => this._buzzCut());
+    step("measureBodyFront", () => this._measureBodyFront(this._hipsY, this.neckY));
+    step("addHandColliders", () => this._addHandColliders());
+    step("styleMaterials", () => this._styleMaterials());
     this._frameCamera();
     this.setFrame(null);
     this._loop();
@@ -781,24 +786,27 @@ export class SignAvatar {
 
   // 몸통 앞면이 높이(y)마다 z 어디까지 나와 있는지 측정 (머리카락 제외, T자세라 팔은 안 걸림)
   _measureBodyFront(y0, y1) {
+    // 높이마다 몸 앞면이 z 어디까지 나와 있는지: 꼭짓점 위치를 한 번만 계산해서 구간별 최댓값
+    // (예전: 높이마다 광선을 쏴서 매번 움직이는 메시 전체를 다시 계산 → 20초 가까이 걸렸음)
     this.vrm.update(0);
     this.vrm.scene.updateMatrixWorld(true);
-    const meshes = [];
+    const step = 0.02, n = Math.max(1, Math.round((y1 + 0.02 - (y0 - 0.1)) / step) + 1);
+    const zs = new Array(n).fill(-Infinity), base = y0 - 0.1;
+    const v = new THREE.Vector3();
     this.vrm.scene.traverse((o) => {
+      if (!o.isMesh || !o.visible) return;
       const mats = [].concat(o.material || []).map((m) => m.name).join(" ");
-      if (o.isMesh && !/hair/i.test(o.name + " " + mats)) meshes.push(o);
-    });
-    const rc = new THREE.Raycaster();
-    this.front = [];
-    for (let y = y0 - 0.1; y <= y1 + 0.02; y += 0.02) {
-      let z = -Infinity;
-      for (const x of [-0.12, -0.06, 0, 0.06, 0.12]) {
-        rc.set(new THREE.Vector3(x, y, 2), new THREE.Vector3(0, 0, -1));
-        const hit = rc.intersectObjects(meshes, false)[0];
-        if (hit) z = Math.max(z, hit.point.z);
+      if (/hair/i.test(o.name + " " + mats)) return;
+      const pos = o.geometry.attributes.position;
+      for (let k = 0; k < pos.count; k++) {
+        if (o.isSkinnedMesh) o.getVertexPosition(k, v); else v.fromBufferAttribute(pos, k);
+        v.applyMatrix4(o.matrixWorld);
+        if (Math.abs(v.x) > 0.13) continue;
+        const i = Math.round((v.y - base) / step);
+        if (i >= 0 && i < n && v.z > zs[i]) zs[i] = v.z;
       }
-      this.front.push([y, z]);
-    }
+    });
+    this.front = zs.map((z, i) => [base + i * step, z]);
     this.torsoHalf = this.shoulderW * 1.0;   // 헐렁한 옷까지 고려
   }
 
