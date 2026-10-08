@@ -13,6 +13,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -21,6 +22,7 @@ from ksl.pipeline import SafetySignPipeline
 ROOT = Path(__file__).resolve().parent
 app = FastAPI(title="이음 — 산업안전 수어 안내 API", version="0.3.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(GZipMiddleware, minimum_size=1000)   # 아바타(6MB→2.5MB)·동작 JSON 압축 → 휴대폰 로딩 빠르게
 
 INDEX = os.environ.get("KSL_INDEX", "checkpoints/kosha_index.pkl")
 
@@ -101,6 +103,14 @@ def demo_sentences():
 
 
 _EXAMPLES = None
+
+
+@app.get("/pages")
+def pages():
+    """출처용 쪽 이미지 목록 (화면이 미리 받아 두어 출처가 바로 뜨게)."""
+    base = ROOT / "web" / "pages"
+    return [f"./pages/{d.name}/{p.name}" for d in sorted(base.iterdir()) if d.is_dir()
+            for p in sorted(d.glob("*.png"), key=lambda x: int(x.stem) if x.stem.isdigit() else 0)] if base.exists() else []
 
 
 @app.get("/examples")

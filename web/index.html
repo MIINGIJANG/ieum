@@ -211,6 +211,9 @@ try {
   window.avatar = await new SignAvatar(document.getElementById("av")).load("./models/avatar.vrm");
   document.getElementById("stage").classList.add("three");
   window.dispatchEvent(new Event("avatar-ready"));
+  // 아바타가 뜬 뒤 출처용 쪽 이미지를 미리 받아 둠 (첫 답변의 출처가 바로 뜨게, 약 2MB)
+  const idle = window.requestIdleCallback || ((f) => setTimeout(f, 300));
+  idle(() => fetch(`${API}/pages`).then(r => r.ok ? r.json() : []).then(list => list.forEach(u => { const i = new Image(); i.src = u; })).catch(() => {}));
 } catch (e) {
   console.warn("3D 아바타를 불러오지 못했습니다:", e);
   const el = document.getElementById("loading");
