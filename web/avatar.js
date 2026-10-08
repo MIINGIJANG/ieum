@@ -70,7 +70,7 @@ export class SignAvatar {
     this._eyeColor();
     this._bareHands();
     this._workwear();
-    this._tidyHair();
+    this._buzzCut();
     this._measureBodyFront(this._hipsY, this.neckY);   // 옷을 몸에 붙인 뒤 몸 앞면 다시 측정 (손이 너무 앞으로 나가지 않게)
     this._addHandColliders();
     this._styleMaterials();
@@ -507,6 +507,92 @@ export class SignAvatar {
     this._workwearDone = done;
   }
 
+  // 빡빡머리: 머리카락을 모두 숨기고, 얼굴(머리) 피부 텍스처의 두피 부분에 짧게 민 머리 자국을 칠함
+  _buzzCut(strength = 0.82) {
+    const V = THREE.Vector3, hm = this.vrm.humanoid;
+    this.vrm.update(0); this.vrm.scene.updateMatrixWorld(true);
+    this.vrm.scene.traverse((o) => { if (o.isMesh && /HAIR/i.test([].concat(o.material).map((m) => m.name).join(" "))) o.visible = false; });
+    this.vrm.scene.traverse((o) => { if (o.isMesh && /Bottoms/i.test([].concat(o.material).map((m) => m.name).join(" "))) o.visible = false; });   // 바지(화면 밖)는 숨김: 허리띠가 웃옷 아래로 비치지 않게
+    const eye = hm.getRawBoneNode("leftEye"), head = hm.getRawBoneNode("head");
+    if (!eye || !head) return;
+    let eyeBox = new THREE.Box3();
+    this.vrm.scene.traverse((o) => { if (o.isMesh && /EyeWhite/i.test([].concat(o.material).map((m) => m.name).join(" "))) eyeBox.expandByObject(o); });
+    const eyeY = eyeBox.isEmpty() ? eye.getWorldPosition(new V()).y + 0.02 : eyeBox.max.y;   // 눈 위쪽 끝 높이
+    let face = null;
+    this.vrm.scene.traverse((o) => {
+      if (o.isMesh && /Face_00_SKIN/i.test([].concat(o.material).map((m) => m.name).join(" "))) {
+        o.geometry.computeBoundingBox(); const b = o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld); face = face ? face.union(b) : b;
+      }
+    });
+    if (!face) return;
+    const front = eyeBox.isEmpty() ? face.max.z - 0.02 : eyeBox.max.z, fcx = (face.min.x + face.max.x) / 2;   // 깊이 기준 = 눈 앞면
+    const smooth = (e0, e1, x) => { const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
+    // 머리 자국 진하기: 이마 위(앞머리선) + 옆·뒤통수(귀 높이 위). 얼굴·귀 앞은 비움
+    const amount = (q) => {
+      const depth = front - q.z;                               // 얼굴 앞면에서 뒤로 얼마나
+      const top = smooth(eyeY + 0.035, eyeY + 0.05, q.y);                                      // 이마 위 머리선
+      const side = smooth(0.05, 0.07, depth) * smooth(eyeY + 0.005, eyeY + 0.02, q.y);         // 관자놀이·귀 위
+      const back = smooth(0.1, 0.12, depth) * smooth(eyeY - 0.06, eyeY - 0.045, q.y);          // 귀 뒤·뒤통수
+      return Math.max(top, side, back);
+    };
+    const done = new Map();
+    this.vrm.scene.traverse((o) => {
+      if (!o.isSkinnedMesh) return;
+      const mats = [].concat(o.material);
+      const mat = mats.find((m) => /Face_00_SKIN/i.test(m.name) && !/Outline/i.test(m.name) && m.map && m.map.image);
+      if (!mat) return;
+      const img = mat.map.image, W = img.width, H = img.height;
+      let C = done.get(img);
+      if (!C) {
+        const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+        const ctx = cv.getContext("2d", { willReadFrequently: true }); ctx.drawImage(img, 0, 0);
+        C = { cv, ctx, data: ctx.getImageData(0, 0, W, H), mask: new Float32Array(W * H), mats: [] };
+        done.set(img, C);
+      }
+      C.mats.push(o);
+      const g = o.geometry, idx = g.index, uv = g.attributes.uv;
+      const P = (k) => o.getVertexPosition(k, new V()).applyMatrix4(o.matrixWorld);
+      for (let t = 0; t < idx.count; t += 3) {
+        const tri = [idx.getX(t), idx.getX(t + 1), idx.getX(t + 2)], Q = tri.map(P);
+        if (Math.max(...Q.map((q) => q.y)) < eyeY - 0.07) continue;
+        const U = tri.map((k) => [uv.getX(k) * W, uv.getY(k) * H]);
+        const x0 = Math.max(0, Math.floor(Math.min(U[0][0], U[1][0], U[2][0]))), x1 = Math.min(W - 1, Math.ceil(Math.max(U[0][0], U[1][0], U[2][0])));
+        const y0 = Math.max(0, Math.floor(Math.min(U[0][1], U[1][1], U[2][1]))), y1 = Math.min(H - 1, Math.ceil(Math.max(U[0][1], U[1][1], U[2][1])));
+        const den = (U[1][1] - U[2][1]) * (U[0][0] - U[2][0]) + (U[2][0] - U[1][0]) * (U[0][1] - U[2][1]);
+        if (Math.abs(den) < 1e-9) continue;
+        const q = new V();
+        for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+          const w0 = ((U[1][1] - U[2][1]) * (x + 0.5 - U[2][0]) + (U[2][0] - U[1][0]) * (y + 0.5 - U[2][1])) / den;
+          const w1 = ((U[2][1] - U[0][1]) * (x + 0.5 - U[2][0]) + (U[0][0] - U[2][0]) * (y + 0.5 - U[2][1])) / den;
+          if (w0 < -0.02 || w1 < -0.02 || 1 - w0 - w1 < -0.02) continue;
+          q.set(0, 0, 0).addScaledVector(Q[0], w0).addScaledVector(Q[1], w1).addScaledVector(Q[2], 1 - w0 - w1);
+          const a = amount(q), m = y * W + x;
+          if (a > C.mask[m]) C.mask[m] = a;
+        }
+      }
+    });
+    const tint = [44, 40, 38];
+    for (const [img, C] of done) {
+      const d = C.data.data;
+      for (let m = 0; m < C.mask.length; m++) {
+        if (C.mask[m] <= 0.01) continue;
+        const k = m * 4, x = m % C.cv.width, y = (m / C.cv.width) | 0;
+        const r = Math.abs(Math.sin(x * 12.9898 + y * 78.233) * 43758.5453) % 1;   // 짧은 머리카락 점점이
+        const a = Math.min(1, C.mask[m] * strength * (0.75 + 0.35 * r));
+        for (let c = 0; c < 3; c++) d[k + c] = d[k + c] * (1 - a) + tint[c] * a;
+      }
+      C.ctx.putImageData(C.data, 0, 0);
+      const tex = new THREE.CanvasTexture(C.cv);
+      this.vrm.scene.traverse((o) => {
+        if (!o.isMesh) return;
+        for (const m of [].concat(o.material)) for (const key of ["map", "shadeMultiplyTexture"]) {
+          const t0 = m[key];
+          if (t0 && t0.image === img) { tex.flipY = t0.flipY; tex.colorSpace = t0.colorSpace; tex.wrapS = t0.wrapS; tex.wrapT = t0.wrapT; m[key] = tex; m.needsUpdate = true; }
+        }
+      });
+    }
+  }
+
   // 단정한 머리: 얼굴 앞으로 내려와 눈을 가리는 앞머리, 턱 아래로 길게 늘어진 옆머리 가닥은 숨김 (안전모가 윗머리를 덮음)
   _tidyHair() {
     const h = this.vrm.humanoid, V = THREE.Vector3;
@@ -556,15 +642,14 @@ export class SignAvatar {
     }
   }
 
-  _slimTorso(sx = 0.9, sz = 0.92, wx = 0.84, wz = 0.86) {
-    // 허리(척추)는 wx·wz, 가슴은 sx·sz 비율로 가늘게. 목·어깨는 원래 굵기로 되돌림 (회전하지 않는 뼈라 정확히 맞음)
+  _slimTorso(sx = 0.9, sz = 0.92) {
+    // 골반·허리·가슴을 같은 비율로 가늘게 → 가슴에서 아래로 일직선 (모래시계 체형 X)
+    // 목·어깨·다리는 원래 굵기로 되돌림 (회전하지 않는 뼈라 정확히 맞음; 다리는 화면 밖)
     const h = this.vrm.humanoid;
-    const chest = h.getRawBoneNode("chest"), spine = h.getRawBoneNode("spine");
-    if (!chest) return;
-    let px = 1, pz = 1;                                   // 가슴의 부모(척추)까지 쌓인 비율
-    if (spine && spine !== chest) { spine.scale.set(wx, 1, wz); px = wx; pz = wz; }
-    chest.scale.set(sx / px, 1, sz / pz);                 // 가슴 최종 비율 = sx, sz
-    for (const n of ["neck", "leftShoulder", "rightShoulder"]) {
+    const hips = h.getRawBoneNode("hips");
+    if (!hips) return;
+    hips.scale.set(sx, 1, sz);
+    for (const n of ["neck", "leftShoulder", "rightShoulder", "leftUpperLeg", "rightUpperLeg"]) {
       const b = h.getRawBoneNode(n);
       if (b) b.scale.set(1 / sx, 1, 1 / sz);
     }
@@ -591,9 +676,25 @@ export class SignAvatar {
       const top = hair.isEmpty() ? face.max.y + 0.03 : Math.min(hair.max.y, face.max.y + 0.06);
       // 눈썹 높이: 눈 뼈 + 약간 (없으면 얼굴 상단에서 추정)
       const eye = this.vrm.humanoid.getRawBoneNode("leftEye");
-      const brow = eye ? eye.getWorldPosition(new THREE.Vector3()).y + fs.y * 0.17 : face.max.y - fs.y * 0.3;
-      const R = Math.max(fs.x * 0.56, 0.08);                    // 셸 반지름 (머리+머리카락 폭)
-      const Hh = Math.max(R * 0.8, top - brow + 0.012);                                        // 셸 높이 (공사장 안전모처럼 높게)
+      // 머리통 크기 재기: 이마 높이에서 좌우·앞뒤로, 정수리는 위에서 광선을 쏴 얼굴(머리) 피부에 닿는 곳
+      const faceMeshes = [];
+      this.vrm.scene.traverse((o) => { if (o.isMesh && /SKIN/i.test([].concat(o.material).map((m) => m.name).join(" "))) faceMeshes.push(o); });   // 머리 피부(얼굴·몸 메시 모두)
+      let eyeBox = new THREE.Box3();
+      this.vrm.scene.traverse((o) => { if (o.isMesh && /EyeWhite/i.test([].concat(o.material).map((m) => m.name).join(" "))) eyeBox.expandByObject(o); });
+      const eyeTop = eyeBox.isEmpty() ? (eye ? eye.getWorldPosition(new THREE.Vector3()).y + 0.02 : face.max.y - fs.y * 0.35) : eyeBox.max.y;
+      const brow = eyeTop + 0.012;                                 // 눈썹 바로 위
+      const rc = new THREE.Raycaster();
+      const hit = (from, dir) => { rc.set(from, dir.normalize()); const r = rc.intersectObjects(faceMeshes, false)[0]; return r ? r.point : null; };
+      const yM = brow + 0.03, far = 1;
+      const Fr = hit(new THREE.Vector3(fc.x, yM, fc.z + far), new THREE.Vector3(0, 0, -1)), Bk = hit(new THREE.Vector3(fc.x, yM, fc.z - far), new THREE.Vector3(0, 0, 1));
+      const czM = Fr && Bk ? (Fr.z + Bk.z) / 2 : fc.z;            // 머리 앞뒤 가운데에서 폭을 잼 (가장 넓은 곳)
+      const L = hit(new THREE.Vector3(fc.x - far, yM, czM), new THREE.Vector3(1, 0, 0)), Rt = hit(new THREE.Vector3(fc.x + far, yM, czM), new THREE.Vector3(-1, 0, 0));
+      const Tp = hit(new THREE.Vector3(fc.x, fc.y + far, czM), new THREE.Vector3(0, -1, 0));
+      const skull = L && Rt && Fr && Bk ? { cx: (L.x + Rt.x) / 2, cz: (Fr.z + Bk.z) / 2, rx: (Rt.x - L.x) / 2, rz: (Fr.z - Bk.z) / 2 } : null;
+      const R = skull ? skull.rx + 0.02 : Math.max(fs.x * 0.56, 0.08);    // 셸 반지름 = 머리통 반폭 + 2cm (실제 안전모처럼 머리를 감쌀 여유)
+      const zs = skull ? (skull.rz + 0.02) / R : 1.15;                     // 앞뒤 길이 비율
+      const topY = Tp ? Tp.y : top;
+      const Hh = Math.max(R * 0.7, topY - brow + 0.018);                    // 셸 높이 = 정수리 + 여유 (낮고 둥글게)
       const grad = new THREE.DataTexture(new Uint8Array([90, 170, 255]), 3, 1, THREE.RedFormat);
       grad.minFilter = grad.magFilter = THREE.NearestFilter; grad.needsUpdate = true;
       const toon = new THREE.MeshToonMaterial({ color: 0xf5b800, gradientMap: grad });
@@ -607,15 +708,15 @@ export class SignAvatar {
       const hat = new THREE.Group();
       const shell = new THREE.Mesh(new THREE.LatheGeometry(shellPts, 64), toon);
       const shellInk = new THREE.Mesh(shell.geometry, ink);
-      shell.scale.set(1, 1, 1.15); shellInk.scale.set(1.03, 1.03, 1.15 * 1.03);
+      shell.scale.set(1, 1, zs); shellInk.scale.set(1.03, 1.03, zs * 1.03);
       // 앞챙: 앞쪽 140°만 길게 나온 차양 (뒤·옆은 얇은 테두리만)
       const visor = new THREE.Mesh(new THREE.LatheGeometry([
         new THREE.Vector2(R * 0.98, 0.006), new THREE.Vector2(R * 1.2, -0.008),
         new THREE.Vector2(R * 1.2, -0.013), new THREE.Vector2(R * 0.98, -0.002),
       ], 48, -Math.PI * 0.39, Math.PI * 0.78), toon2);
-      visor.scale.set(1, 1, 1.15);
+      visor.scale.set(1, 1, zs);
       const lip = new THREE.Mesh(new THREE.TorusGeometry(R * 1.01, 0.006, 8, 64), toon);
-      lip.rotation.x = Math.PI / 2; lip.scale.set(1, 1.15, 1);
+      lip.rotation.x = Math.PI / 2; lip.scale.set(1, zs, 1);
       // 꼭대기 앞뒤로 지나는 보강 능선 3줄 (셸과 같은 색, 살짝 솟음)
       for (const ang of [-0.32, 0, 0.32]) {
         const pts = [];
@@ -623,16 +724,16 @@ export class SignAvatar {
           const t = 0.18 * Math.PI + (i / 20) * 0.64 * Math.PI;   // 앞쪽 일부 ~ 뒤쪽 일부
           const r = R * Math.cos(ang) * 1.0, y = Hh * Math.pow(Math.sin(t), 0.8);
           const rr = Math.sqrt(Math.max(0, 1 - Math.pow(Math.cos(t), 2))) ;
-          pts.push(new THREE.Vector3(Math.sin(ang) * R * rr * 0.98, y * (0.985 + 0.02 * Math.cos(ang)) + 0.002, -Math.cos(t) * R * 1.15 * 0.99));
+          pts.push(new THREE.Vector3(Math.sin(ang) * R * rr * 0.98, y * (0.985 + 0.02 * Math.cos(ang)) + 0.002, -Math.cos(t) * R * zs * 0.99));
         }
         const rib = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 32, R * 0.035, 6, false), toon);
         hat.add(rib);
       }
       hat.add(shellInk, shell, visor, lip);
       // 이마 위를 덮도록 낮게 씀
-      hat.rotation.x = 0.16;                                     // 앞이 내려간 각도 (이마에 붙게)
-      // 앞 테두리가 눈썹 바로 위에 오도록
-      hat.position.set(fc.x, brow + R * 1.15 * Math.sin(0.16), fc.z + fs.z * 0.12);   // 앞으로 당겨 이마와 틈 없게
+      hat.rotation.x = 0.04;                                     // 거의 수평으로 깊게 씀
+      // 머리통 중심에 맞춰 쓰고, 앞 테두리가 눈썹 바로 위에 오도록
+      hat.position.set(skull ? skull.cx : fc.x, brow + R * zs * Math.sin(0.04) - 0.004, skull ? skull.cz : fc.z);
       this.scene.add(hat);
       hat.updateMatrixWorld(true);
       head.attach(hat);                                          // 머리 뼈를 따라 움직이도록
