@@ -218,8 +218,8 @@ export class SignAvatar {
           if (m.outlineColorFactor) m.outlineColorFactor.set(0x2a2220);
         }
         if (/Tops/i.test(m.name) && m.color) {
-          m.color.set(0x2f4a6d);                                  // 작업복 남색
-          if (m.shadeColorFactor) m.shadeColorFactor.set(0x1c2e47);
+          m.color.set(0x2a2c30);                                  // 작업복 검정 (주름·외곽선이 보이도록 아주 짙은 회색)
+          if (m.shadeColorFactor) m.shadeColorFactor.set(0x141517);
         }
         if (/SKIN/i.test(m.name) && m.shadeColorFactor) m.shadeColorFactor.set(0xd9a38a);   // 피부 음영 또렷하게
       }
