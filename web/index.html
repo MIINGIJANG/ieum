@@ -118,7 +118,6 @@
     padding: 4px 10px; border-radius: 8px; background: var(--surface); border: 1px solid var(--line);
     font-weight: 500; transition: background .15s, color .15s;
   }
-  ol.glosses li.sep { background: none; border: 0; color: var(--muted); padding: 4px 2px; }
   ol.glosses li.nomo { background: #d9dcd6; border-color: #d9dcd6; color: var(--ink); }   /* 동작 없는 단어: 재생 안 함 */
   ol.glosses li.active { background: var(--ink); color: #fff; border-color: var(--ink); }   /* 지금 표현 중 */
 
@@ -351,6 +350,22 @@ function renderNone() {
   if (window.avatar) window.avatar.setFrame(null);
 }
 
+// 단어 박스가 두 줄 이상이면 줄마다 개수가 비슷하도록: 줄 수가 늘지 않는 가장 좁은 폭을 찾아 그 폭으로 맞춤
+function balanceRows(box) {
+  box.style.maxWidth = "";
+  const lines = () => new Set([...box.children].map(c => c.offsetTop)).size;
+  const n = lines();
+  if (n <= 1) return;
+  let lo = 0, hi = box.getBoundingClientRect().width;
+  while (hi - lo > 2) {
+    const mid = (lo + hi) / 2;
+    box.style.maxWidth = mid + "px";
+    if (lines() > n) lo = mid; else hi = mid;
+  }
+  box.style.maxWidth = Math.ceil(hi) + "px";
+}
+addEventListener("resize", () => balanceRows($("glosses")));
+
 function render() {
   if (data.mode === "none") return renderNone();
   $("controls").hidden = false;
@@ -361,8 +376,7 @@ function render() {
   items = [];
   const ol = $("glosses"); ol.innerHTML = "";
   let k = 0;
-  sents.forEach((s, si) => {
-    if (si > 0) { const li = document.createElement("li"); li.className = "sep"; li.textContent = "/"; li.setAttribute("aria-hidden", "true"); ol.append(li); }
+  sents.forEach((s) => {
     s.gloss.forEach(g => {
       const li = document.createElement("li");
       li.textContent = label(g);
@@ -373,6 +387,8 @@ function render() {
       k++;
     });
   });
+
+  balanceRows(ol);
 
   // 답변
   const a = $("answer");
