@@ -63,6 +63,7 @@ export class SignAvatar {
     this._slimTorso();
     this._captureRest();
     this._dressUp();
+    this._bareHands();
     this._addHandColliders();
     this._styleMaterials();
     this._frameCamera();
@@ -79,17 +80,20 @@ export class SignAvatar {
     h.resetNormalizedPose();
     this.vrm.scene.updateMatrixWorld(true);
     const pos = (n) => { const b = this.bone(n); return b ? b.getWorldPosition(new THREE.Vector3()) : null; };
+    // 방향은 모델 자신의 좌표로 기록 (VRM0 모델은 rotateVRM0 로 180° 돌아가 있어서, 월드 방향을 쓰면 회전이 두 번 들어가 팔이 위로 감)
+    const inv = this.vrm.scene.getWorldQuaternion(new THREE.Quaternion()).invert();
+    const dir = (from, to) => to.sub(from).normalize().applyQuaternion(inv);
     this.rest = {};
     for (const s of SIDES) {
       const P = s.pre;
       this.rest[P] = {
-        upper: pos(P + "LowerArm").sub(pos(P + "UpperArm")).normalize(),
-        lower: pos(P + "Hand").sub(pos(P + "LowerArm")).normalize(),
-        handF: pos(P + "MiddleProximal").sub(pos(P + "Hand")).normalize(),
-        handS: pos(P + "LittleProximal").sub(pos(P + "IndexProximal")).normalize(),
+        upper: dir(pos(P + "UpperArm"), pos(P + "LowerArm")),
+        lower: dir(pos(P + "LowerArm"), pos(P + "Hand")),
+        handF: dir(pos(P + "Hand"), pos(P + "MiddleProximal")),
+        handS: dir(pos(P + "IndexProximal"), pos(P + "LittleProximal")),
         fingers: FINGERS.map(([names]) => names.map((n, i) => {
           const a = pos(P + n), b = i < 2 ? pos(P + names[i + 1]) : null;
-          return b ? b.sub(a).normalize() : null;        // 끝마디는 바로 앞 마디 방향 사용
+          return b ? dir(a, b) : null;                     // 끝마디는 바로 앞 마디 방향 사용
         })),
       };
       const fr = this.rest[P].fingers;
@@ -108,6 +112,95 @@ export class SignAvatar {
   }
 
   // 상체를 살짝 슬림하게: 가슴 뼈의 폭·두께를 줄이고, 그 아래 달린 목·어깨는 원래 크기로 되돌림
+  // 장갑 벗기기: 손이 어두우면(장갑) 손·손가락 부분 텍스처를 피부색으로 칠함 → 수어 손 모양이 잘 보이게
+  // 장갑은 모델마다 몸(SKIN)이나 옷(CLOTH) 텍스처에 있음 → 손 뼈를 따라 움직이는 삼각형만 골라 칠함
+  _bareHands() {
+    const h = this.vrm.humanoid;
+    const handBones = new Set();
+    for (const P of ["left", "right"]) {
+      handBones.add(h.getRawBoneNode(P + "Hand"));
+      for (const [names] of FINGERS) for (const n of names) handBones.add(h.getRawBoneNode(P + n));
+    }
+    handBones.delete(null); handBones.delete(undefined);
+    const neckBones = new Set([h.getRawBoneNode("neck"), h.getRawBoneNode("head")]);
+    const lum = (d) => (0.299 * d[0] + 0.587 * d[1] + 0.114 * d[2]) / 255;
+    const canvases = new Map();          // 텍스처 이미지 → 2D 캔버스 (같은 텍스처는 한 번만)
+    const canvasOf = (img) => {
+      if (!canvases.has(img)) {
+        const cv = document.createElement("canvas"); cv.width = img.width; cv.height = img.height;
+        const ctx = cv.getContext("2d", { willReadFrequently: true }); ctx.drawImage(img, 0, 0);
+        canvases.set(img, { cv, ctx, dirty: false });
+      }
+      return canvases.get(img);
+    };
+    const parts = [];
+    this.vrm.scene.traverse((o) => {
+      if (!o.isSkinnedMesh || !o.geometry.index || !o.geometry.attributes.uv || !o.geometry.attributes.skinIndex) return;
+      const mat = [].concat(o.material).find((m) => !/Outline/i.test(m.name) && m.map && m.map.image);
+      if (mat) parts.push({ o, mat });
+    });
+    const domFrac = (o, v, set) => {
+      const si = o.geometry.attributes.skinIndex, sw = o.geometry.attributes.skinWeight, bones = o.skeleton.bones;
+      let w = 0;
+      for (let k = 0; k < 4; k++) if (set.has(bones[si.getComponent(v, k)])) w += sw.getComponent(v, k);
+      return w;
+    };
+    const uvPx = (o, v, img) => [o.geometry.attributes.uv.getX(v) * img.width, o.geometry.attributes.uv.getY(v) * img.height];
+    const sample = (o, v, mat) => {
+      const img = mat.map.image, { ctx } = canvasOf(img), [x, y] = uvPx(o, v, img);
+      return ctx.getImageData(Math.max(0, Math.min(img.width - 1, x | 0)), Math.max(0, Math.min(img.height - 1, y | 0)), 1, 1).data;
+    };
+    // 피부색: 피부(SKIN) 재질에서 목·머리 뼈를 따르는 점들의 가운데 밝기
+    const skin = [];
+    for (const { o, mat } of parts) {
+      if (!/SKIN/i.test(mat.name)) continue;
+      const n = o.geometry.attributes.uv.count;
+      for (let v = 0; v < n && skin.length < 60; v += 5) if (domFrac(o, v, neckBones) > 0.9) skin.push(sample(o, v, mat));
+    }
+    if (!skin.length) return;
+    skin.sort((p, q) => lum(q) - lum(p));
+    const c0 = skin[Math.floor(skin.length / 2)], fill = `rgb(${c0[0]},${c0[1]},${c0[2]})`;
+    for (const { o, mat } of parts) {
+      const idx = o.geometry.index, tris = [];
+      for (let t = 0; t < idx.count; t += 3) {
+        const a = idx.getX(t), b = idx.getX(t + 1), c = idx.getX(t + 2);
+        if (domFrac(o, a, handBones) > 0.6 && domFrac(o, b, handBones) > 0.6 && domFrac(o, c, handBones) > 0.6) tris.push([a, b, c]);
+      }
+      if (!tris.length) continue;
+      const img = mat.map.image, C = canvasOf(img);
+      // 어두운 삼각형(장갑 부분)만: 세 꼭짓점과 가운데 색의 밝기로 판단 (손가락 없는 장갑도 처리)
+      const dark = tris.filter(([a, b, c]) => {
+        const [ax, ay] = uvPx(o, a, img), [bx, by] = uvPx(o, b, img), [cx, cy] = uvPx(o, c, img);
+        const mid = C.ctx.getImageData(Math.min(img.width - 1, ((ax + bx + cx) / 3) | 0), Math.min(img.height - 1, ((ay + by + cy) / 3) | 0), 1, 1).data;
+        return lum(mid) < 0.4;
+      });
+      if (!dark.length) continue;
+      C.ctx.fillStyle = fill; C.ctx.strokeStyle = fill; C.ctx.lineWidth = 2;
+      for (const [a, b, c] of dark) {
+        const [ax, ay] = uvPx(o, a, img), [bx, by] = uvPx(o, b, img), [cx, cy] = uvPx(o, c, img);
+        C.ctx.beginPath(); C.ctx.moveTo(ax, ay); C.ctx.lineTo(bx, by); C.ctx.lineTo(cx, cy); C.ctx.closePath(); C.ctx.fill(); C.ctx.stroke();
+      }
+      C.dirty = true;
+    }
+    // 칠한 텍스처를 그 텍스처를 쓰는 모든 재질에 반영
+    for (const [img, C] of canvases) {
+      if (!C.dirty) continue;
+      this.vrm.scene.traverse((o) => {
+        if (!o.isMesh) return;
+        for (const m of [].concat(o.material)) {
+          for (const key of ["map", "shadeMultiplyTexture"]) {
+            const t = m[key];
+            if (t && t.image === img) {
+              const nt = new THREE.CanvasTexture(C.cv);
+              nt.flipY = t.flipY; nt.colorSpace = t.colorSpace; nt.wrapS = t.wrapS; nt.wrapT = t.wrapT;
+              m[key] = nt; m.needsUpdate = true;
+            }
+          }
+        }
+      });
+    }
+  }
+
   _slimTorso(sx = 0.9, sz = 0.92) {
     const h = this.vrm.humanoid;
     const chest = h.getRawBoneNode("chest");
@@ -276,7 +369,7 @@ export class SignAvatar {
     const hips = this.vrm.humanoid.getRawBoneNode("hips").getWorldPosition(new V()).y;
     const top = this._hat ? new THREE.Box3().setFromObject(this._hat).max.y : this.headY + 0.18;
     const bottom = hips + 0.02;
-    const pad = -0.008, span = top - bottom + pad;       // 위 여백 거의 없음: 캔버스 위·아래 끝 = 안전모 끝·배
+    const pad = 0.003, span = top - bottom + pad;       // 위 여백 거의 없음: 캔버스 위·아래 끝 = 안전모 끝·배
     const half = THREE.MathUtils.degToRad(this.camera.fov / 2);
     const dist = span / 2 / Math.tan(half);
     const cy = bottom + span / 2;
@@ -323,7 +416,7 @@ export class SignAvatar {
     for (const s of SIDES) {
       const P = s.pre, R = this.rest[P];
       const b = fr && fr.body;
-      const I = new THREE.Quaternion();
+      const I = this.vrm.scene.getWorldQuaternion(new THREE.Quaternion());   // 몸통(팔의 부모) 방향 = 모델 전체 회전 (VRM1 은 없음, VRM0 은 180°)
       let upperW, lowerW;
       if (!neutral && b[s.sho] && b[s.elb] && b[s.wri]) {
         // 손목 '위치'를 어깨 기준으로 옮긴 뒤(팔 길이 비율로 축척) IK 로 팔꿈치 계산

@@ -25,7 +25,7 @@
 | `ksl/motion.py` | 수어 동작(관절 좌표) 공통 형식, AI Hub(OpenPose)·MediaPipe 변환, 동작사전, 글로스 이어붙이기 |
 | `ksl/pipeline.py`, `api.py` | 전체 연결 + FastAPI (`/ask`, `/translate`, `/motion`) |
 | `web/index.html`, `web/avatar.js` | 시연용 웹 화면 + **3D 수어 아바타**(Three.js + VRM, 팔·손목·손가락 관절). 3D가 안 되면 2D 그림으로 자동 대체 |
-| `web/vendor/`, `web/models/avatar.vrm` | 라이브러리·3D 모델 내장 → 인터넷 없이도 시연 가능 (모델: pixiv 샘플, 재배포·상업 이용 허용) |
+| `web/vendor/`, `web/models/avatar.vrm` | 라이브러리·3D 모델 내장 → 인터넷 없이도 시연 가능. 모델: VRoid Project 공식 샘플(남성, VRoid Hub 조건: 수정·재배포·상업 이용 허용, 표기 불필요). 이전 여성 모델은 `avatar_female.vrm` (pixiv three-vrm 샘플) — 파일 이름만 바꾸면 교체 |
 | `data/demo_sentences.json`, `data/motions/` | 조원이 정리한 5개 안내 문장(번역 메모리)과 글로스별 3D 동작 |
 | `docs/API.md`, `docs/mock/` | 프론트/아바타 담당용 API 명세 + 실제 응답 예시 파일 |
 | `scripts/` | 학습·평가·인덱스·검색평가·JSONL 구조 확인·샘플데이터 |
