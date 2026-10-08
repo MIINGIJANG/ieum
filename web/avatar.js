@@ -175,6 +175,7 @@ export class SignAvatar {
     if (!skin.length) return;
     skin.sort((p, q) => lum(q) - lum(p));
     const c0 = skin[Math.floor(skin.length / 2)], fill = `rgb(${c0[0]},${c0[1]},${c0[2]})`;
+    const jobs = [];
     for (const { o, mat } of parts) {
       const idx = o.geometry.index, tris = [];
       for (let t = 0; t < idx.count; t += 3) {
@@ -182,7 +183,8 @@ export class SignAvatar {
         // 피부(SKIN)는 손목 경계까지(손 뼈 비중 15%↑), 옷은 손 부분만(60%↑). 어두운 곳만 칠하므로 맨살은 그대로
         const th = /SKIN/i.test(mat.name) ? 0.15 : 0.6;
         const nearWrist = (k) => /SKIN/i.test(mat.name) && wristT(o, k) > 0.8;
-        if ([a, b, c].every((k) => domFrac(o, k, handBones) > th || nearWrist(k))) tris.push([a, b, c]);
+        const ok = (k) => domFrac(o, k, handBones) > th || nearWrist(k);
+        if (/SKIN/i.test(mat.name) ? [a, b, c].some(ok) : [a, b, c].every(ok)) tris.push([a, b, c]);   // 피부는 경계에 걸친 삼각형까지
       }
       if (!tris.length) continue;
       const img = mat.map.image, C = canvasOf(img);
@@ -192,11 +194,36 @@ export class SignAvatar {
         const mid = C.ctx.getImageData(Math.min(img.width - 1, ((ax + bx + cx) / 3) | 0), Math.min(img.height - 1, ((ay + by + cy) / 3) | 0), 1, 1).data;
         return lum(mid) < 0.4;
       });
-      if (!dark.length) continue;
+      jobs.push({ o, mat, tris, dark, img, C });
+    }
+    const gloved = jobs.some((j) => j.dark.length);               // 모델 어딘가에 장갑이 있으면
+    for (const { o, mat, tris, dark, img, C } of jobs) {
+      if (!gloved || (!dark.length && !/SKIN/i.test(mat.name))) continue;   // 맨손 모델은 그대로, 피부는 모든 부분 정리
       C.ctx.fillStyle = fill; C.ctx.strokeStyle = fill; C.ctx.lineWidth = 2;
       for (const [a, b, c] of dark) {
         const [ax, ay] = uvPx(o, a, img), [bx, by] = uvPx(o, b, img), [cx, cy] = uvPx(o, c, img);
         C.ctx.beginPath(); C.ctx.moveTo(ax, ay); C.ctx.lineTo(bx, by); C.ctx.lineTo(cx, cy); C.ctx.closePath(); C.ctx.fill(); C.ctx.stroke();
+      }
+      // 밝은 삼각형 안에 남은 가는 장갑 줄무늬: 손 부분 픽셀 중 피부보다 확 어두운 픽셀만 피부색으로
+      if (/SKIN/i.test(mat.name)) {
+        const W = img.width, H = img.height, data = C.ctx.getImageData(0, 0, W, H), d = data.data;
+        const skinL = lum(c0);
+        for (const [a, b, c] of tris) {
+          const U = [a, b, c].map((k) => uvPx(o, k, img));
+          const x0 = Math.max(0, Math.floor(Math.min(U[0][0], U[1][0], U[2][0])) - 1), x1 = Math.min(W - 1, Math.ceil(Math.max(U[0][0], U[1][0], U[2][0])) + 1);
+          const y0 = Math.max(0, Math.floor(Math.min(U[0][1], U[1][1], U[2][1])) - 1), y1 = Math.min(H - 1, Math.ceil(Math.max(U[0][1], U[1][1], U[2][1])) + 1);
+          const den = (U[1][1] - U[2][1]) * (U[0][0] - U[2][0]) + (U[2][0] - U[1][0]) * (U[0][1] - U[2][1]);
+          if (Math.abs(den) < 1e-9) continue;
+          for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+            const px = x + 0.5, py = y + 0.5;
+            const w0 = ((U[1][1] - U[2][1]) * (px - U[2][0]) + (U[2][0] - U[1][0]) * (py - U[2][1])) / den;
+            const w1 = ((U[2][1] - U[0][1]) * (px - U[2][0]) + (U[0][0] - U[2][0]) * (py - U[2][1])) / den;
+            if (w0 < -0.05 || w1 < -0.05 || 1 - w0 - w1 < -0.05) continue;
+            const k = (y * W + x) * 4;
+            if (lum([d[k], d[k + 1], d[k + 2]]) < skinL * 0.7) { d[k] = c0[0]; d[k + 1] = c0[1]; d[k + 2] = c0[2]; }
+          }
+        }
+        C.ctx.putImageData(data, 0, 0);
       }
       C.dirty = true;
     }
@@ -231,17 +258,24 @@ export class SignAvatar {
       if (!/CLOTH/i.test([].concat(o.material).map((m) => m.name).join(" ")) || /Bottoms|Shoes/i.test(o.material.name || [].concat(o.material)[0].name)) return;
       const g = o.geometry, pos = g.attributes.position, si = g.attributes.skinIndex, sw = g.attributes.skinWeight;
       const bones = o.skeleton.bones, inv = o.matrixWorld.clone().invert();
-      let moved = 0;
+      // 1차: 소매 끝 너머 꼭짓점과 아래팔 축 사이 거리(굵기) 수집 → 팔마다 가장 굵은 값 = 소매 굵기
+      const info = [], maxR = [0, 0];
       for (let k = 0; k < pos.count; k++) {
         const p = o.getVertexPosition(k, new V()).applyMatrix4(o.matrixWorld);
-        const A = p.distanceTo(arms[0].w) < p.distanceTo(arms[1].w) ? arms[0] : arms[1];
+        const ai = p.distanceTo(arms[0].w) < p.distanceTo(arms[1].w) ? 0 : 1, A = arms[ai];
         const ax = A.w.clone().sub(A.e), t = p.clone().sub(A.e).dot(ax) / ax.lengthSq();
         if (t <= end) continue;
-        const onAxis = A.e.clone().addScaledVector(ax, t), radial = p.clone().sub(onAxis);
+        const radial = p.clone().sub(A.e.clone().addScaledVector(ax, t));
         if (radial.length() > ax.length() * 0.9) continue;          // 아래팔과 먼 꼭짓점(몸통 등)은 제외
-        // 손목 너머(장갑)는 소매 안쪽 축 위로 접어 넣고, 소매 끝은 end 지점 둘레로
-        const target = t > 1.0 ? A.e.clone().addScaledVector(ax, end - 0.05)
-                               : A.e.clone().addScaledVector(ax, end).add(radial);
+        info.push({ k, ai, A, ax, t, radial });
+        if (t < 1.0) maxR[ai] = Math.max(maxR[ai], radial.length());
+      }
+      // 2차: 소매(굵은 부분)는 end 지점 둘레로 당기고, 손목에 딱 붙는 장갑·손 부분은 소매 안쪽 축으로 접어 넣음
+      let moved = 0;
+      for (const { k, ai, A, ax, t, radial } of info) {
+        const tight = t > 1.0 || radial.length() < maxR[ai] * 0.8;
+        const target = tight ? A.e.clone().addScaledVector(ax, end - 0.05)
+                             : A.e.clone().addScaledVector(ax, end).add(radial);
         const local = target.applyMatrix4(inv);
         pos.setXYZ(k, local.x, local.y, local.z);
         const bi = bones.indexOf(A.bone);
