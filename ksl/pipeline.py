@@ -56,6 +56,7 @@ def merge_sources(hits, titles, order=None, tables=None, images=None):
             o["region"] = images.region(o["doc"], o["page"], text_lines, boxes)
             pg = images.page(o["doc"], o["page"])
             o["page_width"] = pg["width"] if pg else None
+            o["page_height"] = pg["height"] if pg else None
         else:
             o["region"] = None
         res.append(o)
@@ -78,13 +79,24 @@ class SignWords:
 
     def __call__(self, sentence):
         out = []
-        for ej in sentence.split():
-            core = ej.strip("“”\"'()[]")
+        for ej in re.split(r"[\s,·()（）:]+", sentence):
+            core = re.sub(r"^[\d.,~%℃]+", "", ej.strip("“”\"'[]"))      # '4시간' → '시간'
+            if not core:
+                continue
+            found, words = [], []
             for word, exact, gloss in self.rules:
                 if (core == word or ej == word) if exact else core.startswith(word):
-                    if gloss not in out:                         # 한 문장 안에서 같은 단어는 한 번만
-                        out.append(gloss)
+                    found.append(gloss); words.append(word)
                     break
+            # 붙여 쓴 명사(개인보호구, 정전기안전화 등): 3글자 이상 단어는 어절 안 어디에 있어도 찾음
+            # (이미 찾은 더 긴 단어의 일부면 제외: '방진마스크' 안의 '마스크')
+            for word, exact, gloss in self.rules:
+                if (not exact and len(word) >= 3 and word in core[1:] and gloss not in found
+                        and not any(word in w for w in words)):
+                    found.append(gloss); words.append(word)
+            for g in found:
+                if g not in out:                                 # 한 문장 안에서 같은 단어는 한 번만
+                    out.append(g)
         return out
 
 
@@ -142,9 +154,9 @@ class SafetySignPipeline:
                 "method": "memory",                              # 검수된 확정 글로스 사용
                 "complete": hit.get("complete", True)}           # False: 일부 단어 동작만 확보
 
-    def sign_sentence(self, text):
+    def sign_sentence(self, text, skip=()):
         """답변 문장 하나 → 그 문장에서 뽑은 수어 단어 + 재생 시간."""
-        glosses = self.sign_words(text)
+        glosses = [g for g in self.sign_words(text) if g not in skip]
         tl, t = [], 0.0
         for g in glosses:
             clip = self.motion.get(g) if self.motion else None
@@ -212,6 +224,26 @@ class SafetySignPipeline:
         t = re.sub(r"\s", "", text)
         return not self.domain_terms or any(w in t for w in self.domain_terms)
 
+    def _clean_answer(self, texts, hits):
+        """추출한 답변 문장 정리: 표 칸을 이어붙인 줄(뒤죽박죽)은 빼고, 거의 같은 문장은 하나만."""
+        def in_table(t):                          # 그 문장이 나온 쪽의 표에 속하는지 (다른 쪽의 표와는 비교 안 함)
+            n = re.sub(r"\s", "", t)
+            src = [h for h in hits if n[:20] in re.sub(r"\s", "", strip_marks(h["text"]))] or hits[:1]
+            h = src[0]
+            return any(b["type"] == "table" for b in self.tables.blocks(h["doc"], h["page"], [t]))
+
+        def similar(a, b):
+            A = {a[i:i + 2] for i in range(len(a) - 1)}
+            B = {b[i:i + 2] for i in range(len(b) - 1)}
+            return len(A & B) / max(1, min(len(A), len(B)))
+
+        plain = [t for t in texts if not in_table(t) and len(t) >= 25] or texts   # 표 줄만 있으면 그대로 둠
+        out = []
+        for t in plain:
+            if not any(similar(re.sub(r"\s", "", t), re.sub(r"\s", "", o)) >= 0.7 for o in out):
+                out.append(t)
+        return out
+
     def _demo_ok(self, question, demo, score):
         """준비된 안내 문장으로 답해도 되는지: 유사도 기준 + 핵심어가 질문에 있어야 함."""
         if not demo or score < self.demo_threshold:
@@ -238,12 +270,17 @@ class SafetySignPipeline:
             if top < self.min_score:                       # 근거 약함 → 답하지 않음
                 return self._abstain(question, top)
             texts, mode = self.rag.answer(question, hits)
-            texts = [" ".join(strip_marks(t).split("\n")) for t in texts]
+            texts = self._clean_answer([" ".join(strip_marks(t).split("\n")) for t in texts], hits)
             if not texts:
                 return self._abstain(question, top)
             answer_text = " ".join(texts)
         # 수어: 답변 문장에 실제로 있는 말만 수어 단어로 (data/sign_words.csv). 번역 모델은 아직 엉뚱한 단어를 만들어서 답변에는 쓰지 않음
-        sents = [self.sign_sentence(p) for p in (split_sentences(answer_text) or [answer_text])]
+        sents, seen = [], set()
+        for p in (split_sentences(answer_text) or [answer_text]):
+            sg = self.sign_sentence(p, skip=seen)                    # 앞 문장에 나온 단어는 다시 넣지 않음
+            seen.update(sg["gloss"])
+            if sg["gloss"]:
+                sents.append(sg)
         return {
             "question": question,
             "answer_mode": mode,                       # demo | llm | extractive

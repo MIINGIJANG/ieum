@@ -297,12 +297,17 @@ async function run() {
 const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 function showResults() {
   if (document.body.classList.contains("result")) return;
-  const form = $("form"), y0 = form.getBoundingClientRect().top;
+  // 입력창과 예시 질문은 함께 제자리에서 위로 미끄러지고(FLIP), 입력창 위 안내는 서서히 나타남
+  const moving = [$("form"), $("examples")];
+  const y0 = moving.map(el => el.getBoundingClientRect().top);
   document.body.classList.replace("landing", "result");
   if (reduce) return;
-  const dy = y0 - form.getBoundingClientRect().top;
-  form.animate([{ transform: `translateY(${dy}px)` }, { transform: "none" }],
-               { duration: 550, easing: "cubic-bezier(.2,.8,.2,1)" });
+  const ease = { duration: 550, easing: "cubic-bezier(.2,.8,.2,1)" };
+  moving.forEach((el, i) => {
+    const dy = y0[i] - el.getBoundingClientRect().top;
+    el.animate([{ transform: `translateY(${dy}px)` }, { transform: "none" }], ease);
+  });
+  document.querySelector(".notice").animate([{ opacity: 0 }, { opacity: 1 }], { ...ease, delay: 250, fill: "backwards" });
 }
 
 // ---------- 결과 표시 ----------
@@ -313,11 +318,12 @@ const label = (g) => (g.startsWith("FS:") ? g.slice(3) : g).replace(/[_\-]?\d+#?
 // 출처: 원본 PDF의 해당 부분을 그대로 잘라 보여줌 (번호·들여쓰기·표 모양 유지). 글은 대체 텍스트로
 function sourceImg(s) {
   // 미리 만든 쪽 이미지(web/pages)에서 region 부분만 보이게 자름 (서버에 PDF 라이브러리 불필요)
+  // loading="lazy" 를 쓰지 않음: Safari 는 잘려서 안 보이는 위치의 이미지를 끝내 안 불러와 흰 상자가 됨
   const [x0, y0, x1, y1] = s.region, w = x1 - x0, pw = s.page_width || 595;
   const pct = (v) => (v / w * 100).toFixed(3) + "%";
   return `<div class="pdf" role="img" aria-label="${esc(s.text)}" style="aspect-ratio: ${w.toFixed(1)} / ${(y1 - y0).toFixed(1)}">
-    <img src="./pages/${encodeURIComponent(s.doc)}/${s.page}.png" alt="" loading="lazy"
-         style="width: ${pct(pw)}; margin-left: -${pct(x0)}; margin-top: -${pct(y0)}"
+    <img src="./pages/${encodeURIComponent(s.doc)}/${s.page}.png" alt="" width="1488" height="${Math.round(1488 * (s.page_height || 841) / pw)}"
+         style="width: ${pct(pw)}; height: auto; margin-left: -${pct(x0)}; margin-top: -${pct(y0)}"
          onerror="const d = this.parentNode; d.nextElementSibling.hidden = false; d.remove()"></div>`;
 }
 
