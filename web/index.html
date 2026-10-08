@@ -9,6 +9,13 @@
 <link rel="apple-touch-icon" href="./favicon-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">  <!-- 글꼴을 기다리지 않고 화면부터 표시 -->
+<script>
+  // 새로고침할 때 브라우저(특히 Safari)가 이전 결과 화면의 스크롤 위치를 되살리면,
+  // 첫 화면은 스크롤이 잠겨 있어 입력창이 화면 위로 밀린 채 멈춤 → 항상 맨 위에서 시작
+  if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+  const toTop = () => { if (document.body?.classList.contains("landing")) window.scrollTo(0, 0); };
+  addEventListener("pageshow", toTop); addEventListener("load", toTop); addEventListener("resize", toTop);
+</script>
 <style>
   :root {
     --sign-blue: #134e9a;      /* 착용 의무 표지판 파랑 */
@@ -277,6 +284,7 @@ const bootAll = Promise.all([
 Promise.race([bootAll, new Promise(r => setTimeout(r, 60000))]).then(() => {
   const el = document.getElementById("boot");
   el.classList.add("done");
+  toTop();
   setTimeout(() => el.remove(), 500);
 });
 // 예시 질문: 서버(/examples)의 목록에서 무작위로 5개. 이번 접속에서 이미 한 질문과
