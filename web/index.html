@@ -50,8 +50,7 @@
   body.landing .hero { min-height: calc(100svh - 68px); }
   .hero h1 { margin: 0 0 6px; font-size: clamp(2.4rem, 8vw, 3.2rem); font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
   body.result .hero h1 { display: none; }
-  .notice { display: none; margin: 0; font-size: .88rem; color: var(--caution-ink); background: #fff6d6;
-            border: 1px solid #f0d77a; border-radius: 999px; padding: 3px 14px; }
+  .notice { display: none; margin: 0; font-size: .88rem; color: var(--muted); }
   body.result .notice { display: block; }
   form.query { position: relative; width: min(100%, 640px); }
   form.query input {
@@ -257,8 +256,15 @@ function similar(a, b) {                       // 글자 2개 단위 겹침 비�
   A.forEach(x => { if (B.has(x)) n++; });
   return n / Math.max(1, Math.min(A.size, B.size));
 }
-const visibleExamples = () => POOL.filter(e =>
-  !(e.topic && asked.topics.has(e.topic)) && !asked.texts.some(t => similar(t, e.question) >= 0.6)).slice(0, SHOW);
+const usable = (e) => !(e.topic && asked.topics.has(e.topic)) && !asked.texts.some(t => similar(t, e.question) >= 0.6);
+let shown = [];                                // 지금 보이는 예시 (자리 고정)
+function visibleExamples() {
+  // 숨겨야 할 예시만 그 자리에서 새 예시로 바꾸고, 나머지는 자리를 그대로 둠
+  const fresh = POOL.filter(e => usable(e) && !shown.includes(e));
+  shown = shown.map(e => usable(e) ? e : fresh.shift()).filter(Boolean);
+  while (shown.length < SHOW && fresh.length) shown.push(fresh.shift());
+  return shown;
+}
 shuffle(POOL);
 
 const $ = (id) => document.getElementById(id);
@@ -455,7 +461,7 @@ $("replay").onclick = () => data && play();
 
 renderExamples();
 fetch(`${API}/examples`).then(r => r.ok ? r.json() : []).then(list => {
-  if (list.length) { POOL = shuffle(list); renderExamples(); }
+  if (list.length) { POOL = shuffle(list); shown = []; renderExamples(); }
 }).catch(() => {});
 </script>
 </body>
