@@ -20,5 +20,16 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          hf upload MIINGI/ieum dist/space . --repo-type space \
-            --commit-message "GitHub ${GITHUB_SHA::7} $(git log -1 --format=%s | head -c 80)"
+          if [ -z "$HF_TOKEN" ]; then
+            echo "::error::HF_TOKEN 이 없습니다. 저장소 Settings → Secrets and variables → Actions 에 이름 HF_TOKEN 으로 넣으세요."; exit 1
+          fi
+          if ! hf auth whoami > who.txt 2>&1; then
+            echo "::error::HF_TOKEN 이 올바르지 않습니다(만료·오타). Hugging Face 에서 Write 토큰을 새로 만들어 다시 넣으세요. $(tail -1 who.txt)"; exit 1
+          fi
+          echo "Hugging Face 계정: $(head -1 who.txt)"
+          if ! hf upload MIINGI/ieum dist/space . --repo-type space \
+               --commit-message "GitHub ${GITHUB_SHA::7} $(git log -1 --format=%s | head -c 80)" > up.txt 2>&1; then
+            cat up.txt
+            echo "::error::업로드 실패 (토큰이 Read 권한이거나 MIINGI/ieum 쓰기 권한이 없음): $(grep -m1 -iE 'error|denied|forbidden|401|403' up.txt | head -c 300)"; exit 1
+          fi
+          cat up.txt
