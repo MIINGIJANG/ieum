@@ -43,7 +43,7 @@ export class SignAvatar {
     this.vrm = null;
     this.driven = new Set();
     this.smooth = 0.55;
-    this.baseSmile = { relaxed: 0.65, happy: 0.15 };   // 평소 표정 (밝게)
+    this.baseSmile = { relaxed: 0.0 };   // 평소 표정: 입 다문 기본 얼굴 (웃는 표정은 이 모델에서 입이 벌어짐)
     this.margin = 0.07;          // 손목이 몸 표면보다 최소 이만큼(m) 앞에 오도록          // 프레임 간 흔들림 줄이기 (0=그대로, 1=안 움직임)
     this.last = performance.now();
     this._resize();
@@ -65,6 +65,7 @@ export class SignAvatar {
     this._captureRest();
     this._dressUp();
     this._tightTop();
+    this._hideCoveredBody();
     this._shortenSleeves();
     this._eyeColor();
     this._bareHands();
@@ -246,6 +247,35 @@ export class SignAvatar {
         }
       });
     }
+  }
+
+  // 옷에 늘 가려지는 몸(몸통·위팔) 피부는 아예 안 그림 → 옷을 몸에 바짝 붙여도 피부가 옷을 뚫고 나오지 않음
+  _hideCoveredBody() {
+    const h = this.vrm.humanoid;
+    const covered = new Set(["hips", "spine", "chest", "upperChest", "leftShoulder", "rightShoulder", "leftUpperArm", "rightUpperArm"]
+      .map((n) => h.getRawBoneNode(n)).filter(Boolean));
+    this.vrm.scene.traverse((o) => {
+      if (!o.isSkinnedMesh || !/Body.*SKIN/i.test([].concat(o.material).map((m) => m.name).join(" "))) return;
+      const g = o.geometry, idx = g.index, si = g.attributes.skinIndex, sw = g.attributes.skinWeight, bones = o.skeleton.bones;
+      if (!idx) return;
+      const main = (k) => { let best = 0, bi = 0; for (let j = 0; j < 4; j++) if (sw.getComponent(k, j) > best) { best = sw.getComponent(k, j); bi = si.getComponent(k, j); } return bones[bi]; };
+      const keep = [];
+      // 그룹(재질별 범위)을 유지하며 가려진 삼각형만 뺌
+      const groups = g.groups.length ? g.groups : [{ start: 0, count: idx.count, materialIndex: 0 }];
+      const ng = [];
+      for (const gr of groups) {
+        const start = keep.length;
+        for (let t = gr.start; t < gr.start + gr.count; t += 3) {
+          const tri = [idx.getX(t), idx.getX(t + 1), idx.getX(t + 2)];
+          if (tri.every((k) => covered.has(main(k)))) continue;
+          keep.push(...tri);
+        }
+        ng.push({ start, count: keep.length - start, materialIndex: gr.materialIndex });
+      }
+      g.setIndex(keep);
+      g.clearGroups(); if (g.groups !== undefined && groups.length > 1) ng.forEach((x) => g.addGroup(x.start, x.count, x.materialIndex));
+      else ng.forEach((x) => g.addGroup(x.start, x.count, x.materialIndex));
+    });
   }
 
   // 몸에 붙는 상의: 윗옷 꼭짓점을 가장 가까운 몸(피부) 표면 바로 바깥으로 당기고, 그 몸 부분과 같은 뼈를 따르게 함
@@ -518,11 +548,14 @@ export class SignAvatar {
     }
   }
 
-  _slimTorso(sx = 0.9, sz = 0.92) {
+  _slimTorso(sx = 0.9, sz = 0.92, wx = 0.84, wz = 0.86) {
+    // 허리(척추)는 wx·wz, 가슴은 sx·sz 비율로 가늘게. 목·어깨는 원래 굵기로 되돌림 (회전하지 않는 뼈라 정확히 맞음)
     const h = this.vrm.humanoid;
-    const chest = h.getRawBoneNode("chest");
+    const chest = h.getRawBoneNode("chest"), spine = h.getRawBoneNode("spine");
     if (!chest) return;
-    chest.scale.set(sx, 1, sz);
+    let px = 1, pz = 1;                                   // 가슴의 부모(척추)까지 쌓인 비율
+    if (spine && spine !== chest) { spine.scale.set(wx, 1, wz); px = wx; pz = wz; }
+    chest.scale.set(sx / px, 1, sz / pz);                 // 가슴 최종 비율 = sx, sz
     for (const n of ["neck", "leftShoulder", "rightShoulder"]) {
       const b = h.getRawBoneNode(n);
       if (b) b.scale.set(1 / sx, 1, 1 / sz);
@@ -589,9 +622,9 @@ export class SignAvatar {
       }
       hat.add(shellInk, shell, visor, lip);
       // 이마 위를 덮도록 낮게 씀
-      hat.rotation.x = 0.1;                                      // 앞이 살짝 내려간 각도
+      hat.rotation.x = 0.16;                                     // 앞이 내려간 각도 (이마에 붙게)
       // 앞 테두리가 눈썹 바로 위에 오도록
-      hat.position.set(fc.x, brow + R * 1.15 * Math.sin(0.1), fc.z - fs.z * 0.02);
+      hat.position.set(fc.x, brow + R * 1.15 * Math.sin(0.16), fc.z + fs.z * 0.12);   // 앞으로 당겨 이마와 틈 없게
       this.scene.add(hat);
       hat.updateMatrixWorld(true);
       head.attach(hat);                                          // 머리 뼈를 따라 움직이도록
