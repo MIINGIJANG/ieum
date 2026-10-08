@@ -66,10 +66,12 @@
   }
   form.query button svg { width: 22px; height: 22px; }
   form.query button:disabled { opacity: .5; cursor: wait; }
-  .examples { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; width: min(100%, 640px); }
+  .examples { display: flex; flex-wrap: wrap; gap: 0 6px; justify-content: center; width: min(100%, 800px); }
+  .examples .br { flex-basis: 100%; height: 0; }   /* 넓은 화면: 3개 / 2개 두 줄 */
+  @media (max-width: 760px) { .examples .br { display: none; } }
   .examples button {
     border: 1px solid var(--line); background: var(--surface); border-radius: 999px;
-    padding: 4px 12px; font-size: .88rem; cursor: pointer; color: var(--ink);
+    padding: 4px 12px; font-size: .88rem; cursor: pointer; color: var(--ink); margin: 3px 0;
   }
   .examples button:hover { border-color: var(--sign-blue); }
 
@@ -228,7 +230,8 @@ let data = null, motion = null, items = [], frameF = 0, raf = 0, lastT = 0;
 // ---------- 입력 ----------
 function renderExamples() {
   $("examples").innerHTML = "";
-  EXAMPLES.forEach(t => {
+  EXAMPLES.forEach((t, i) => {
+    if (i === Math.ceil(EXAMPLES.length / 2)) { const br = document.createElement("span"); br.className = "br"; $("examples").append(br); }
     const b = document.createElement("button");
     b.type = "button"; b.textContent = t;
     b.onclick = () => { $("q").value = t; $("q").focus(); };   // 입력창에만 넣고, 화살표를 눌러야 넘어감
