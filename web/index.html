@@ -294,6 +294,11 @@ Promise.race([bootAll, new Promise(r => setTimeout(r, 60000))]).then(() => {
   const el = document.getElementById("boot");
   el.remove();                                 // 바로 사라짐 (페이드 없음)
   toTop();
+  // 로딩 화면이 사라지면 입력창(과 예시 질문)이 아래에서 올라옴. 제목 '이음'은 제자리
+  if (!matchMedia("(prefers-reduced-motion: reduce)").matches)
+    [document.getElementById("form"), document.getElementById("examples")].forEach((x, i) =>
+      x.animate([{ transform: "translateY(40px)", opacity: 0 }, { transform: "none", opacity: 1 }],
+                { duration: 550, delay: i * 80, easing: "cubic-bezier(.2,.8,.2,1)", fill: "backwards" }));
 });
 // 예시 질문: 서버(/examples)의 목록에서 무작위로 5개. 이번 접속에서 이미 한 질문과
 // 주제가 같거나(같은 안내 문장·같은 문서 문단으로 답이 감) 글자가 비슷하면 숨김. 새로고침하면 다시 무작위.
