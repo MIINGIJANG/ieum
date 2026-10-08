@@ -17,7 +17,7 @@
     --line: #d5d9d2;
     --caution: #f2b705;        /* 경고 표지 노랑 */
     --caution-ink: #3d2e00;
-    --block-gap: 32px;         /* 입력창–아바타, 아바타–출처 간격 (같게) */
+    --block-gap: 20px;         /* 화면의 모든 박스·요소 사이 세로 간격 (하나로 통일) */
     --font: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
   }
   * { box-sizing: border-box; }
@@ -46,11 +46,11 @@
 
   /* ---------- 첫 화면: 가운데 입력창 → 결과 화면: 위로 ---------- */
   body.landing { overflow: hidden; }
-  .hero { display: grid; gap: 14px; align-content: center; justify-items: center; }
+  .hero { display: grid; gap: var(--block-gap); align-content: center; justify-items: center; }
   body.landing .hero { min-height: calc(100svh - 68px); }
-  .hero h1 { margin: 0 0 6px; font-size: clamp(2.4rem, 8vw, 3.2rem); font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
+  .hero h1 { margin: 0; font-size: clamp(2.4rem, 8vw, 3.2rem); font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
   body.result .hero h1 { display: none; }
-  .notice { display: none; margin: 0; font-size: .88rem; color: var(--muted); }
+  .notice { display: none; margin: 0; font-size: .88rem; line-height: 1; color: var(--muted); }
   body.result .notice { display: block; }
   form.query { position: relative; width: min(100%, 640px); }
   form.query input {
@@ -70,7 +70,7 @@
   }
   form.query button svg { width: 22px; height: 22px; }
   form.query button:disabled { opacity: .5; cursor: wait; }
-  .examples { display: flex; flex-wrap: wrap; gap: 0 6px; justify-content: center; width: min(100%, 880px); }
+  .examples { display: flex; flex-wrap: wrap; gap: 0 6px; justify-content: center; width: min(100%, 880px); margin: -3px 0; }   /* 버튼 위아래 3px 여백 상쇄 */
   .examples .br { flex-basis: 100%; height: 0; }   /* 넓은 화면: 3개 / 2개 두 줄 */
   @media (max-width: 760px) { .examples .br { display: none; } }
   .examples button {
@@ -82,7 +82,6 @@
   /* 결과: 아래에서 올라옴 (그 사이 아바타는 미리 불러와 둠) */
   .results { display: grid; gap: var(--block-gap); grid-template-columns: minmax(0, 1fr); }
   .results > * { min-width: 0; }
-  .results .stage-wrap { margin-top: -17px; }   /* 캔버스 위 빈 여백만큼 당겨서 두 간격을 눈으로도 같게 */
   body.landing .results { visibility: hidden; opacity: 0; transform: translateY(100vh); position: absolute; left: 0; right: 0; top: 0; pointer-events: none; }
   body.result .results { animation: rise .6s cubic-bezier(.2,.8,.2,1) .12s both; }
   @keyframes rise { from { opacity: 0; transform: translateY(60vh); } to { opacity: 1; transform: none; } }
@@ -91,7 +90,7 @@
   }
 
   /* ---------- 수어 표지판 무대 ---------- */
-  .stage-wrap { display: grid; justify-items: center; gap: 14px; width: 100%; }
+  .stage-wrap { display: grid; justify-items: center; gap: var(--block-gap); width: 100%; }
   .stage {
     position: relative;
     width: min(100%, 460px);
@@ -103,10 +102,11 @@
   .stage .loading { position: absolute; inset: auto 0 45% 0; text-align: center; color: var(--muted); font-size: 1rem; display: none; }
   .stage .loading.on { display: block; }
   .controls { display: flex; gap: 8px; align-items: center; }
-  .controls button {
-    border: 2px solid var(--ink); background: var(--surface); border-radius: 10px;
-    padding: 6px 14px; font-weight: 700; cursor: pointer;
+  .controls button {   /* 단어 박스와 같은 크기·글자 */
+    padding: 4px 10px; border-radius: 8px; background: var(--surface); border: 1px solid var(--line);
+    font-weight: 500; line-height: inherit; cursor: pointer;
   }
+  .controls button:hover { border-color: var(--ink); }
   .controls label { font-size: 1rem; color: var(--muted); display: flex; gap: 6px; align-items: center; }
 
   /* 글로스 순서 */
@@ -132,7 +132,7 @@
     border-left: 4px solid var(--caution); background: #fffaea; padding: 8px 12px; border-radius: 0 8px 8px 0;
     font-size: 1rem; margin: 0 0 12px;
   }
-  .info { display: grid; gap: 16px; }
+  .info { display: grid; gap: var(--block-gap); }
   .info > * { min-width: 0; }
   .src ul { list-style: none; margin: 0; padding: 0; font-size: 1rem; color: var(--muted); }
   .src li { margin-bottom: 12px; }

@@ -276,10 +276,10 @@ export class SignAvatar {
     const hips = this.vrm.humanoid.getRawBoneNode("hips").getWorldPosition(new V()).y;
     const top = this._hat ? new THREE.Box3().setFromObject(this._hat).max.y : this.headY + 0.18;
     const bottom = hips + 0.02;
-    const pad = 0.025, span = top - bottom + pad * 2;
+    const pad = -0.008, span = top - bottom + pad;       // 위 여백 거의 없음: 캔버스 위·아래 끝 = 안전모 끝·배
     const half = THREE.MathUtils.degToRad(this.camera.fov / 2);
     const dist = span / 2 / Math.tan(half);
-    const cy = (top + bottom) / 2;
+    const cy = bottom + span / 2;
     this.camera.position.set(0, cy, dist);
     this.camera.lookAt(0, cy, 0);
   }
