@@ -179,7 +179,7 @@
   <div class="in" id="bootIn">
     <h1>이음</h1>
     <div class="bar" aria-hidden="true"><i id="bootBar"></i></div>
-    <p id="bootMsg">준비하는 중…</p>
+    <p id="bootMsg">아바타를 준비하는 중…</p>
   </div>
 </div>
 <main class="app">
@@ -282,8 +282,6 @@ const preloadPages = fetch(`${API}/pages`).then(r => r.ok ? r.json() : []).then(
   Promise.all(list.map(u => new Promise((res) => { const i = new Image(); i.onload = i.onerror = res; i.src = u; }))));
 const warmServer = fetch(`${API}/warmup`, { method: "POST" });
 const examplesReady = fetch(`${API}/examples`).then(r => r.ok ? r.json() : []);
-boot.show("아바타를 준비하는 중…");
-avatarReady.then(() => boot.show("답변을 준비하는 중…"));
 const bootAll = Promise.all([
   boot.add("avatar", avatarReady),
   boot.add("pages", preloadPages),
