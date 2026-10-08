@@ -286,7 +286,7 @@ export class SignAvatar {
     });
   }
 
-  // 눈동자 색: 빨간 눈동자 등 튀는 색이면 짙은 갈색으로 (명암은 유지)
+  // 눈동자 색: 빨간 눈동자 등 튀는 색이면 검은색으로 (명암은 유지)
   _eyeColor() {
     this.vrm.scene.traverse((o) => {
       if (!o.isMesh) return;
@@ -298,7 +298,7 @@ export class SignAvatar {
         let red = 0, n = 0;
         for (let k = 0; k < d.length; k += 4 * 7) if (d[k + 3] > 20) { n++; if (d[k] > d[k + 1] * 1.4 && d[k] > d[k + 2] * 1.3) red++; }
         if (!n || red / n < 0.2) continue;                        // 이미 자연스러운 색이면 그대로
-        const dark = [38, 24, 16], light = [132, 88, 56];          // 짙은 갈색 눈동자
+        const dark = [10, 9, 9], light = [58, 50, 46];             // 검은 눈동자
         for (let k = 0; k < d.length; k += 4) {
           if (d[k + 3] <= 8) continue;
           const l = Math.max(d[k], d[k + 1], d[k + 2]) / 255;      // 붉은 눈은 R 이 밝기
