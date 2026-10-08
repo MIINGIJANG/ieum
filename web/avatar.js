@@ -33,7 +33,7 @@ const V = (p) => new THREE.Vector3(p[0], -p[1], -(p[2] || 0));
 //   head : nod(끄덕임) · shake(도리도리) · tilt(갸웃) · up(위를 봄), n = 반복 횟수, deg = 각도
 //   데이터(수어자 얼굴)의 입 모양·눈 깜빡임은 그대로 쓰고, 이 표는 단어 뜻에 맞는 표정을 더함
 export const NMS = {
-  "위험1":    { face: { angry: 0.55, sad: 0.25 }, head: { type: "nod", n: 1, deg: 5 } },          // 경고: 긴장한 얼굴
+  "위험1":    { face: { angry: 0.75, sad: 0.2 }, head: { type: "nod", n: 1, deg: 5 } },          // 경고: 긴장한 얼굴
   "조심1":    { face: { angry: 0.4, surprised: 0.2 }, head: { type: "nod", n: 1, deg: 7 } },     // 주의: 진지하게 한 번 끄덕
   "멈추다1":  { face: { angry: 0.65 }, head: { type: "nod", n: 1, deg: 10 } },                   // 단호하게
   "낙하물0#": { face: { surprised: 0.6 }, head: { type: "up", deg: 10 } },                        // 위를 보며 놀람

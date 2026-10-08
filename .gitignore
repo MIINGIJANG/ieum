@@ -19,3 +19,6 @@ data/processed/
 /기술지원규정.pdf
 # 샘플용 가짜 동작 (make_sample_motion.py 로 다시 생성)
 data/sample/motions/
+
+# Hugging Face 배포용 폴더 (scripts/make_space.py 로 다시 생성)
+/dist/
