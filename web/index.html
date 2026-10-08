@@ -233,7 +233,7 @@ function renderExamples() {
   EXAMPLES.forEach(t => {
     const b = document.createElement("button");
     b.type = "button"; b.textContent = t;
-    b.onclick = () => { $("q").value = t; run(); };
+    b.onclick = () => { $("q").value = t; $("q").focus(); };   // 입력창에만 넣고, 화살표를 눌러야 넘어감
     $("examples").append(b);
   });
 }
