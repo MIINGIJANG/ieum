@@ -62,6 +62,32 @@ def merge_sources(hits, titles, order=None, tables=None, images=None):
     return sorted(res, key=lambda o: (o["doc"], o["page"]))     # 출처는 쪽 번호 순
 
 
+class SignWords:
+    """답변 문장 → 수어로 표현할 단어(글로스) 목록. 문장에 실제로 있는 말만 뽑으므로 없는 내용이 생기지 않음."""
+
+    def __init__(self, path="data/sign_words.csv"):
+        self.rules = []                     # (말, 정확히일치?, 글로스)
+        p = Path(path)
+        if p.exists():
+            for ln in p.read_text(encoding="utf-8").splitlines()[1:]:
+                if not ln.strip() or ln.startswith("#") or ln.startswith("말,"):
+                    continue
+                word, gloss = ln.rsplit(",", 1)
+                exact = word.startswith("=")
+                self.rules.append((word.lstrip("="), exact, gloss.strip()))
+
+    def __call__(self, sentence):
+        out = []
+        for ej in sentence.split():
+            core = ej.strip("“”\"'()[]")
+            for word, exact, gloss in self.rules:
+                if (core == word or ej == word) if exact else core.startswith(word):
+                    if gloss not in out:                         # 한 문장 안에서 같은 단어는 한 번만
+                        out.append(gloss)
+                    break
+        return out
+
+
 class SafetySignPipeline:
     def __init__(self, ckpt, index, lexicon=None, motion_dir=None, sentences=None, k=3, demo_threshold=0.45,
                  titles="data/kosha/titles.json", answers="data/kosha/answers.json", min_score=0.11,
@@ -70,6 +96,7 @@ class SafetySignPipeline:
         self.rag = SafetyRAG.load(index)
         self.motion = MotionDict(motion_dir) if motion_dir and Path(motion_dir).exists() else None
         self.k = k
+        self.sign_words = SignWords(Path(sentences).parent / "sign_words.csv" if sentences else "data/sign_words.csv")
         # 답변 거절 기준: 문서 검색 1위 점수가 이보다 낮으면 '관련 내용 없음' (환각 방지, docs/환각방지.md)
         self.min_score = min_score
         # 문장 번역 거절 기준: 산업안전 핵심어가 하나도 없으면 번역하지 않음 (번역 모델이 아무 문장이나 안전 수어로 바꾸는 것 방지)
@@ -114,6 +141,19 @@ class SafetySignPipeline:
                 "dropped_terms": [], "unverified_terms": [], "has_unk": False,
                 "method": "memory",                              # 검수된 확정 글로스 사용
                 "complete": hit.get("complete", True)}           # False: 일부 단어 동작만 확보
+
+    def sign_sentence(self, text):
+        """답변 문장 하나 → 그 문장에서 뽑은 수어 단어 + 재생 시간."""
+        glosses = self.sign_words(text)
+        tl, t = [], 0.0
+        for g in glosses:
+            clip = self.motion.get(g) if self.motion else None
+            d = round(len(clip["frames"]) / clip.get("fps", 30), 3) if clip else 0.0
+            tl.append({"gloss": g, "start": round(t, 3), "duration": d})
+            t += d
+        return {"korean": text, "gloss": glosses, "timeline": tl, "lexicon_terms": [], "dropped_terms": [],
+                "unverified_terms": [], "has_unk": False, "method": "extract",   # 답변 문장에서 단어 추출
+                "complete": all(self.motion and self.motion.get(g) for g in glosses)}
 
     def translate_text(self, text, beam=4):
         sents = [self.translate_one(s, beam) for s in split_sentences(text) or [text]]
@@ -202,12 +242,13 @@ class SafetySignPipeline:
             if not texts:
                 return self._abstain(question, top)
             answer_text = " ".join(texts)
-        sents = [self.translate_one(p, beam) for t in texts for p in (split_sentences(t) or [t])]
+        # 수어: 답변 문장에 실제로 있는 말만 수어 단어로 (data/sign_words.csv). 번역 모델은 아직 엉뚱한 단어를 만들어서 답변에는 쓰지 않음
+        sents = [self.sign_sentence(p) for p in (split_sentences(answer_text) or [answer_text])]
         return {
             "question": question,
             "answer_mode": mode,                       # demo | llm | extractive
             "answer_text": answer_text,                # 화면에 보여줄 답변 (문서 근거)
-            "sign_text": " ".join(texts),              # 아바타가 수어로 보여주는 문장
+            "sign_text": answer_text,                  # 수어 단어를 뽑은 문장 (= 답변)
             "sentences": sents,                        # 문장별 글로스 + 타임라인
             "motion": self.motion_for([g for s in sents for g in s["gloss"]]),   # 전체 문장 이어붙인 동작
             "sources": merge_sources(hits, self.titles, self._order, self.tables, self.images),   # 출처: 문서 제목·쪽·전체 문장
