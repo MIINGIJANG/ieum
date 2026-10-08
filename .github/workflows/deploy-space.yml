@@ -1,0 +1,24 @@
+# main 에 푸시하면 Hugging Face Space(MIINGI/ieum)에 자동으로 올림 → Space 가 다시 빌드(5~10분)
+# 필요: GitHub 저장소 Settings → Secrets → Actions 에 HF_TOKEN (Hugging Face Write 토큰)
+# 번역 모델(best.pt)·검색 인덱스는 GitHub 에 없으므로 Space 에 이미 올린 것을 그대로 씀
+name: Hugging Face Space 배포
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -U huggingface_hub
+      - run: python scripts/make_space.py --no-ckpt
+      - name: Space 에 올리기
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          hf upload MIINGI/ieum dist/space . --repo-type space \
+            --commit-message "GitHub ${GITHUB_SHA::7} $(git log -1 --format=%s | head -c 80)"
