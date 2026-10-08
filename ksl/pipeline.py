@@ -31,7 +31,7 @@ def merge_sources(hits, titles, order=None, tables=None):
     """같은 문서·쪽은 하나로 합치고(겹치는 문장 제거, 문서 순서대로) 번호 표시를 뗀 전체 문장으로."""
     out = {}
     rank = {}
-    for i, h in enumerate(hits):                      # 쪽 순서는 검색 점수 순, 쪽 안의 문장은 문서 순
+    for i, h in enumerate(hits):                      # 쪽 안의 문장은 문서 순
         rank.setdefault((h["doc"], h["page"]), i)
     order = order or {}
     for h in sorted(hits, key=lambda h: (rank[(h["doc"], h["page"])], order.get(h["text"], 0))):
@@ -51,7 +51,7 @@ def merge_sources(hits, titles, order=None, tables=None):
         o["blocks"] = (tables.blocks(o["doc"], o["page"], lines) if tables
                        else [{"type": "text", "text": ln} for ln in lines])   # 원문 표는 표로
         res.append(o)
-    return res
+    return sorted(res, key=lambda o: (o["doc"], o["page"]))     # 출처는 쪽 번호 순
 
 
 class SafetySignPipeline:

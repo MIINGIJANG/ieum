@@ -142,8 +142,8 @@
     border-left: 4px solid var(--caution); background: #fffaea; padding: 8px 12px; border-radius: 0 8px 8px 0;
     font-size: .92rem; margin: 0 0 12px;
   }
-  .src { border-top: 1px solid var(--line); padding-top: 10px; }
-  .src h3 { font-size: .95rem; margin: 0 0 6px; font-weight: 500; }
+  .info { display: grid; gap: 16px; }
+  .info > * { min-width: 0; }
   .src ul { list-style: none; margin: 0; padding: 0; font-size: .9rem; color: var(--muted); }
   .src li { margin-bottom: 12px; }
   .src li p { margin: 2px 0 0; }
@@ -187,7 +187,10 @@
       </div>
     </section>
 
-    <section class="answer" id="answer" aria-live="polite"></section>
+    <div class="info">
+      <section class="answer" id="answer" aria-live="polite"></section>
+      <section class="answer src" id="sources" aria-label="출처" hidden></section>
+    </div>
   </div>
 </main>
 
@@ -266,6 +269,7 @@ async function run() {
     render();
   } catch (err) {
     showResults();
+    $("sources").hidden = true;
     $("answer").innerHTML = `<p class="error">서버에 연결하지 못했습니다. 터미널에서 api 서버가 켜져 있는지 확인하세요. (${err.message})</p>`;
   } finally {
     $("go").disabled = false;
@@ -337,7 +341,8 @@ function render() {
   // 답변
   const a = $("answer");
   if (data.mode === "ask") {
-    const src = (data.sources || []).map(s =>
+    // 출처: 쪽 번호 순
+    const src = [...(data.sources || [])].sort((x, y) => x.page - y.page).map(s =>
       `<li><b>${esc(s.title || s.doc)} ${esc(s.page)}쪽</b>${(s.blocks || s.text.split("\n").map(t => ({type: "text", text: t})))
         .map(b => b.type === "table" ? tableHTML(b.rows) : `<p>${esc(b.text)}</p>`).join("")}</li>`).join("");
     a.innerHTML = `
@@ -345,9 +350,11 @@ function render() {
       <p class="text">${esc(data.answer_text || "문서에서 관련 내용을 찾지 못했습니다.")}</p>
       ${data.sign_text && data.sign_text !== data.answer_text ? `<p class="sign">수어 안내 · ${esc(data.sign_text)}</p>` : ""}
       ${unverified.length ? `<p class="warn">${unverified.map(esc).join(", ")}: 아직 수어 표현이 확인되지 않아 지문자로 표시합니다.</p>` : ""}
-      ${partial}
-      ${src ? `<div class="src"><h3>출처</h3><ul>${src}</ul></div>` : ""}`;
+      ${partial}`;
+    $("sources").innerHTML = src ? `<h2>출처</h2><ul>${src}</ul>` : "";
+    $("sources").hidden = !src;
   } else {
+    $("sources").hidden = true;
     a.innerHTML = `<h2>번역한 문장</h2><p class="text">${sents.map(s => esc(s.korean)).join(" ")}</p>
       ${unverified.length ? `<p class="warn">${unverified.map(esc).join(", ")}: 아직 수어 표현이 확인되지 않아 지문자로 표시합니다.</p>` : ""}${partial}`;
   }
