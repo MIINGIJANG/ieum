@@ -16,6 +16,7 @@ import pypdfium2 as pdfium
 
 ROOT = Path(__file__).resolve().parent.parent
 SCALE = 2.5
+PAPER = 242          # 원문 PDF 회색 상자(법령 인용)의 회색. 흰 바탕도 이 색으로 맞춤
 
 
 def build(pdf_path):
@@ -27,6 +28,7 @@ def build(pdf_path):
     with pdfplumber.open(pdf_path) as pl:
         for i, pg in enumerate(pl.pages, start=1):
             img = pdf[i - 1].render(scale=SCALE).to_pil().convert("L")      # 흑백이면 충분, 파일 작게
+            img = img.point(lambda v: min(v, PAPER))                        # 흰 바탕을 원문 회색 상자와 같은 회색으로 (출처 배경 통일)
             img = img.quantize(16)                                          # 16단계 회색 → 글자 선명, 용량 작음
             img.save(out_img / f"{i}.png", optimize=True)
             words = [[w["text"], round(w["x0"], 1), round(w["top"], 1), round(w["x1"], 1), round(w["bottom"], 1)]

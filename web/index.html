@@ -118,7 +118,7 @@
     display: flex; flex-wrap: wrap; gap: 6px; justify-content: center;
   }
   ol.glosses li {
-    padding: 4px 10px; border-radius: 8px; background: var(--surface); border: 1px solid var(--line);
+    padding: .25em .62em; border-radius: 8px; background: var(--surface); border: 1px solid var(--line);
     font-weight: 500; transition: background .15s, color .15s;
   }
   ol.glosses li.nomo { background: #d9dcd6; border-color: #d9dcd6; color: var(--ink); }   /* 동작 없는 단어: 재생 안 함 */
@@ -142,7 +142,7 @@
   .src li p { margin: 2px 0 0; }
   .src b { color: var(--ink); font-weight: 500; }
   .src .tbl { overflow-x: auto; margin: 6px 0 8px; }
-  .src .pdf { overflow: hidden; margin: 8px 0 0; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+  .src .pdf { overflow: hidden; margin: 8px 0 0; border: 1px solid var(--line); border-radius: 6px; background: #f2f2f2; }   /* 쪽 이미지 바탕과 같은 회색 */
   .src .pdf img { display: block; max-width: none; height: auto; }
   .src table { border-collapse: collapse; width: 100%; font-size: 1rem; color: var(--ink); background: var(--surface); }
   .src th, .src td { border: 1px solid #9aa1a8; padding: 5px 8px; vertical-align: middle; line-height: 1.45; }
@@ -364,8 +364,11 @@ function renderNone() {
 
 // 단어 박스가 두 줄 이상이면 줄마다 개수가 비슷하도록: 줄 수가 늘지 않는 가장 좁은 폭을 찾아 그 폭으로 맞춤
 function balanceRows(box) {
-  box.style.maxWidth = "";
+  // 1) 두 줄 안에 들어가게: 넘치면 단어 박스 글자·여백을 조금씩 줄임 (최대 2줄)
+  box.style.maxWidth = ""; box.style.fontSize = "";
   const lines = () => new Set([...box.children].map(c => c.offsetTop)).size;
+  for (let f = 1; lines() > 2 && f > 0.72; f -= 0.04) box.style.fontSize = f.toFixed(2) + "rem";
+  // 2) 두 줄이면 줄마다 개수가 비슷하도록: 줄 수가 늘지 않는 가장 좁은 폭 + 여유
   const n = lines();
   if (n <= 1) return;
   let lo = 0, hi = box.getBoundingClientRect().width;
@@ -374,9 +377,10 @@ function balanceRows(box) {
     box.style.maxWidth = mid + "px";
     if (lines() > n) lo = mid; else hi = mid;
   }
-  box.style.maxWidth = Math.ceil(hi) + "px";
+  box.style.maxWidth = Math.ceil(hi) + 6 + "px";
 }
 addEventListener("resize", () => balanceRows($("glosses")));
+if (document.fonts) document.fonts.ready.then(() => balanceRows($("glosses")));   // 글꼴이 늦게 로드되면 폭이 바뀌므로 다시 맞춤
 
 function render() {
   if (data.mode === "none") return renderNone();
@@ -400,7 +404,7 @@ function render() {
     });
   });
 
-  balanceRows(ol);
+  balanceRows(ol); setTimeout(() => balanceRows(ol), 400);   // 결과가 다 그려진 뒤 한 번 더
 
   // 답변
   const a = $("answer");
