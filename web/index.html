@@ -146,10 +146,8 @@
   .empty { color: var(--muted); }
   .error { color: #9b1c1c; }
 
-  @media (min-width: 860px) {
-    .results { grid-template-columns: 440px 1fr; column-gap: 40px; align-items: start; }
-    .stage-wrap { position: sticky; top: 24px; }
-  }
+  /* 화면이 넓어도 위아래 배치 (입력창 폭에 맞춤) */
+  .results { width: min(100%, 640px); margin: 0 auto; }
 </style>
 </head>
 <body class="landing">
