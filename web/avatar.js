@@ -28,6 +28,22 @@ const SIDES = [
 // 데이터 좌표 → three.js 월드 방향 (y 위, z 카메라 쪽)
 const V = (p) => new THREE.Vector3(p[0], -p[1], -(p[2] || 0));
 
+// 비수지 표현(NMS): 단어마다 붙는 표정·고개 움직임. 수어에서 표정은 문법·의미의 일부.
+//   face : 표정 세기 0~1 (angry=눈 찡그림·긴장, sad=걱정, surprised=눈 크게, relaxed=부드러운 얼굴)
+//   head : nod(끄덕임) · shake(도리도리) · tilt(갸웃) · up(위를 봄), n = 반복 횟수, deg = 각도
+//   데이터(수어자 얼굴)의 입 모양·눈 깜빡임은 그대로 쓰고, 이 표는 단어 뜻에 맞는 표정을 더함
+export const NMS = {
+  "위험1":    { face: { angry: 0.55, sad: 0.25 }, head: { type: "nod", n: 1, deg: 5 } },          // 경고: 긴장한 얼굴
+  "조심1":    { face: { angry: 0.4, surprised: 0.2 }, head: { type: "nod", n: 1, deg: 7 } },     // 주의: 진지하게 한 번 끄덕
+  "멈추다1":  { face: { angry: 0.65 }, head: { type: "nod", n: 1, deg: 10 } },                   // 단호하게
+  "낙하물0#": { face: { surprised: 0.6 }, head: { type: "up", deg: 10 } },                        // 위를 보며 놀람
+  "감전0":    { face: { surprised: 0.75, angry: 0.2 }, head: { type: "back", deg: 6 } },          // 움찔
+  "없다1":    { face: { sad: 0.3 }, head: { type: "shake", n: 2, deg: 14 } },                     // 부정: 고개 젓기
+  "확인1":    { face: { surprised: 0.25 }, head: { type: "nod", n: 2, deg: 8 } },                 // 확인: 끄덕끄덕
+  "이상하다1": { face: { sad: 0.45, angry: 0.15 }, head: { type: "tilt", deg: 10 } },             // 의아: 갸웃
+};
+const FACE_KEYS = ["aa", "ou", "ee", "blink", "surprised", "angry", "sad", "relaxed"];
+
 export class SignAvatar {
   constructor(canvas) {
     this.canvas = canvas;
@@ -876,9 +892,11 @@ export class SignAvatar {
     return new THREE.Matrix4().makeBasis(x, y, z);
   }
 
-  setFrame(fr) {
+  // fr: 동작 한 프레임, word: { gloss, t } (지금 표현 중인 단어와 그 단어 안 진행도 0~1)
+  setFrame(fr, word = null) {
     if (!this.vrm) return;
     this._face = fr;
+    this._word = fr ? word : null;
     const neutral = !fr || !fr.body;
     for (const s of SIDES) {
       const P = s.pre, R = this.rest[P];
@@ -936,21 +954,56 @@ export class SignAvatar {
     }
   }
 
-  // 비수지 표현: 표정(입 벌림·입 모양·눈 감음·눈썹) + 고개 방향
+  // 표정 이름이 모델마다 다름 (이 모델은 '놀람'이 Surprised)
+  _expr(name) {
+    const em = this.vrm.expressionManager;
+    if (!this._exprName) this._exprName = {};
+    if (!(name in this._exprName)) {
+      const all = Object.keys(em.expressionMap || {});
+      this._exprName[name] = all.find((k) => k.toLowerCase() === name.toLowerCase()) || null;
+    }
+    return this._exprName[name];
+  }
+
+  // 비수지 표현: 수어자 얼굴 데이터(입 모양·눈 깜빡임) + 단어별 표정·고개 움직임(NMS) + 평소 눈 깜빡임
   _applyFace(fr) {
     const em = this.vrm.expressionManager;
     const e = (fr && fr.expr) || {};
+    const w = this._word, nm = w && NMS[w.gloss];
+    const t = w ? Math.max(0, Math.min(1, w.t)) : 0;
+    const env = nm ? Math.min(1, t / 0.2, (1 - t) / 0.15 + 0.3) : 0;     // 단어 시작에 표정이 올라오고 끝에 조금 풀림
+    const now = performance.now();
     if (em) {
-      for (const name of ["aa", "ou", "ee", "blink", "surprised", "angry"]) {
-        if (!em.getExpression(name)) continue;
-        const cur = em.getValue(name) || 0, tgt = e[name] || 0;
-        em.setValue(name, cur + (tgt - cur) * 0.35);            // 부드럽게
+      // 평소 눈 깜빡임 (3~5초마다 0.15초)
+      if (!this._nextBlink || now > this._nextBlink + 150) this._nextBlink = now + 3000 + Math.random() * 2000;
+      const idleBlink = !fr && now > this._nextBlink ? 1 : 0;
+      for (const name of FACE_KEYS) {
+        const key = this._expr(name);
+        if (!key) continue;
+        let tgt = e[name] || 0;
+        if (name === "surprised" || name === "angry") tgt *= 0.4;          // 데이터의 눈썹 값은 흔들림이 커서 약하게
+        if (nm && nm.face[name]) tgt = Math.max(tgt, nm.face[name] * env);
+        if (name === "blink") {
+          tgt = Math.max(tgt, idleBlink);
+          if (nm && (nm.face.surprised || 0) > 0.4) tgt *= 0.3;             // 놀란 표정 중엔 눈 감지 않게
+          else if (nm && nm.face.angry) tgt *= 0.5;                          // 찡그린 눈 + 깜빡임이 윙크처럼 보이지 않게
+        }
+        const cur = em.getValue(key) || 0;
+        em.setValue(key, cur + (tgt - cur) * (name === "blink" ? 0.6 : 0.3));   // 부드럽게
       }
-      // 평소 표정: 살짝 웃는 밝은 얼굴 (놀람·화남 표정이 나오면 그만큼 줄임)
-      const other = Math.max(em.getValue("surprised") || 0, em.getValue("angry") || 0);
-      for (const [name, v] of Object.entries(this.baseSmile)) if (em.getExpression(name)) em.setValue(name, v * (1 - other));
+      const other = Math.max(...["surprised", "angry", "sad"].map((n) => (this._expr(n) && em.getValue(this._expr(n))) || 0));
+      for (const [name, v] of Object.entries(this.baseSmile)) if (this._expr(name)) em.setValue(this._expr(name), v * (1 - other));
     }
-    const h = (fr && fr.head) || [0, 0, 0];
+    // 고개: 데이터 방향 + 단어별 움직임 (yaw, pitch(+위), roll)
+    const h = ((fr && fr.head) || [0, 0, 0]).map((v) => Math.max(-15, Math.min(15, v)));   // 데이터 고개 각도는 ±15° 까지만 (튀는 값 방지)
+    if (nm && nm.head) {
+      const H = nm.head, wave = Math.sin(Math.PI * 2 * (H.n || 1) * t), bump = Math.sin(Math.PI * t);
+      if (H.type === "nod") h[1] += H.deg * Math.max(0, wave);               // 아래로 끄덕 (이 모델은 + 가 아래)
+      else if (H.type === "shake") { h[0] = h[0] * 0.3 + H.deg * wave * env; }
+      else if (H.type === "tilt") h[2] += H.deg * env;
+      else if (H.type === "up") h[1] -= H.deg * env;
+      else if (H.type === "back") h[1] -= H.deg * bump;
+    }
     const d = THREE.MathUtils.degToRad;
     const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(d(-h[1]) * 0.8, d(h[0]) * 0.8, d(h[2]) * 0.8, "YXZ"));
     const half = new THREE.Quaternion().slerp(q, 0.5);

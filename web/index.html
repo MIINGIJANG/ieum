@@ -458,8 +458,10 @@ function play() {
     const n = totalFrames();
     const f = Math.min(Math.floor(frameF), Math.max(n - 1, 0));
     const fr = motion && motion.frames.length ? motion.frames[f] : null;
-    if (window.avatar) window.avatar.setFrame(fr);
     const it = currentItem(f);
+    const word = it && it.seg && it.seg.end > it.seg.start
+      ? { gloss: it.seg.gloss || it.gloss, t: (f - it.seg.start) / (it.seg.end - it.seg.start) } : null;
+    if (window.avatar) window.avatar.setFrame(fr, word);   // 단어별 표정·고개 움직임을 위해 지금 단어도 전달
     items.forEach(x => x.li.classList.toggle("active", x === it));
     if (frameF < n) raf = requestAnimationFrame(loop);
     else {
