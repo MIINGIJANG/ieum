@@ -160,16 +160,15 @@
   .error { color: #9b1c1c; }
 
   /* 첫 로딩 화면: 아바타·출처 이미지·번역 모델을 모두 준비한 뒤 사라짐 (사용 중에는 기다림 없음) */
-  .boot { position: fixed; inset: 0; z-index: 1000; background: var(--concrete); transition: opacity .4s ease; }
+  .boot { position: fixed; inset: 0; z-index: 1000; background: var(--concrete); }
   /* 제목 '이음'은 첫 화면 제목과 같은 글꼴·크기·위치 (위치는 JS 가 첫 화면 제목에 맞춤) → 로딩이 끝나도 제목이 안 움직임 */
   .boot .in { visibility: hidden; position: absolute; left: 0; right: 0; top: 40%; display: flex; flex-direction: column; align-items: center; gap: var(--block-gap); }
-  .boot.done { opacity: 0; pointer-events: none; }
   .boot .in.placed { visibility: visible; }   /* 첫 화면 제목 위치를 잰 뒤에만 보임 (가운데에 떴다가 튀어오르지 않게) */
   .boot h1 { margin: 0; font-size: clamp(2.4rem, 8vw, 3.2rem); font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
   .boot .bar { width: min(240px, 60vw); height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
   .boot .bar i { display: block; height: 100%; width: 0; background: var(--ink); border-radius: 3px; transition: width .3s ease; }
   .boot p { margin: 0; color: var(--muted); font-size: 1rem; min-height: 1.6em; }
-  @media (prefers-reduced-motion: reduce) { .boot, .boot .bar i { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { .boot .bar i { transition: none; } }
 
   /* 화면이 넓어도 위아래 배치 (입력창 폭에 맞춤) */
   .results { width: min(100%, 640px); margin: 0 auto; }
@@ -295,9 +294,8 @@ const bootAll = Promise.all([
 // 너무 오래 걸리면(느린 망) 60초 뒤에는 그냥 시작 (남은 준비는 뒤에서 계속)
 Promise.race([bootAll, new Promise(r => setTimeout(r, 60000))]).then(() => {
   const el = document.getElementById("boot");
-  el.classList.add("done");
+  el.remove();                                 // 바로 사라짐 (페이드 없음)
   toTop();
-  setTimeout(() => el.remove(), 500);
 });
 // 예시 질문: 서버(/examples)의 목록에서 무작위로 5개. 이번 접속에서 이미 한 질문과
 // 주제가 같거나(같은 안내 문장·같은 문서 문단으로 답이 감) 글자가 비슷하면 숨김. 새로고침하면 다시 무작위.
