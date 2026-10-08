@@ -134,10 +134,15 @@
   ol.glosses li.active { background: var(--sign-blue); color: #fff; border-color: var(--sign-blue); }
 
   /* ---------- 답변 · 출처 ---------- */
-  .answer { background: var(--surface); border-radius: 14px; padding: 18px 18px 14px; border: 1px solid var(--line); }
+  .answer { background: var(--surface); border-radius: 14px; padding: 18px; border: 1px solid var(--line); }
   .answer h2 { font-size: .95rem; margin: 0 0 6px; color: var(--muted); font-weight: 500; }
   .answer .text { font-size: 1.1rem; margin: 0 0 12px; }
-  .answer .sign { margin: -4px 0 12px; color: var(--muted); font-size: .92rem; }
+  .signinfo { display: grid; gap: 8px; justify-items: center; text-align: center; width: 100%; }
+  .signinfo:empty { display: none; }
+  .signinfo p { margin: 0; }
+  .signinfo .sign { color: var(--muted); font-size: .92rem; }
+  .signinfo .warn { margin: 0; text-align: left; }
+  .answer > :last-child { margin-bottom: 0; }
   .warn {
     border-left: 4px solid var(--caution); background: #fffaea; padding: 8px 12px; border-radius: 0 8px 8px 0;
     font-size: .92rem; margin: 0 0 12px;
@@ -182,6 +187,7 @@
       </div>
       <div class="now" id="now" aria-live="polite"></div>
       <ol class="glosses" id="glosses" aria-label="수어 순서"></ol>
+      <div class="signinfo" id="signinfo"></div>
       <div class="controls">
         <button type="button" id="replay">다시 보기</button>
       </div>
@@ -338,6 +344,13 @@ function render() {
     });
   });
 
+  // 아바타 영역: 수어로 보여주는 문장 + 동작 준비 상태
+  const signText = data.mode === "ask" ? data.sign_text : "";   // 문장 번역이면 답변 칸의 문장과 같으므로 생략
+  $("signinfo").innerHTML = `
+    ${signText ? `<p class="sign">수어 안내 · ${esc(signText)}</p>` : ""}
+    ${unverified.length ? `<p class="warn">${unverified.map(esc).join(", ")}: 아직 수어 표현이 확인되지 않아 지문자로 표시합니다.</p>` : ""}
+    ${partial}`;
+
   // 답변
   const a = $("answer");
   if (data.mode === "ask") {
@@ -348,15 +361,12 @@ function render() {
     a.innerHTML = `
       <h2>답변</h2>
       <p class="text">${esc(data.answer_text || "문서에서 관련 내용을 찾지 못했습니다.")}</p>
-      ${data.sign_text && data.sign_text !== data.answer_text ? `<p class="sign">수어 안내 · ${esc(data.sign_text)}</p>` : ""}
-      ${unverified.length ? `<p class="warn">${unverified.map(esc).join(", ")}: 아직 수어 표현이 확인되지 않아 지문자로 표시합니다.</p>` : ""}
-      ${partial}`;
+`;
     $("sources").innerHTML = src ? `<h2>출처</h2><ul>${src}</ul>` : "";
     $("sources").hidden = !src;
   } else {
     $("sources").hidden = true;
-    a.innerHTML = `<h2>번역한 문장</h2><p class="text">${sents.map(s => esc(s.korean)).join(" ")}</p>
-      ${unverified.length ? `<p class="warn">${unverified.map(esc).join(", ")}: 아직 수어 표현이 확인되지 않아 지문자로 표시합니다.</p>` : ""}${partial}`;
+    a.innerHTML = `<h2>번역한 문장</h2><p class="text">${sents.map(s => esc(s.korean)).join(" ")}</p>`;
   }
   // 결과가 다 올라온 뒤 재생 (아바타가 아직이면 준비되는 대로)
   const start = () => setTimeout(play, reduce ? 0 : 650);
