@@ -43,6 +43,7 @@ export class SignAvatar {
     this.vrm = null;
     this.driven = new Set();
     this.smooth = 0.55;
+    this.baseSmile = { relaxed: 0.65, happy: 0.15 };   // 평소 표정 (밝게)
     this.margin = 0.07;          // 손목이 몸 표면보다 최소 이만큼(m) 앞에 오도록          // 프레임 간 흔들림 줄이기 (0=그대로, 1=안 움직임)
     this.last = performance.now();
     this._resize();
@@ -283,6 +284,8 @@ export class SignAvatar {
     };
     const g = tops.geometry, pos = g.attributes.position, si = g.attributes.skinIndex, sw = g.attributes.skinWeight;
     const bones = tops.skeleton.bones, inv = tops.matrixWorld.clone().invert();
+    const hm = this.vrm.humanoid;
+    const armBones = new Set(["left", "right"].flatMap((P) => [hm.getRawBoneNode(P + "UpperArm"), hm.getRawBoneNode(P + "LowerArm")]));
     let moved = 0;
     for (let k = 0; k < pos.count; k++) {
       const p = tops.getVertexPosition(k, new V()).applyMatrix4(tops.matrixWorld);
@@ -292,7 +295,8 @@ export class SignAvatar {
       const out = p.clone().sub(b.p).dot(b.n);          // 몸 표면 바깥쪽 거리
       if (out < gap) continue;                          // 이미 붙어 있음
       // 몸에서 떨어진 거리를 줄이되 비율로 줄여서 겹친 옷(안쪽 셔츠·바깥 점퍼)의 순서는 유지
-      const target = b.p.clone().addScaledVector(b.n, gap + (out - gap) * 0.42).add(p.clone().sub(b.p).projectOnPlane(b.n));
+      const onArm = b.bones.some((bn, j) => armBones.has(bn) && b.w[j] > 0.5);   // 팔(소매)은 겹친 옷이 없어서 더 바짝
+      const target = b.p.clone().addScaledVector(b.n, gap + (out - gap) * (onArm ? 0.1 : 0.42)).add(p.clone().sub(b.p).projectOnPlane(b.n));
       const local = target.applyMatrix4(inv);
       pos.setXYZ(k, local.x, local.y, local.z);
       // 붙은 몸 부분과 같은 뼈를 따르게 (팔·몸을 움직여도 옷이 피부를 뚫지 않음)
@@ -487,6 +491,31 @@ export class SignAvatar {
       if (overEyes || longSide) { o.visible = false; hidden++; }
     }
     this._hairHidden = hidden;
+    // 남은 가닥 다듬기: 귀 중간 높이 아래로 내려온 부분은 그 높이에서 자르고, 옆으로 삐친 부분은 머리에 붙게
+    let face = null;
+    this.vrm.scene.traverse((o) => {
+      if (o.isMesh && /Face_00_SKIN/i.test([].concat(o.material).map((m) => m.name).join(" "))) {
+        o.geometry.computeBoundingBox(); const b = o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld);
+        face = face ? face.union(b) : b;
+      }
+    });
+    const cutY = eyeY - 0.012;
+    const R = face ? (face.max.x - face.min.x) / 2 + 0.014 : 0.09;          // 머리 반지름 + 머리카락 두께
+    const cx = headP.x, cz = face ? (face.min.z + face.max.z) / 2 - 0.01 : headP.z;
+    for (const o of strands) {
+      if (!o.visible) continue;
+      const pos = o.geometry.attributes.position, inv = o.matrixWorld.clone().invert();
+      let changed = false;
+      for (let k = 0; k < pos.count; k++) {
+        const p = o.getVertexPosition(k, new V()).applyMatrix4(o.matrixWorld);
+        let ch = false;
+        if (p.y < cutY) { p.y = cutY; ch = true; }
+        const dx = p.x - cx, dz = p.z - cz, r = Math.hypot(dx, dz);
+        if (p.y < headP.y + 0.12 && r > R) { p.x = cx + dx * R / r; p.z = cz + dz * R / r; ch = true; }
+        if (ch) { const l = p.applyMatrix4(inv); pos.setXYZ(k, l.x, l.y, l.z); changed = true; }
+      }
+      if (changed) { pos.needsUpdate = true; o.geometry.computeVertexNormals(); o.geometry.computeBoundingSphere(); }
+    }
   }
 
   _slimTorso(sx = 0.9, sz = 0.92) {
@@ -757,6 +786,9 @@ export class SignAvatar {
         const cur = em.getValue(name) || 0, tgt = e[name] || 0;
         em.setValue(name, cur + (tgt - cur) * 0.35);            // 부드럽게
       }
+      // 평소 표정: 살짝 웃는 밝은 얼굴 (놀람·화남 표정이 나오면 그만큼 줄임)
+      const other = Math.max(em.getValue("surprised") || 0, em.getValue("angry") || 0);
+      for (const [name, v] of Object.entries(this.baseSmile)) if (em.getExpression(name)) em.setValue(name, v * (1 - other));
     }
     const h = (fr && fr.head) || [0, 0, 0];
     const d = THREE.MathUtils.degToRad;
