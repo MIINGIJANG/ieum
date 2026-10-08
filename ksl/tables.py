@@ -26,6 +26,23 @@ class PageTables:
         return self._cache[key]
 
     def _load(self, doc, page):
+        """미리 만든 data/kosha/<문서>.layout.json 의 표 사용 (없으면 pdfplumber 로 직접)."""
+        import json
+        lay = self.dir / f"{doc}.layout.json"
+        if lay.exists():
+            pg = json.loads(lay.read_text(encoding="utf-8"))["pages"].get(str(page))
+            raw = pg["tables"] if pg else []
+        else:
+            raw = self._from_pdf(doc, page)
+        out = []
+        for t in raw:
+            rows = t["rows"]
+            text = " ".join(c for r in rows for c in r if c)
+            flat = _ws.sub("", "".join(c for r in rows for c in r if c))   # 행 순서로 이어붙인 글자
+            out.append({"rows": rows, "grams": _grams(text), "flat": flat, "bbox": t["bbox"]})
+        return out
+
+    def _from_pdf(self, doc, page):
         f = self.dir / f"{doc}.pdf"
         if not f.exists():
             return []
@@ -37,11 +54,8 @@ class PageTables:
                 out = []
                 for t in pdf.pages[page - 1].find_tables():
                     rows = [[None if c is None else c.replace("\n", " ").strip() for c in r] for r in t.extract()]
-                    if len(rows) < 2 or max(len(r) for r in rows) < 2:      # 머리말 상자(KOSHA GUIDE) 등 제외
-                        continue
-                    text = " ".join(c for r in rows for c in r if c)
-                    flat = _ws.sub("", "".join(c for r in rows for c in r if c))   # 행 순서로 이어붙인 글자
-                    out.append({"rows": rows, "grams": _grams(text), "flat": flat, "bbox": list(t.bbox)})
+                    if len(rows) >= 2 and max(len(r) for r in rows) >= 2:
+                        out.append({"rows": rows, "bbox": list(t.bbox)})
                 return out
         except Exception:
             return []

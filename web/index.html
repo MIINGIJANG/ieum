@@ -138,7 +138,8 @@
   .src li p { margin: 2px 0 0; }
   .src b { color: var(--ink); font-weight: 500; }
   .src .tbl { overflow-x: auto; margin: 6px 0 8px; }
-  .src img.pdf { display: block; width: 100%; height: auto; margin: 8px 0 4px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+  .src .pdf { overflow: hidden; margin: 8px 0 4px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+  .src .pdf img { display: block; max-width: none; height: auto; }
   .src table { border-collapse: collapse; width: 100%; font-size: 1rem; color: var(--ink); background: var(--surface); }
   .src th, .src td { border: 1px solid #9aa1a8; padding: 5px 8px; vertical-align: middle; line-height: 1.45; }
   .src th { background: #f1f2ef; font-weight: 500; text-align: center; }
@@ -308,12 +309,13 @@ const label = (g) => (g.startsWith("FS:") ? g.slice(3) : g).replace(/[_\-]?\d+#?
 
 // 출처: 원본 PDF의 해당 부분을 그대로 잘라 보여줌 (번호·들여쓰기·표 모양 유지). 글은 대체 텍스트로
 function sourceImg(s) {
-  const [x0, y0, x1, y1] = s.region;
-  const q = new URLSearchParams({ doc: s.doc, page: s.page, x0, y0, x1, y1 });
-  // 이미지를 못 만들면(서버에 PDF 라이브러리 없음 등) 같은 내용을 글·표로 대신 보여줌
-  return `<img class="pdf" src="${API}/source_image?${q}" alt="${esc(s.text)}" loading="lazy"
-           onerror="this.nextElementSibling.hidden = false; this.remove()"
-           style="aspect-ratio: ${(x1 - x0).toFixed(1)} / ${(y1 - y0).toFixed(1)}">`;
+  // 미리 만든 쪽 이미지(web/pages)에서 region 부분만 보이게 자름 (서버에 PDF 라이브러리 불필요)
+  const [x0, y0, x1, y1] = s.region, w = x1 - x0, pw = s.page_width || 595;
+  const pct = (v) => (v / w * 100).toFixed(3) + "%";
+  return `<div class="pdf" role="img" aria-label="${esc(s.text)}" style="aspect-ratio: ${w.toFixed(1)} / ${(y1 - y0).toFixed(1)}">
+    <img src="./pages/${encodeURIComponent(s.doc)}/${s.page}.png" alt="" loading="lazy"
+         style="width: ${pct(pw)}; margin-left: -${pct(x0)}; margin-top: -${pct(y0)}"
+         onerror="const d = this.parentNode; d.nextElementSibling.hidden = false; d.remove()"></div>`;
 }
 
 // 원문 PDF 표 → HTML 표. 병합된 칸(null)은 위 칸(rowspan) 또는 왼쪽 칸(colspan)으로 합침

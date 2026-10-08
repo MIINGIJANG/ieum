@@ -54,6 +54,8 @@ def merge_sources(hits, titles, order=None, tables=None, images=None):
             text_lines = [b["text"] for b in o["blocks"] if b["type"] == "text"]
             boxes = [b["bbox"] for b in o["blocks"] if b["type"] == "table"]
             o["region"] = images.region(o["doc"], o["page"], text_lines, boxes)
+            pg = images.page(o["doc"], o["page"])
+            o["page_width"] = pg["width"] if pg else None
         else:
             o["region"] = None
         res.append(o)

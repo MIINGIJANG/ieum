@@ -1,10 +1,10 @@
-"""출처를 원본 PDF 모양 그대로 보여주기: 출처 문장이 있는 쪽의 해당 부분만 잘라 이미지로.
+"""출처를 원본 PDF 모양 그대로 보여주기: 출처 문장이 있는 쪽에서 그 부분의 위치를 찾음.
 
-- region(): 출처 문장들의 PDF 위치(첫 문장 시작 ~ 마지막 문장 끝)를 pdfplumber 로 찾아 [x0, y0, x1, y1] (pt)
-- render(): pypdfium2 로 그 부분만 PNG 로 (서버 /source_image)
-글꼴·번호·들여쓰기·표가 원본과 같으므로 원문과 비교하기 쉬움.
+미리 만든 자료만 사용 (scripts/build_page_assets.py) → 서버 컴퓨터에 PDF 라이브러리가 없어도 됨
+- data/kosha/<문서>.layout.json : 쪽마다 단어 위치·표
+- web/pages/<문서>/<쪽>.png      : 쪽 이미지 (화면이 region 부분만 잘라서 표시)
 """
-import io
+import json
 import re
 from functools import lru_cache
 from pathlib import Path
@@ -12,84 +12,61 @@ from pathlib import Path
 _ws = re.compile(r"\s")
 
 
-def _pattern(chars):
-    return r"\s*".join(map(re.escape, chars))
-
-
 class PageImages:
-    def __init__(self, pdf_dir="data/kosha", scale=2.5):
-        self.dir = Path(pdf_dir)
-        self.scale = scale
+    def __init__(self, data_dir="data/kosha"):
+        self.dir = Path(data_dir)
 
-    def path(self, doc):
-        """문서 이름 → PDF 경로 (data/kosha 안의 실제 파일만 허용)."""
+    @lru_cache(maxsize=8)
+    def layout(self, doc):
         if not re.fullmatch(r"[\w.\-]+", doc or ""):
             return None
-        f = self.dir / f"{doc}.pdf"
-        return f if f.exists() else None
+        f = self.dir / f"{doc}.layout.json"
+        return json.loads(f.read_text(encoding="utf-8")) if f.exists() else None
+
+    def page(self, doc, page):
+        lay = self.layout(doc)
+        return lay["pages"].get(str(page)) if lay else None
 
     @lru_cache(maxsize=64)
-    def _plumber_page(self, doc, page):
-        import pdfplumber
-        f = self.path(doc)
-        if not f:
-            return None
-        pdf = pdfplumber.open(f)
-        return pdf.pages[page - 1] if 1 <= page <= len(pdf.pages) else None
-
-    def _find(self, pg, chars, after=0.0):
-        if len(chars) < 2:
-            return None
-        try:
-            hits = [m for m in pg.search(_pattern(chars), regex=True) if m["top"] >= after - 1]
-        except Exception:
-            return None
-        return hits[0] if hits else None
+    def _flat(self, doc, page):
+        """쪽의 글자를 공백 없이 이어붙인 문자열 + 글자마다 몇 번째 단어인지."""
+        pg = self.page(doc, page)
+        text, owner = [], []
+        for i, w in enumerate(pg["words"]):
+            for ch in _ws.sub("", w[0]):
+                text.append(ch)
+                owner.append(i)
+        return "".join(text), owner
 
     def region(self, doc, page, lines, boxes=()):
-        """boxes: 출처에 포함된 표의 bbox들 (표는 글 줄 검색 대신 표 테두리 전체를 포함)."""
-        try:
-            pg = self._plumber_page(doc, page)
-        except Exception:
+        """출처 문장들(+표 bbox)이 차지하는 영역 [x0, y0, x1, y1] (pt). 못 찾으면 None."""
+        pg = self.page(doc, page)
+        if not pg:
             return None
-        if pg is None:
-            return None
+        words = pg["words"]
+        text, owner = self._flat(doc, page)
         top = bottom = None
         for b in boxes:
             top = b[1] if top is None else min(top, b[1])
             bottom = b[3] if bottom is None else max(bottom, b[3])
         for ln in lines:
             core = _ws.sub("", ln)
-            a = self._find(pg, core[:14])
-            if not a:
+            if len(core) < 2:
                 continue
-            b = self._find(pg, core[-14:], after=a["top"]) or a
-            top = a["top"] if top is None else min(top, a["top"])
-            bottom = b["bottom"] if bottom is None else max(bottom, b["bottom"])
+            s = text.find(core[:14])
+            if s < 0:
+                continue
+            e = text.find(core[-14:], s)
+            e = (e + len(core[-14:]) - 1) if e >= 0 else s + min(len(core), 14) - 1
+            ws, we = words[owner[s]], words[owner[min(e, len(owner) - 1)]]
+            top = ws[2] if top is None else min(top, ws[2])
+            bottom = we[4] if bottom is None else max(bottom, we[4])
         if top is None:
             return None
-        # 가로: 그 높이 범위에 있는 글자·선의 좌우 끝 (표 테두리 포함)
-        objs = [w for w in pg.extract_words() if w["bottom"] >= top - 2 and w["top"] <= bottom + 2]
-        objs += [e for e in (pg.lines + pg.rects) if e["bottom"] >= top - 2 and e["top"] <= bottom + 2]
-        x0 = min((o["x0"] for o in objs), default=40)
-        x1 = max((o["x1"] for o in objs), default=pg.width - 40)
+        xs = [(w[1], w[3]) for w in words if w[4] >= top - 2 and w[2] <= bottom + 2]
+        xs += [(b[0], b[2]) for b in boxes]
+        x0 = min((a for a, _ in xs), default=40)
+        x1 = max((b for _, b in xs), default=pg["width"] - 40)
         pad = 6
         return [round(max(0, x0 - pad), 1), round(max(0, top - pad), 1),
-                round(min(pg.width, x1 + pad), 1), round(min(pg.height, bottom + pad), 1)]
-
-    @lru_cache(maxsize=16)
-    def _page_bitmap(self, doc, page):
-        import pypdfium2 as pdfium
-        pdf = pdfium.PdfDocument(str(self.path(doc)))
-        return pdf[page - 1].render(scale=self.scale).to_pil()
-
-    def render(self, doc, page, box):
-        if not self.path(doc):
-            return None
-        img = self._page_bitmap(doc, page)
-        s = self.scale
-        x0, y0, x1, y1 = box
-        crop = img.crop((int(x0 * s), int(y0 * s), int(x1 * s), int(y1 * s)))
-        buf = io.BytesIO()
-        crop.save(buf, format="PNG", optimize=True)
-        return buf.getvalue()
+                round(min(pg["width"], x1 + pad), 1), round(min(pg["height"], bottom + pad), 1)]
