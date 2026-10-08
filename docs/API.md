@@ -58,7 +58,7 @@ KSL_LEXICON=data/lexicon.csv KSL_MOTION=data/motions uvicorn api:app --host 0.0.
   - 화면 정면에서 보면 수어자의 오른손은 화면 왼쪽(x 음수)에 있음
   - Three.js 로 옮길 때: `y_three = -y`, 아바타 어깨너비로 곱하기
 - 점이 안 보인 프레임은 `null`
-- `segments[].has_motion = false` → 동작 데이터 없는 글로스 (기본 자세 유지). `FS:` 로 시작하면 지문자 대상 → 글로스 텍스트를 크게 띄워주기
+- `segments[].has_motion = false` → 동작 데이터 없는 글로스: 프레임 없이 건너뜀 (`start`/`end` = null). 화면에서는 회색 단어로만 표시
 - 글로스 사이에는 0.2초 보간 프레임이 들어가 있음 (segments 사이 빈 번호 구간)
 
 ## 3D 아바타 (web/avatar.js)

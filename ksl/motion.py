@@ -308,9 +308,10 @@ def neutral_frame():
     return {"body": body, "lh": None, "rh": None}
 
 
-def compose(glosses, mdict: MotionDict, fps=FPS, transition=0.2, missing_sec=0.6, speed=1.0):
+def compose(glosses, mdict: MotionDict, fps=FPS, transition=0.2, missing_sec=0.6, speed=1.0, skip_missing=True):
     """글로스 순서대로 동작 클립을 이어붙임. 클립 사이는 transition 초 동안 선형 보간.
 
+    skip_missing=True: 동작이 없는 글로스는 건너뜀 (프레임 없음, segment 의 start/end = None)
     반환: {"fps", "frames", "segments": [{"gloss","start","end","has_motion"}]}  (start/end 는 프레임 번호)
     """
     frames, segments = [], []
@@ -322,9 +323,12 @@ def compose(glosses, mdict: MotionDict, fps=FPS, transition=0.2, missing_sec=0.6
             n = max(2, round(len(src) * fps / clip.get("fps", fps) / speed))
             seg = _resample(src, n)
             has = True
+        elif skip_missing:
+            # 동작이 없는 글로스(지문자 FS: 포함): 재생에서 건너뜀 → 웹에서 회색 단어로만 표시
+            segments.append({"gloss": g, "start": None, "end": None, "has_motion": False})
+            continue
         else:
-            # 지문자(FS:)나 동작이 없는 글로스: 기본 자세 유지 → 웹/아바타에서 텍스트로 표시
-            seg = [neutral_frame()] * max(2, round(missing_sec * fps))
+            seg = [neutral_frame()] * max(2, round(missing_sec * fps))     # 기본 자세 유지
             has = False
         if frames:
             a, b = frames[-1], seg[0]
