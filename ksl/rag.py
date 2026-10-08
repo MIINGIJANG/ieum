@@ -201,7 +201,8 @@ class SafetyRAG:
         for rank, h in enumerate(hits):
             for s in h["text"].split("\n"):
                 s = s.strip()
-                if len(s) >= 20 and s not in seen:          # 제목·표 머리글 같은 짧은 줄 제외
+                code = len(re.findall(r"[A-Za-z0-9\-]", s)) / max(len(s.replace(" ", "")), 1)
+                if len(s) >= 20 and s not in seen and code < 0.2:   # 짧은 제목줄, 기호만 나열된 표 줄 제외
                     seen.add(s)
                     cand.append((s, rank))
         if not cand:

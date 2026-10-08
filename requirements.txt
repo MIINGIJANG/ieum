@@ -3,6 +3,7 @@ numpy
 scikit-learn
 sacrebleu>=2.4
 pypdf
+pdfplumber            # 출처에 원문 표 표시
 fastapi
 uvicorn
 httpx

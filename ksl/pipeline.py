@@ -27,10 +27,14 @@ def strip_marks(text):
     return "\n".join(_HEADNUM.sub("", _MARK.sub("", ln)).strip() for ln in text.split("\n") if ln.strip())
 
 
-def merge_sources(hits, titles):
-    """같은 문서·쪽은 하나로 합치고(겹치는 문장 제거) 번호 표시를 뗀 전체 문장으로."""
+def merge_sources(hits, titles, order=None, tables=None):
+    """같은 문서·쪽은 하나로 합치고(겹치는 문장 제거, 문서 순서대로) 번호 표시를 뗀 전체 문장으로."""
     out = {}
-    for h in hits:
+    rank = {}
+    for i, h in enumerate(hits):                      # 쪽 순서는 검색 점수 순, 쪽 안의 문장은 문서 순
+        rank.setdefault((h["doc"], h["page"]), i)
+    order = order or {}
+    for h in sorted(hits, key=lambda h: (rank[(h["doc"], h["page"])], order.get(h["text"], 0))):
         key = (h["doc"], h["page"])
         if key not in out:
             out[key] = {"doc": h["doc"], "title": titles.get(h["doc"], h["doc"]), "page": h["page"],
@@ -44,17 +48,24 @@ def merge_sources(hits, titles):
                 continue
             lines = [x for x in lines if not ln.startswith(x)] + [ln]   # 더 긴 문장으로 교체
         o["text"] = "\n".join(lines)
+        o["blocks"] = (tables.blocks(o["doc"], o["page"], lines) if tables
+                       else [{"type": "text", "text": ln} for ln in lines])   # 원문 표는 표로
         res.append(o)
     return res
 
 
 class SafetySignPipeline:
     def __init__(self, ckpt, index, lexicon=None, motion_dir=None, sentences=None, k=3, demo_threshold=0.45,
-                 titles="data/kosha/titles.json"):
+                 titles="data/kosha/titles.json", answers="data/kosha/answers.json"):
         self.tr = Translator(ckpt, lexicon)
         self.rag = SafetyRAG.load(index)
         self.motion = MotionDict(motion_dir) if motion_dir and Path(motion_dir).exists() else None
         self.k = k
+        # 안내 문장별 문서 근거 답변 (수어 문장은 짧은 안내, 화면 답변은 문서 내용)
+        self.answers = json.loads(Path(answers).read_text(encoding="utf-8")) if answers and Path(answers).exists() else {}
+        from .tables import PageTables
+        self.tables = PageTables(Path(titles).parent if titles else "data/kosha")
+        self._order = {c["text"]: i for i, c in enumerate(self.rag.chunks)}
         self.titles = json.loads(Path(titles).read_text(encoding="utf-8")) if titles and Path(titles).exists() else {}
         self.demo = []
         if sentences and Path(sentences).exists():
@@ -113,17 +124,30 @@ class SafetySignPipeline:
     def ask(self, question, beam=4):
         hits = self.rag.search(question, self.k)
         demo, score = self.best_demo(question)
-        if demo and score >= self.demo_threshold:
-            texts, mode = [demo["korean"]], "demo"           # 준비된 안내 문장으로 답변
+        kws = self.answers.get(demo["korean"], {}).get("keywords") if demo else None
+        on_topic = not kws or any(k in re.sub(r"\s", "", question) for k in kws)   # 핵심어가 있어야 준비된 문장으로 답함
+        if demo and score >= self.demo_threshold and on_topic:
+            # 수어: 조원이 확정한 안내 문장 / 화면 답변: 그 문장의 문서 근거 답변
+            texts, mode = [demo["korean"]], "demo"
+            a = self.answers.get(demo["korean"])
+            if a:
+                answer_text = a["answer"]
+                on_page = [h for h in self.rag.search(question, 60) if h["page"] in a["pages"]]
+                hits = (on_page or hits)[:self.k]
+            else:
+                found, _ = self.rag.answer(question, hits)
+                answer_text = " ".join(" ".join(strip_marks(t).split("\n")) for t in found)
         else:
             texts, mode = self.rag.answer(question, hits)
             texts = [" ".join(strip_marks(t).split("\n")) for t in texts]
+            answer_text = " ".join(texts)
         sents = [self.translate_one(p, beam) for t in texts for p in (split_sentences(t) or [t])]
         return {
             "question": question,
             "answer_mode": mode,                       # demo | llm | extractive
-            "answer_text": " ".join(texts),
+            "answer_text": answer_text,                # 화면에 보여줄 답변 (문서 근거)
+            "sign_text": " ".join(texts),              # 아바타가 수어로 보여주는 문장
             "sentences": sents,                        # 문장별 글로스 + 타임라인
             "motion": self.motion_for([g for s in sents for g in s["gloss"]]),   # 전체 문장 이어붙인 동작
-            "sources": merge_sources(hits, self.titles),   # 출처: 문서 제목·쪽·전체 문장
+            "sources": merge_sources(hits, self.titles, self._order, self.tables),   # 출처: 문서 제목·쪽·전체 문장
         }

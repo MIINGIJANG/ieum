@@ -26,7 +26,8 @@ KSL_LEXICON=data/lexicon.csv KSL_MOTION=data/motions uvicorn api:app --host 0.0.
 {
   "question": "먼지 많은 작업할 때 마스크",
   "answer_mode": "demo",                // demo(준비된 안내 문장) | llm | extractive(문서 문장 그대로)
-  "answer_text": "분진이 많이 발생하는 작업에서는 방진마스크를 착용합니다.",
+  "answer_text": "...",                 // 화면 답변: 문서 근거 (demo 이면 data/kosha/answers.json 의 답변)
+  "sign_text": "분진이 많이 발생하는 작업에서는 방진마스크를 착용합니다.",  // 아바타가 수어로 보여주는 문장
   "sentences": [{
     "korean": "분진이 많이 발생하는 작업에서는 방진마스크를 착용합니다.",
     "gloss": ["있다", "작업", "FS:방진마스크", "사용"],
