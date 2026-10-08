@@ -138,10 +138,11 @@
   .info > * { min-width: 0; }
   .src ul { list-style: none; margin: 0; padding: 0; font-size: 1rem; color: var(--muted); }
   .src li { margin-bottom: 12px; }
+  .src li:last-child { margin-bottom: 0; }   /* 박스 아래 여백 = 좌우 여백 */
   .src li p { margin: 2px 0 0; }
   .src b { color: var(--ink); font-weight: 500; }
   .src .tbl { overflow-x: auto; margin: 6px 0 8px; }
-  .src .pdf { overflow: hidden; margin: 8px 0 4px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+  .src .pdf { overflow: hidden; margin: 8px 0 0; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
   .src .pdf img { display: block; max-width: none; height: auto; }
   .src table { border-collapse: collapse; width: 100%; font-size: 1rem; color: var(--ink); background: var(--surface); }
   .src th, .src td { border: 1px solid #9aa1a8; padding: 5px 8px; vertical-align: middle; line-height: 1.45; }
@@ -406,7 +407,7 @@ function render() {
   if (data.mode === "ask") {
     // 출처: 쪽 번호 순
     const src = [...(data.sources || [])].sort((x, y) => x.page - y.page).map(s =>
-      `<li><b>${esc(s.title || s.doc)} ${esc(s.page)}쪽</b>${s.region ? sourceImg(s) : ""}
+      `<li><b>${esc(s.title || s.doc)} ${esc(s.page)}페이지</b>${s.region ? sourceImg(s) : ""}
         <div class="srctext"${s.region ? " hidden" : ""}>${(s.blocks || s.text.split("\n").map(t => ({type: "text", text: t})))
         .map(b => b.type === "table" ? tableHTML(b.rows) : `<p>${esc(b.text)}</p>`).join("")}</div></li>`).join("");
     a.innerHTML = `

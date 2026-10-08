@@ -44,7 +44,7 @@ export class SignAvatar {
     this.driven = new Set();
     this.smooth = 0.55;
     this.baseSmile = { relaxed: 0.0 };   // 평소 표정: 입 다문 기본 얼굴 (웃는 표정은 이 모델에서 입이 벌어짐)
-    this.margin = 0.07;          // 손목이 몸 표면보다 최소 이만큼(m) 앞에 오도록          // 프레임 간 흔들림 줄이기 (0=그대로, 1=안 움직임)
+    this.margin = 0.035;         // 손목이 몸 표면보다 최소 이만큼(m) 앞에 오도록          // 프레임 간 흔들림 줄이기 (0=그대로, 1=안 움직임)
     this.last = performance.now();
     this._resize();
     new ResizeObserver(() => this._resize()).observe(canvas);
@@ -71,6 +71,7 @@ export class SignAvatar {
     this._bareHands();
     this._workwear();
     this._tidyHair();
+    this._measureBodyFront(this._hipsY, this.neckY);   // 옷을 몸에 붙인 뒤 몸 앞면 다시 측정 (손이 너무 앞으로 나가지 않게)
     this._addHandColliders();
     this._styleMaterials();
     this._frameCamera();
@@ -114,7 +115,14 @@ export class SignAvatar {
     }
     this.headY = pos("head").y;
     this.neckY = pos("neck").y;
+    this.neckPos = pos("neck");
+    this._hipsY = pos("hips").y;
     this.shoulderW = pos("leftUpperArm").distanceTo(pos("rightUpperArm"));
+    // 얼굴: 코 높이(목 위로 어깨너비 몇 배)와 머리 중심·반지름 → 얼굴 근처 수어 위치 맞추기, 손이 얼굴을 뚫지 않게
+    const eye = pos("leftEye") || pos("head").add(new THREE.Vector3(0, 0.05, 0));
+    this.noseAbove = (eye.y - 0.025 - this.neckY) / Math.max(this.shoulderW, 1e-6);
+    this.headCenter = new THREE.Vector3(pos("head").x, eye.y - 0.01, pos("head").z);
+    this.headR = this.shoulderW * 0.36;
     this._measureBodyFront(pos("hips").y, pos("neck").y);
   }
 
@@ -772,9 +780,19 @@ export class SignAvatar {
         // 손목 '위치'를 어깨 기준으로 옮긴 뒤(팔 길이 비율로 축척) IK 로 팔꿈치 계산
         // → 아바타와 수어자의 체형(팔 길이·몸 두께)이 달라도 손이 몸 앞, 같은 높이에 옴
         const sh = V(b[s.sho]), el = V(b[s.elb]), wr = V(b[s.wri]);
-        const dataLen = el.distanceTo(sh) + wr.distanceTo(el);
-        const k = (R.a + R.b) / Math.max(dataLen, 1e-6) * 0.97;
-        const W = R.sho.clone().add(wr.clone().sub(sh).multiplyScalar(k));
+        // 손목 목표 = 목 위치 + (데이터의 목→손목) × 아바타 어깨너비. 몸 기준으로 옮겨서
+        // 팔이 긴 캐릭터 체형이어도 손이 수어자와 같은 곳(턱·코·가슴 등)에 옴 (팔 길이 비율로 늘리면 손이 아래·앞으로 감)
+        const off = wr.clone();
+        // 목보다 위(얼굴 높이)는 코 높이 비율로 늘림: 캐릭터 머리가 커도 코·턱 같은 같은 곳을 짚게
+        const dn = b[0] ? -b[0][1] : 0;
+        if (off.y > 0 && dn > 0.1) off.y *= Math.min(2.2, Math.max(0.8, this.noseAbove / dn));
+        const W = this.neckPos.clone().add(off.multiplyScalar(this.shoulderW));
+        // 얼굴 안으로 들어가면 얼굴 앞쪽으로 밀어냄
+        const fromHead = W.clone().sub(this.headCenter);
+        if (fromHead.length() < this.headR) {
+          fromHead.z = Math.max(fromHead.z, 0.02);
+          W.copy(this.headCenter).add(fromHead.normalize().multiplyScalar(this.headR));
+        }
         if (Math.abs(W.x) < this.torsoHalf) {
           const fz = this.frontZ(W.y);
           if (isFinite(fz) && W.z < fz + this.margin) W.z = fz + this.margin;   // 몸 안으로 파묻히지 않게
