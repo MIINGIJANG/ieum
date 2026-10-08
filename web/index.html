@@ -387,10 +387,8 @@ function render() {
     });
   });
 
-  // 아바타 영역: 수어로 보여주는 문장 + 동작 준비 상태
-  const signText = data.mode === "ask" ? data.sign_text : "";   // 문장 번역이면 답변 칸의 문장과 같으므로 생략
+  // 아바타 영역: 수어 표현이 확인 안 된 단어 안내
   $("signinfo").innerHTML = `
-    ${signText ? `<p class="sign">수어 안내 · ${esc(signText)}</p>` : ""}
     ${unverified.length ? `<p class="warn">${unverified.map(esc).join(", ")}: 아직 수어 표현이 확인되지 않아 지문자로 표시합니다.</p>` : ""}
     ${partial}`;
 
