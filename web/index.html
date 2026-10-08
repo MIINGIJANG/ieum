@@ -423,8 +423,7 @@ function renderNone() {
   $("glosses").innerHTML = ""; 
   $("controls").hidden = true; $("sources").hidden = true;
   $("answer").innerHTML = `<h2>답변</h2>
-    <p class="text">문서에서 관련 내용을 찾지 못했습니다.</p>
-    <p class="hint">보호구 착용·관리처럼 산업안전 문서에 있는 내용을 질문하거나, 안전 안내 문장을 입력해 주세요.</p>`;
+    <p class="text">개인보호구의 사용 및 관리에 관한 기술지원규정에서 관련 내용을 찾지 못했습니다.</p>`;
   cancelAnimationFrame(raf);
   if (window.avatar) window.avatar.setFrame(null);
 }
@@ -483,7 +482,7 @@ function render() {
         .map(b => b.type === "table" ? tableHTML(b.rows) : `<p>${esc(b.text)}</p>`).join("")}</div></li>`).join("");
     a.innerHTML = `
       <h2>답변</h2>
-      <p class="text">${esc(data.answer_text || "문서에서 관련 내용을 찾지 못했습니다.")}</p>
+      <p class="text">${esc(data.answer_text || "개인보호구의 사용 및 관리에 관한 기술지원규정에서 관련 내용을 찾지 못했습니다.")}</p>
 `;
     $("sources").innerHTML = src ? `<h2>출처</h2><ul>${src}</ul>` : "";
     $("sources").hidden = !src;
