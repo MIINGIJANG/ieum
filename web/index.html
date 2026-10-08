@@ -80,7 +80,7 @@
   }
   form.query button svg { width: 22px; height: 22px; }
   form.query button:disabled { opacity: .5; cursor: wait; }
-  /* 예시 질문: 모든 화면에서 한 줄에 1개씩 3줄, 버튼 폭은 질문 길이에 맞춤 */
+  /* 예시 질문: 모든 화면에서 한 줄에 1개씩 2줄, 버튼 폭은 질문 길이에 맞춤 */
   .examples { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; }
   .examples button {
     max-width: 100%; text-align: center;
@@ -307,7 +307,7 @@ let POOL = [
   "보호구에 이상이 있는지 어떻게 확인해요?",
   "정화통은 언제 교체해요?",
 ].map(q => ({ question: q, topic: null }));
-const SHOW = 3;   // 한 줄에 1개씩 3줄
+const SHOW = 2;   // 한 줄에 1개씩 2줄
 const asked = { texts: [], topics: new Set() };
 const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const bigrams = (t) => { const s = t.replace(/[\s?.!,~]/g, ""), g = new Set(); for (let i = 0; i < s.length - 1; i++) g.add(s.slice(i, i + 2)); return g; };
