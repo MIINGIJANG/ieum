@@ -14,13 +14,18 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import JSONResponse
+
+
+class UTF8JSON(JSONResponse):
+    media_type = "application/json; charset=utf-8"   # 브라우저(Safari 등)에서 한글이 깨지지 않게
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from ksl.pipeline import SafetySignPipeline
 
 ROOT = Path(__file__).resolve().parent
-app = FastAPI(title="이음 — 산업안전 수어 안내 API", version="0.3.0")
+app = FastAPI(title="이음 — 산업안전 수어 안내 API", version="0.3.0", default_response_class=UTF8JSON)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.add_middleware(GZipMiddleware, minimum_size=1000)   # 아바타(6MB→2.5MB)·동작 JSON 압축 → 휴대폰 로딩 빠르게
 
@@ -111,7 +116,7 @@ def llm_check():
     from ksl.rag import LLM_STATUS
     if not os.environ.get("ANTHROPIC_API_KEY"):
         return {"연결": "안 됨", "이유": "ANTHROPIC_API_KEY 가 설정되지 않음 (Space Settings → Variables and secrets)"}
-    r = pipe.ask("정화통 관리 방법을 알려줘")
+    r = pipe.ask("정화통은 언제 교체해요?")
     ok = r.get("answer_mode") == "llm"
     return {"연결": "됨" if ok else "안 됨", "답변 방식": r.get("answer_mode"),
             "Claude 호출 결과": LLM_STATUS["last"], "답변": r.get("answer_text")}

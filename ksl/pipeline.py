@@ -276,6 +276,8 @@ class SafetySignPipeline:
             if top < self.min_score:                       # 근거 약함 → 답하지 않음
                 return self._abstain(question, top)
             texts, mode = self.rag.answer(question, hits)
+            if mode == "llm" and any("찾을 수 없" in t for t in texts):   # Claude 도 문서에서 근거를 못 찾음 → 답하지 않음
+                return self._abstain(question, top)
             texts = self._clean_answer([" ".join(strip_marks(t).split("\n")) for t in texts], hits)
             if not texts:
                 return self._abstain(question, top)
