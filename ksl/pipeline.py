@@ -160,8 +160,7 @@ class SignWords:
             if len(same) > 1 and same[0][2] == start:
                 shown = sentence[a:nxt]                # 첫 단어는 어절 앞(숫자 등)부터
             shown = shown.strip("“”\"'[]").rstrip(".!?。")
-            if g not in seen and shown:
-                seen.add(g)
+            if shown:                                    # 같은 단어가 다시 나와도 답변 순서 그대로 (수어도 반복함)
                 out.append((g, shown))
         return out
 
@@ -380,10 +379,9 @@ class SafetySignPipeline:
                 return self._abstain(question, top)
             answer_text = " ".join(texts)
         # 수어: 답변 문장에 실제로 있는 말만 수어 단어로 (data/sign_words.csv). 번역 모델은 아직 엉뚱한 단어를 만들어서 답변에는 쓰지 않음
-        sents, seen = [], set()
+        sents = []
         for p in (split_sentences(answer_text) or [answer_text]):
-            sg = self.sign_sentence(p, skip=seen)                    # 앞 문장에 나온 단어는 다시 넣지 않음
-            seen.update(sg["gloss"])
+            sg = self.sign_sentence(p)                               # 앞 문장에 나온 단어도 답변에 있으면 그대로
             if sg["gloss"]:
                 sents.append(sg)
         return {
