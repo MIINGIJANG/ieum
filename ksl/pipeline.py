@@ -78,25 +78,36 @@ class SignWords:
                 self.rules.append((word.lstrip("="), exact, gloss.strip()))
 
     def __call__(self, sentence):
-        out = []
+        return [g for g, _ in self.with_words(sentence)]
+
+    def with_words(self, sentence):
+        """[(글로스, 답변에 쓰인 모양)] — 화면의 단어 블록은 답변과 같은 모양으로 보여줌
+        (예: 이상하다1 → '이상이', 깨끗하다 → '깨끗하게'). 수어 동작은 글로스 그대로."""
+        out, seen = [], set()
         for ej in re.split(r"[\s,·()（）:]+", sentence):
-            core = re.sub(r"^[\d.,~%℃]+", "", ej.strip("“”\"'[]"))      # '4시간' → '시간'
+            disp = ej.strip("“”\"'[]").rstrip(".!?。")                       # 화면에 보일 모양 ('6개월마다')
+            core = re.sub(r"^[\d.,~%℃]+", "", disp)                       # 단어 찾기용 ('4시간' → '시간')
+            pre = disp[:len(disp) - len(core)]
             if not core:
                 continue
-            found, words = [], []
+            found = []                                           # (글로스, 말, 어절 안 위치)
             for word, exact, gloss in self.rules:
                 if (core == word or ej == word) if exact else core.startswith(word):
-                    found.append(gloss); words.append(word)
+                    found.append((gloss, word, 0))
                     break
             # 붙여 쓴 명사(개인보호구, 정전기안전화 등): 3글자 이상 단어는 어절 안 어디에 있어도 찾음
             # (이미 찾은 더 긴 단어의 일부면 제외: '방진마스크' 안의 '마스크')
             for word, exact, gloss in self.rules:
-                if (not exact and len(word) >= 3 and word in core[1:] and gloss not in found
-                        and not any(word in w for w in words)):
-                    found.append(gloss); words.append(word)
-            for g in found:
-                if g not in out:                                 # 한 문장 안에서 같은 단어는 한 번만
-                    out.append(g)
+                if (not exact and len(word) >= 3 and word in core[1:] and gloss not in [f[0] for f in found]
+                        and not any(word in f[1] for f in found)):
+                    found.append((gloss, word, core.index(word, 1)))
+            found.sort(key=lambda f: f[2])
+            for k, (g, word, pos) in enumerate(found):
+                # 어절에 단어가 하나면 어절 그대로('이상이'), 여러 개면 앞 단어는 그 말만, 마지막은 뒤 조사까지('개인'+'보호구는')
+                shown = disp if len(found) == 1 else (core[pos:] if k == len(found) - 1 else (pre if pos == 0 else "") + word)
+                if g not in seen:                                # 한 문장 안에서 같은 단어는 한 번만
+                    seen.add(g)
+                    out.append((g, shown))
         return out
 
 
@@ -156,14 +167,15 @@ class SafetySignPipeline:
 
     def sign_sentence(self, text, skip=()):
         """답변 문장 하나 → 그 문장에서 뽑은 수어 단어 + 재생 시간."""
-        glosses = [g for g in self.sign_words(text) if g not in skip]
+        pairs = [(g, w) for g, w in self.sign_words.with_words(text) if g not in skip]
+        glosses = [g for g, _ in pairs]
         tl, t = [], 0.0
         for g in glosses:
             clip = self.motion.get(g) if self.motion else None
             d = round(len(clip["frames"]) / clip.get("fps", 30), 3) if clip else 0.0
             tl.append({"gloss": g, "start": round(t, 3), "duration": d})
             t += d
-        return {"korean": text, "gloss": glosses, "timeline": tl, "lexicon_terms": [], "dropped_terms": [],
+        return {"korean": text, "gloss": glosses, "words": [w for _, w in pairs], "timeline": tl, "lexicon_terms": [], "dropped_terms": [],
                 "unverified_terms": [], "has_unk": False, "method": "extract",   # 답변 문장에서 단어 추출
                 "complete": all(self.motion and self.motion.get(g) for g in glosses)}
 

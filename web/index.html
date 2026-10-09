@@ -225,28 +225,21 @@
   "@pixiv/three-vrm": "./vendor/three-vrm.module.min.js"
 } }
 </script>
-<script>
-// 모듈 파일을 못 불러오면(서버가 옛날 버전이거나 파일 누락) 그때만 안내
-setTimeout(() => {
-  if (!document.getElementById("stage").classList.contains("three")) {
-    const el = document.getElementById("loading");
-    el.textContent = "아바타를 불러오지 못했습니다. 서버를 다시 켠 뒤 새로고침하세요.";
-    el.classList.add("on");
-  }
-}, 20000);
-</script>
 <script type="module">
 import { SignAvatar } from "./avatar.js";
-try {
-  window.avatar = await new SignAvatar(document.getElementById("av")).load("./models/avatar.vrm");
-  document.getElementById("stage").classList.add("three");
-  window.dispatchEvent(new Event("avatar-ready"));
-} catch (e) {
-  window.dispatchEvent(new Event("avatar-failed"));
-  console.warn("3D 아바타를 불러오지 못했습니다:", e);
-  const el = document.getElementById("loading");
-  el.textContent = "아바타를 불러오지 못했습니다. 서버를 다시 켠 뒤 새로고침하세요.";
-  el.classList.add("on");
+// 아바타 불러오기: 실패하면(느린 망 등) 조용히 다시 시도. 안내 문구는 띄우지 않음
+const av = new SignAvatar(document.getElementById("av"));
+for (let i = 0; i < 4; i++) {
+  try {
+    window.avatar = await av.load("./models/avatar.vrm");
+    document.getElementById("stage").classList.add("three");
+    window.dispatchEvent(new Event("avatar-ready"));
+    break;
+  } catch (e) {
+    console.warn("3D 아바타 불러오기 재시도", i + 1, e);
+    if (i === 3) window.dispatchEvent(new Event("avatar-failed"));
+    else await new Promise(r => setTimeout(r, 1500 * (i + 1)));
+  }
 }
 </script>
 <script>
@@ -288,8 +281,7 @@ const warmServer = fetch(`${API}/warmup`, { method: "POST" });
 const examplesReady = fetch(`${API}/examples`).then(r => r.ok ? r.json() : []);
 const bootAll = Promise.all([
   boot.add("avatar", avatarReady),
-  boot.add("pages", preloadPages),
-  boot.add("server", warmServer),
+  boot.add("server", Promise.race([warmServer, new Promise(r => setTimeout(r, 15000))])),   // 서버 준비는 15초까지만 기다림
   boot.add("examples", examplesReady),
   boot.add("fonts", Promise.race([document.fonts ? document.fonts.ready : null, new Promise(r => setTimeout(r, 3000))])),  // 글꼴은 3초까지만 기다림
 ]);
@@ -482,9 +474,9 @@ function render() {
   const ol = $("glosses"); ol.innerHTML = "";
   let k = 0;
   sents.forEach((s) => {
-    s.gloss.forEach(g => {
+    s.gloss.forEach((g, i) => {
       const li = document.createElement("li");
-      li.textContent = label(g);
+      li.textContent = (s.words && s.words[i]) || label(g);   // 답변에 쓰인 모양 그대로 (예: '이상이', '깨끗하게')
       const seg = motion ? motion.segments[k] : null;
       const it = { gloss: g, li, seg };
       if (!(seg && seg.has_motion)) { li.className = "nomo"; li.title = "아직 아바타 동작이 없는 단어"; }

@@ -394,12 +394,12 @@ def neutral_frame():
 
 
 def compose(glosses, mdict: MotionDict, fps=FPS, transition=0.25, missing_sec=0.6, speed=0.8, skip_missing=True,
-            lead=0.35):
+            lead=0.45, lead_out=0.8):
     """글로스 순서대로 동작 클립을 이어붙임.
 
     - speed: 재생 속도 (조원 자료는 문장 수어에서 단어만 잘라 0.4~0.8초로 짧음 → 0.8배로 조금 천천히)
     - 클립 사이는 transition 초 동안 부드럽게(천천히 출발·멈춤) 보간
-    - 처음·끝: 손을 내린 기본 자세에서 lead 초 동안 올라오고, 끝나면 다시 내려감 (갑자기 튀지 않게)
+    - 처음·끝: 손을 내린 기본 자세에서 lead 초 동안 올라오고, 끝나면 lead_out 초 동안 천천히 내려감 (갑자기 튀지 않게)
     - 관절 좌표 떨림은 앞뒤 프레임 평균으로 줄임
     skip_missing=True: 동작이 없는 글로스는 건너뜀 (프레임 없음, segment 의 start/end = None)
     반환: {"fps", "frames", "segments": [{"gloss","start","end","has_motion"}]}  (start/end 는 프레임 번호)
@@ -407,6 +407,7 @@ def compose(glosses, mdict: MotionDict, fps=FPS, transition=0.25, missing_sec=0.
     frames, segments = [], []
     n_tr = max(1, round(transition * fps))
     n_lead = max(1, round(lead * fps))
+    n_out = max(1, round(lead_out * fps))
 
     def toward_rest(f, t):      # t=0 이면 동작 그대로, 1 이면 기본 자세. 아바타가 관절 회전을 기본 자세 쪽으로 섞음
         out = dict(f)
@@ -443,5 +444,6 @@ def compose(glosses, mdict: MotionDict, fps=FPS, transition=0.25, missing_sec=0.
         segments.append({"gloss": g, "start": start, "end": len(frames) - 1, "has_motion": has})
     if frames:
         last = frames[-1]
-        frames += [toward_rest(last, _ease((i + 1) / n_lead)) for i in range(n_lead)]           # 마지막 동작 → 기본 자세
+        frames += [last] * round(0.15 * fps)                                                     # 마지막 손 모양 잠깐 유지
+        frames += [toward_rest(last, _ease((i + 1) / n_out)) for i in range(n_out)]             # 마지막 동작 → 기본 자세 (천천히)
     return {"fps": fps, "frames": frames, "segments": segments}

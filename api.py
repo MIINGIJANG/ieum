@@ -174,6 +174,12 @@ def warmup():
     return {"ok": True, "ms": round((time.time() - t0) * 1000)}
 
 
+@app.on_event("startup")
+def _warm_on_start():
+    """서버가 켜질 때(메인 스레드) 미리 준비 → 첫 방문자의 로딩 화면이 서버를 기다리지 않음."""
+    warmup()
+
+
 @app.get("/pages")
 def pages():
     """출처용 쪽 이미지 목록 (화면이 미리 받아 두어 출처가 바로 뜨게)."""
