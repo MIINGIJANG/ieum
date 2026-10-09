@@ -1,12 +1,12 @@
 """KOSHA 문서로 RAG 인덱스 생성.
 
-python scripts/build_index.py --docs data/kosha/A-G-12-2026.pdf --out checkpoints/kosha_index.pkl
+python scripts/data/build_index.py --docs data/kosha/A-G-12-2026.pdf --out checkpoints/kosha_index.pkl
 """
 import argparse
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from ksl.rag import SafetyRAG  # noqa: E402
 
 ap = argparse.ArgumentParser()

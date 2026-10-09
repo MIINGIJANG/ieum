@@ -3,7 +3,7 @@
 서버 실행 (기본 주소 `http://localhost:8000`)
 ```bash
 KSL_CKPT=checkpoints/run1/best.pt KSL_INDEX=checkpoints/kosha_index.pkl \
-KSL_LEXICON=data/lexicon.csv KSL_MOTION=data/motions uvicorn api:app --host 0.0.0.0 --port 8000
+KSL_LEXICON=data/sign/lexicon.csv KSL_MOTION=data/sign/motions uvicorn api:app --host 0.0.0.0 --port 8000
 ```
 - 서버 없이 화면 개발: `docs/mock/ask_response.json` 을 `/ask` 응답 대신 불러와 쓰면 됨 (실제 응답 그대로 저장한 파일)
 - CORS 전체 허용 → React 개발 서버(`localhost:5173` 등)에서 바로 호출 가능

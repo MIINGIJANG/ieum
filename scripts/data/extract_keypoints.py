@@ -1,7 +1,7 @@
 """영상(한국수어사전 등) → MediaPipe 관절 좌표 → 동작사전에 저장.
 
-python scripts/extract_keypoints.py --video 보안경.mp4 --gloss 보안경 --out data/motions
-python scripts/extract_keypoints.py --video_dir 사전영상/ --out data/motions     # 파일명 = 글로스
+python scripts/data/extract_keypoints.py --video 보안경.mp4 --gloss 보안경 --out data/sign/motions
+python scripts/data/extract_keypoints.py --video_dir 사전영상/ --out data/sign/motions     # 파일명 = 글로스
 
 - 처음 실행 때 MediaPipe 모델 파일 2개를 models/ 에 자동으로 받음 (인터넷 필요)
 - 앞뒤 손 내린 구간은 자동으로 잘라냄 (trim_idle)
@@ -12,14 +12,14 @@ import sys
 import urllib.request
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from ksl.motion import MotionDict, mediapipe_frame, normalize, trim_idle  # noqa: E402
 
 MODELS = {
     "hand": "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task",
     "pose": "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task",
 }
-MODEL_DIR = Path(__file__).resolve().parents[1] / "models"
+MODEL_DIR = Path(__file__).resolve().parents[2] / "models"
 
 
 def ensure_models():
@@ -75,7 +75,7 @@ def main():
     ap.add_argument("--video")
     ap.add_argument("--gloss", help="--video 와 함께 사용. 생략하면 파일명")
     ap.add_argument("--video_dir", help="폴더 안 영상 전부, 파일명이 글로스")
-    ap.add_argument("--out", default="data/motions")
+    ap.add_argument("--out", default="data/sign/motions")
     a = ap.parse_args()
     vids = [(Path(a.video), a.gloss or Path(a.video).stem)] if a.video else \
            [(p, p.stem) for p in sorted(Path(a.video_dir).iterdir())

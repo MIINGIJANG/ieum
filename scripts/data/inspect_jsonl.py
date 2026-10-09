@@ -1,6 +1,6 @@
 """팀 전처리 JSONL 구조 확인 → ksl/config.py 의 FIELDS 를 맞추는 용도.
 
-python scripts/inspect_jsonl.py data/processed/ksl_safety.jsonl
+python scripts/data/inspect_jsonl.py data/processed/ksl_safety.jsonl
 """
 import json
 import sys

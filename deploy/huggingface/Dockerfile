@@ -1,4 +1,4 @@
-# Hugging Face Spaces (Docker) 용. scripts/make_space.py 가 이 파일을 배포 폴더로 복사함.
+# Hugging Face Spaces (Docker) 용. scripts/deploy/make_space.py 가 이 파일을 배포 폴더로 복사함.
 FROM python:3.11-slim
 RUN useradd -m -u 1000 user
 WORKDIR /app

@@ -1,6 +1,6 @@
 """출처를 원본 PDF 모양 그대로 보여주기: 출처 문장이 있는 쪽에서 그 부분의 위치를 찾음.
 
-미리 만든 자료만 사용 (scripts/build_page_assets.py) → 서버 컴퓨터에 PDF 라이브러리가 없어도 됨
+미리 만든 자료만 사용 (scripts/data/build_page_assets.py) → 서버 컴퓨터에 PDF 라이브러리가 없어도 됨
 - data/kosha/<문서>.layout.json : 쪽마다 단어 위치·표
 - web/pages/<문서>/<쪽>.png      : 쪽 이미지 (화면이 region 부분만 잘라서 표시)
 """

@@ -1,5 +1,5 @@
 """아바타(VRM) 용량 줄이기: 텍스처를 화면에 필요한 크기로 줄이고, 화면에서 숨기는 부분(머리카락·바지·썸네일)은 아주 작게.
-  python scripts/shrink_vrm.py 원본.vrm web/models/avatar.vrm
+  python scripts/deploy/shrink_vrm.py 원본.vrm web/models/avatar.vrm
 휴대폰 첫 로딩이 이 파일 내려받기에 가장 오래 걸림 (13MB → 약 4MB)
 """
 import io

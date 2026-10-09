@@ -1,6 +1,6 @@
 """RAG 검색 성능: Recall@1/3/5 (목표: Recall@3 ≥ 0.90).
 
-python scripts/eval_retrieval.py --index checkpoints/kosha_index.pkl --questions data/rag_questions.csv
+python scripts/eval/eval_retrieval.py --index checkpoints/kosha_index.pkl --questions data/eval/eval_questions.csv
 질문 CSV 열: question, gold_page, gold_keyword  (gold_keyword 는 '|' 로 여러 개 AND 조건)
 """
 import argparse
@@ -8,7 +8,7 @@ import csv
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from ksl.rag import SafetyRAG, is_hit, load_questions  # noqa: E402
 
 ap = argparse.ArgumentParser()

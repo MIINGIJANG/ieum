@@ -1,6 +1,6 @@
 """한국어 → 수어 글로스 Transformer 학습.
 
-python scripts/train.py --data data/processed/ksl_safety.jsonl --out checkpoints/run1
+python scripts/model/train.py --data data/processed/ksl_safety.jsonl --out checkpoints/run1
 """
 import argparse
 import json
@@ -14,7 +14,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from ksl.config import TrainConfig  # noqa: E402
 from ksl.data import gloss_durations, load_jsonl, save_json, split_records  # noqa: E402
 from ksl.metrics import all_metrics  # noqa: E402

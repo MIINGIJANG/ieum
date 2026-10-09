@@ -15,7 +15,7 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install -U huggingface_hub
-      - run: python scripts/make_space.py --no-ckpt
+      - run: python scripts/deploy/make_space.py --no-ckpt
       - name: Space 에 올리기
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -27,7 +27,9 @@ jobs:
             echo "::error::HF_TOKEN 이 올바르지 않습니다(만료·오타). Hugging Face 에서 Write 토큰을 새로 만들어 다시 넣으세요. $(tail -1 who.txt)"; exit 1
           fi
           echo "Hugging Face 계정: $(head -1 who.txt)"
+          # 코드·데이터 폴더는 Space 에서 지운 뒤 새로 올림 (폴더 구조를 바꿔도 예전 파일이 남지 않게, 번역 모델 checkpoints/ 는 유지)
           if ! hf upload MIINGI/ieum dist/space . --repo-type space \
+               --delete "data/*" --delete "ksl/*" --delete "web/*" --delete "scripts/*" \
                --commit-message "GitHub ${GITHUB_SHA::7} $(git log -1 --format=%s | head -c 80)" > up.txt 2>&1; then
             cat up.txt
             echo "::error::업로드 실패 (토큰이 Read 권한이거나 MIINGI/ieum 쓰기 권한이 없음): $(grep -m1 -iE 'error|denied|forbidden|401|403' up.txt | head -c 300)"; exit 1

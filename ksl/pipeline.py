@@ -66,7 +66,7 @@ def merge_sources(hits, titles, order=None, tables=None, images=None):
 class SignWords:
     """답변 문장 → 수어로 표현할 단어(글로스) 목록. 문장에 실제로 있는 말만 뽑으므로 없는 내용이 생기지 않음."""
 
-    def __init__(self, path="data/sign_words.csv"):
+    def __init__(self, path="data/sign/sign_words.csv"):
         self.rules = []                     # (말, 정확히일치?, 글로스)
         p = Path(path)
         if p.exists():
@@ -202,7 +202,7 @@ class SafetySignPipeline:
         self.rag = SafetyRAG.load(index)
         self.motion = MotionDict(motion_dir) if motion_dir and Path(motion_dir).exists() else None
         self.k = k
-        self.sign_words = SignWords(Path(sentences).parent / "sign_words.csv" if sentences else "data/sign_words.csv")
+        self.sign_words = SignWords(Path(sentences).parent / "sign_words.csv" if sentences else "data/sign/sign_words.csv")
         # 답변 거절 기준: 문서 검색 1위 점수가 이보다 낮으면 '관련 내용 없음' (환각 방지, docs/환각방지.md)
         self.min_score = min_score
         # 문장 번역 거절 기준: 산업안전 핵심어가 하나도 없으면 번역하지 않음 (번역 모델이 아무 문장이나 안전 수어로 바꾸는 것 방지)
@@ -377,7 +377,7 @@ class SafetySignPipeline:
             if not texts:
                 return self._abstain(question, top)
             answer_text = " ".join(texts)
-        # 수어: 답변 문장에 실제로 있는 말만 수어 단어로 (data/sign_words.csv). 번역 모델은 아직 엉뚱한 단어를 만들어서 답변에는 쓰지 않음
+        # 수어: 답변 문장에 실제로 있는 말만 수어 단어로 (data/sign/sign_words.csv). 번역 모델은 아직 엉뚱한 단어를 만들어서 답변에는 쓰지 않음
         sents = []
         for p in (split_sentences(answer_text) or [answer_text]):
             sg = self.sign_sentence(p)                               # 앞 문장에 나온 단어도 답변에 있으면 그대로

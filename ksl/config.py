@@ -1,7 +1,7 @@
 """프로젝트 전역 설정.
 
 팀 JSONL의 실제 키 이름이 다르면 FIELDS만 고치면 된다.
-(scripts/inspect_jsonl.py 를 돌리면 어떤 키가 있는지 바로 보인다.)
+(scripts/data/inspect_jsonl.py 를 돌리면 어떤 키가 있는지 바로 보인다.)
 """
 from dataclasses import dataclass, field
 

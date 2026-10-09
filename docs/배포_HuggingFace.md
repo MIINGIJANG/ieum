@@ -8,7 +8,7 @@
 2. Space 만들기: New Space → 이름 `ieum`, SDK **Docker** (Blank), 하드웨어 **CPU basic (무료)**, 공개 범위 **Private**
 3. 업로드할 폴더 만들기
    ```
-   python scripts/make_space.py checkpoints/test/best.pt
+   python scripts/deploy/make_space.py checkpoints/test/best.pt
    ```
 4. 로그인 후 업로드
    ```
@@ -21,7 +21,7 @@
 
 ## 유의할 점
 
-- **공개 범위:** `data/motions` 는 AI Hub 데이터에서 뽑은 관절 좌표다. AI Hub 데이터는 재배포가 제한되므로 Space 는 **Private** 으로 둔다. Private Space 는 로그인한 본인·초대된 사람(조직 멤버)만 볼 수 있다 → 조원은 Organization 을 만들어 초대.
+- **공개 범위:** `data/sign/motions` 는 AI Hub 데이터에서 뽑은 관절 좌표다. AI Hub 데이터는 재배포가 제한되므로 Space 는 **Private** 으로 둔다. Private Space 는 로그인한 본인·초대된 사람(조직 멤버)만 볼 수 있다 → 조원은 Organization 을 만들어 초대.
   공개 시연이 꼭 필요하면 AI Hub 이용 약관(결과물 공개 범위)을 먼저 확인할 것.
 - **잠자기:** 무료 Space 는 한동안 접속이 없으면 잠든다. 발표 직전에 한 번 열어서 깨워 둘 것(깨어나는 데 1~2분).
 - **첫 번역:** 서버가 뜬 뒤 첫 문장 번역은 모델을 불러오느라 몇 초 걸린다(질문 답변은 바로).

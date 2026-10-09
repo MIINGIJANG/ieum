@@ -1,6 +1,6 @@
 """테스트셋 평가 + 사전 치환 베이스라인 비교 + 오류 분석 파일 생성.
 
-python scripts/evaluate.py --run checkpoints/run1 --lexicon data/lexicon.csv
+python scripts/model/evaluate.py --run checkpoints/run1 --lexicon data/sign/lexicon.csv
 결과: <run>/eval_report.json, <run>/errors.csv
 """
 import argparse
@@ -9,7 +9,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from ksl.data import load_jsonl, save_json  # noqa: E402
 from ksl.metrics import all_metrics  # noqa: E402
 from ksl.translate import DictBaseline, Translator  # noqa: E402

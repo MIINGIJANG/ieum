@@ -12,24 +12,41 @@
 
 ## 폴더 구조
 
-| 파일 | 역할 |
-|---|---|
-| `ksl/config.py` | **팀 JSONL 키 이름 매핑(FIELDS)**, 하이퍼파라미터 |
-| `ksl/data.py` | JSONL 로딩, 누락·시간오류·중복 제거, 문장 단위 train/val/test 분할, 글로스별 평균 동작시간 |
-| `ksl/tokenizer.py` | 한국어=글자 단위 / 수어=**글로스 단위** 토큰화 |
-| `ksl/model.py` | Transformer encoder-decoder (greedy / beam search) |
-| `ksl/oov.py` | 전문용어(OOV) 슬롯 처리 + `lexicon.csv` 용어사전 |
-| `ksl/translate.py` | 번역기, 사전 치환 베이스라인 |
-| `ksl/metrics.py` | BLEU(sacrebleu), 정확일치율, 글로스 F1 |
-| `ksl/rag.py` | KOSHA 문서 분할·검색(TF-IDF 기본 / 임베딩 선택)·답변 문장 생성 |
-| `ksl/motion.py` | 수어 동작(관절 좌표) 공통 형식, AI Hub(OpenPose)·MediaPipe 변환, 동작사전, 글로스 이어붙이기 |
-| `ksl/pipeline.py`, `api.py` | 전체 연결 + FastAPI (`/ask`, `/translate`, `/motion`) |
-| `web/index.html`, `web/avatar.js` | 시연용 웹 화면 + **3D 수어 아바타**(Three.js + VRM, 팔·손목·손가락 관절). 3D가 안 되면 2D 그림으로 자동 대체 |
-| `web/vendor/`, `web/models/avatar.vrm` | 라이브러리·3D 모델 내장 → 인터넷 없이도 시연 가능. 모델: VRoid Project 공식 샘플(남성, VRoid Hub 조건: 수정·재배포·상업 이용 허용, 표기 불필요). 이전 여성 모델은 `avatar_female.vrm` (pixiv three-vrm 샘플) — 파일 이름만 바꾸면 교체 |
-| `data/demo_sentences.json`, `data/motions/` | 조원이 정리한 5개 안내 문장(번역 메모리)과 글로스별 3D 동작 |
-| `docs/API.md`, `docs/mock/` | 프론트/아바타 담당용 API 명세 + 실제 응답 예시 파일 |
-| `scripts/` | 학습·평가·인덱스·검색평가·JSONL 구조 확인·샘플데이터 |
-| `data/lexicon.csv` | 산업안전 용어 ↔ 수어 글로스 (한국수어사전 조사 결과 넣는 곳) |
+```
+이음/
+├── api.py                    서버 (FastAPI): /query, /ask, /translate, /motion, /eval …
+├── 이음 실행.command          Mac 에서 더블클릭 → 서버 켜고 브라우저 열기
+├── 이음 공개 실행.command     위 + 임시 공개 주소(Cloudflare)
+├── requirements.txt
+├── ksl/                      핵심 코드
+│   ├── rag.py                문서 검색·답변(추출식 / Claude)
+│   ├── pipeline.py           질문 → 답변 → 수어 단어 → 동작 (전체 연결)
+│   ├── motion.py             수어 동작 형식·이어붙이기·2D→3D 깊이 추정
+│   ├── translate.py, model.py, tokenizer.py, oov.py, data.py, config.py   한국어→수어 글로스 번역 모델
+│   ├── pageimage.py, tables.py   출처를 원본 PDF 모양으로
+│   └── evaluation.py, metrics.py 평가
+├── web/                      화면
+│   ├── index.html            웹 화면
+│   ├── avatar.js             3D 수어 아바타 (Three.js + VRM)
+│   ├── models/avatar.vrm     아바타 모델 (VRoid 샘플, 수정·재배포 허용)
+│   ├── pages/                출처용 PDF 쪽 이미지
+│   └── vendor/               라이브러리 (인터넷 없이 시연 가능)
+├── data/
+│   ├── kosha/                KOSHA 문서(PDF·쪽 배치)와 안내 문장 답변·예시 질문·핵심어
+│   ├── sign/                 수어: motions/(단어별 3D 동작), sign_words.csv(말→수어 단어),
+│   │                         lexicon.csv(용어사전), demo_sentences.json(조원 안내 문장)
+│   ├── eval/                 평가용 질문 (문서 안·밖, 안전 문장)
+│   ├── sample/               예시용 가짜 데이터
+│   └── raw/                  (GitHub 에 안 올림) AI Hub·조원 원본 키포인트
+├── scripts/
+│   ├── data/                 자료 만들기: 검색 인덱스, PDF 쪽 이미지, 조원 키포인트 가져오기 등
+│   ├── model/                번역 모델 학습·평가
+│   ├── eval/                 환각 방지·검색 평가
+│   └── deploy/               Hugging Face 배포 폴더 만들기, 아바타 용량 줄이기
+├── deploy/huggingface/       Space 용 Dockerfile·설명
+├── docs/                     API 명세, 환각 방지 정리(발표용), 배포 안내, 수행계획서
+└── .github/workflows/        main 에 올리면 Hugging Face 에 자동 배포
+```
 
 ## 실행 순서 (팀 데이터 기준)
 
@@ -37,29 +54,29 @@
 pip install -r requirements.txt
 
 # 0) 전처리 JSONL 키 확인 → ksl/config.py 의 FIELDS 오른쪽 값을 실제 키로 수정
-python scripts/inspect_jsonl.py data/processed/ksl_safety.jsonl
+python scripts/data/inspect_jsonl.py data/processed/ksl_safety.jsonl
 
 # 1) 번역 모델 학습 (GPU 있으면 자동 사용, 결과: checkpoints/run1/best.pt + train/val/test.jsonl)
-python scripts/train.py --data data/processed/ksl_safety.jsonl --out checkpoints/run1
+python scripts/model/train.py --data data/processed/ksl_safety.jsonl --out checkpoints/run1
 
 # 2) 테스트셋 평가 (Transformer vs 사전 치환 베이스라인, 오류 목록 errors.csv)
-python scripts/evaluate.py --run checkpoints/run1 --lexicon data/lexicon.csv
+python scripts/model/evaluate.py --run checkpoints/run1 --lexicon data/sign/lexicon.csv
 
 # 3) KOSHA 인덱스 + 검색 평가 (목표 Recall@3 ≥ 0.90)
-python scripts/build_index.py --docs data/kosha/A-G-12-2026.pdf --out checkpoints/kosha_index.pkl
-python scripts/eval_retrieval.py --index checkpoints/kosha_index.pkl --questions data/rag_questions.csv
+python scripts/data/build_index.py --docs data/kosha/A-G-12-2026.pdf --out checkpoints/kosha_index.pkl
+python scripts/eval/eval_retrieval.py --index checkpoints/kosha_index.pkl --questions data/eval/eval_questions.csv
 
 # 4) 동작사전 (둘 중 가능한 것)
-python scripts/build_motion_dict.py --data data/processed/ksl_safety.jsonl --kp_root <AI Hub 키포인트 폴더> --out data/motions
-python scripts/extract_keypoints.py --video_dir <수어사전 영상 폴더> --out data/motions   # pip install mediapipe opencv-python
+python scripts/data/build_motion_dict.py --data data/processed/ksl_safety.jsonl --kp_root <AI Hub 키포인트 폴더> --out data/sign/motions
+python scripts/data/extract_keypoints.py --video_dir <수어사전 영상 폴더> --out data/sign/motions   # pip install mediapipe opencv-python
 
 # 5) 서버 + 웹 화면  →  브라우저 http://localhost:8000
-KSL_CKPT=checkpoints/run1/best.pt KSL_INDEX=checkpoints/kosha_index.pkl KSL_MOTION=data/motions uvicorn api:app --port 8000
+KSL_CKPT=checkpoints/run1/best.pt KSL_INDEX=checkpoints/kosha_index.pkl KSL_MOTION=data/sign/motions uvicorn api:app --port 8000
 ```
 
 ### 조원 키포인트(문장별_수어키포인트) 반영
 ```bash
-python scripts/import_team_keypoints.py ~/Downloads/문장별_수어키포인트 --out data/motions
+python scripts/data/import_team_keypoints.py ~/Downloads/문장별_수어키포인트 --out data/sign/motions
 KSL_CKPT=checkpoints/test/best.pt KSL_INDEX=checkpoints/sample_index.pkl uvicorn api:app --port 8000
 ```
 - 5개 안내 문장은 **번역 메모리**: 입력이 이 문장과 같으면 모델 대신 조원이 확정한 글로스를 사용 (`method: "memory"`)
@@ -68,9 +85,9 @@ KSL_CKPT=checkpoints/test/best.pt KSL_INDEX=checkpoints/sample_index.pkl uvicorn
 
 ### 샘플로 웹 화면까지 바로 보기
 ```bash
-python scripts/make_sample_data.py && python scripts/make_sample_motion.py
-python scripts/train.py --data data/sample/sample_ksl.jsonl --out checkpoints/test --epochs 40 --d_model 128 --layers 2 --batch_size 32
-python scripts/build_index.py --docs data/sample/sample_safety_doc.txt --out checkpoints/sample_index.pkl --max_chars 150
+python scripts/data/make_sample_data.py && python scripts/data/make_sample_motion.py
+python scripts/model/train.py --data data/sample/sample_ksl.jsonl --out checkpoints/test --epochs 40 --d_model 128 --layers 2 --batch_size 32
+python scripts/data/build_index.py --docs data/sample/sample_safety_doc.txt --out checkpoints/sample_index.pkl --max_chars 150
 KSL_CKPT=checkpoints/test/best.pt KSL_INDEX=checkpoints/sample_index.pkl KSL_MOTION=data/sample/motions uvicorn api:app --port 8000
 ```
 샘플 동작(`make_sample_motion.py`)은 손이 원을 그리는 **가짜 동작**이라 화면 연결 확인용으로만 쓸 것.
@@ -124,7 +141,7 @@ BLEU 는 낮은데 글로스 F1 이 높으면 → "어휘는 맞고 어순이 �
 
 ## 샘플 데이터로 동작 확인한 결과 (⚠ 실제 성능 아님)
 
-`scripts/make_sample_data.py` 로 만든 **템플릿 가짜 데이터 441문장**(실제 AI Hub 데이터 아님)으로 끝까지 돌려 확인함. CPU 1분 학습.
+`scripts/data/make_sample_data.py` 로 만든 **템플릿 가짜 데이터 441문장**(실제 AI Hub 데이터 아님)으로 끝까지 돌려 확인함. CPU 1분 학습.
 
 | | BLEU | 정확일치 | 글로스 F1 |
 |---|---|---|---|
@@ -142,8 +159,8 @@ BLEU 는 낮은데 글로스 F1 이 높으면 → "어휘는 맞고 어순이 �
 
 | 질문 세트 | Recall@1 | Recall@3 | Recall@5 |
 |---|---|---|---|
-| 개발용 30문항 `data/kosha/eval_questions.csv` | 0.533 | **0.967** | 0.967 |
-| 새로 쓴 10문항 `data/kosha/heldout_questions.csv` | 0.200 | 0.600 | 0.800 |
+| 개발용 30문항 `data/eval/eval_questions.csv` | 0.533 | **0.967** | 0.967 |
+| 새로 쓴 10문항 `data/eval/heldout_questions.csv` | 0.200 | 0.600 | 0.800 |
 
 - 개발용 질문은 현장 말→지침 용어 확장 규칙(`QUERY_SYNONYMS`)을 만들 때 참고했기 때문에 점수가 높게 나옴. **발표 때는 팀원이 새로 쓴 질문으로 다시 재는 게 공정함**
 - 확장 규칙 전 개발용 Recall@3: 0.767 → 확장 후 0.967
@@ -158,7 +175,7 @@ BLEU 는 낮은데 글로스 F1 이 높으면 → "어휘는 맞고 어순이 �
 | 문서 안 질문 40개에 답함 | 40 | 38 |
 | 안전 안내 문장 10개 번역 | 10 | 10 |
 
-검색 1위 점수 < 0.11 이면 답 거절, 산업안전 핵심어가 없는 문장은 번역 거절. 재현: `python scripts/eval_abstain.py`
+검색 1위 점수 < 0.11 이면 답 거절, 산업안전 핵심어가 없는 문장은 번역 거절. 재현: `python scripts/eval/eval_abstain.py`
 
 ## 동작 데이터 형식 (요약, 자세한 건 docs/API.md)
 - 프레임 = `body` 8점 + 오른손/왼손 21점, 목=(0,0) · 어깨너비=1 로 정규화 → 다른 영상 클립끼리 크기·위치가 맞음

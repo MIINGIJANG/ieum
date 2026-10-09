@@ -1,6 +1,6 @@
 """출처 표시용 자료를 미리 만들어 두기 (PDF 라이브러리 없는 컴퓨터에서도 출처가 원본 모양으로 보이도록).
 
-  python scripts/build_page_assets.py
+  python scripts/data/build_page_assets.py
 
 data/kosha/*.pdf 마다
 - web/pages/<문서>/<쪽>.png        : 쪽 이미지 (화면에서 출처 부분만 잘라 보여줌)
@@ -14,7 +14,7 @@ from pathlib import Path
 import pdfplumber
 import pypdfium2 as pdfium
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 SCALE = 2.5
 PAPER = 242          # 원문 PDF 회색 상자(법령 인용)의 회색. 흰 바탕도 이 색으로 맞춤
 

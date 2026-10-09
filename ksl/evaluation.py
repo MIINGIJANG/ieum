@@ -1,4 +1,4 @@
-"""환각 방지(답변 거절) 평가 — scripts/eval_abstain.py 와 서버 /eval 이 함께 씀.
+"""환각 방지(답변 거절) 평가 — scripts/eval/eval_abstain.py 와 서버 /eval 이 함께 씀.
 
 - 문서 안 질문(dev 30 + heldout 10): 답하는 비율, 답한 것 중 정답 쪽이 출처에 있는 비율
 - 문서 밖 입력 28개: 답하지 않는 비율
@@ -8,7 +8,7 @@ import csv
 from collections import Counter
 from pathlib import Path
 
-K = Path(__file__).resolve().parent.parent / "data" / "kosha"
+K = Path(__file__).resolve().parent.parent / "data" / "eval"
 
 
 def _rows(name):

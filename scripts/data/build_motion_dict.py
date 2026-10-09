@@ -1,7 +1,7 @@
 """AI Hub 키포인트(OpenPose JSON) + 글로스 시간 → 글로스별 동작사전.
 
-python scripts/build_motion_dict.py --data data/processed/ksl_safety.jsonl \
-    --kp_root /path/to/aihub/keypoints --out data/motions
+python scripts/data/build_motion_dict.py --data data/processed/ksl_safety.jsonl \
+    --kp_root /path/to/aihub/keypoints --out data/sign/motions
 
 동작 원리
   1) JSONL 각 문장의 글로스별 start/end(초)와 영상 id 를 읽음
@@ -17,7 +17,7 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from ksl.data import load_jsonl  # noqa: E402
 from ksl.motion import FPS, MotionDict, load_openpose, normalize  # noqa: E402
 
@@ -41,7 +41,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", required=True)
     ap.add_argument("--kp_root", required=True)
-    ap.add_argument("--out", default="data/motions")
+    ap.add_argument("--out", default="data/sign/motions")
     ap.add_argument("--video_key", default="source", help="JSONL 에서 영상 id 가 들어있는 필드")
     ap.add_argument("--fps", type=float, default=FPS, help="키포인트 프레임레이트")
     ap.add_argument("--limit", type=int, default=0)

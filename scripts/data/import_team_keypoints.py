@@ -1,14 +1,14 @@
 """조원이 정리한 '문장별_수어키포인트' 폴더 → 동작사전 + 5문장 번역 메모리.
 
-python scripts/import_team_keypoints.py ~/Downloads/문장별_수어키포인트 --out data/motions
+python scripts/data/import_team_keypoints.py ~/Downloads/문장별_수어키포인트 --out data/sign/motions
 
 폴더 구조 (조원 형식)
   01_위험장소_작업중지/sentence.json   {"sentence", "fps", "sequence": [{"order","gloss","file"}]}
   01_위험장소_작업중지/keypoints/01_위험.json
 
 결과
-  data/motions/              글로스별 동작 (같은 글로스가 여러 문장에 있으면 처음 것 사용)
-  data/demo_sentences.json   문장 → 글로스 순서 (번역 메모리: 이 문장들은 모델 대신 확정 글로스 사용)
+  data/sign/motions/              글로스별 동작 (같은 글로스가 여러 문장에 있으면 처음 것 사용)
+  data/sign/demo_sentences.json   문장 → 글로스 순서 (번역 메모리: 이 문장들은 모델 대신 확정 글로스 사용)
 """
 import argparse
 import json
@@ -16,14 +16,14 @@ import sys
 import unicodedata
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from ksl.motion import MotionDict, bone_lengths, calibrate_expressions, lift_2d, load_team_clip, normalize  # noqa: E402
 
 ap = argparse.ArgumentParser()
 ap.add_argument("root")
 ap.add_argument("--extra", nargs="*", default=[], help="문장 폴더 밖의 단어 키포인트 JSON (조원 형식 2: gloss_raw 사용)")
-ap.add_argument("--out", default="data/motions")
-ap.add_argument("--sentences_out", default="data/demo_sentences.json")
+ap.add_argument("--out", default="data/sign/motions")
+ap.add_argument("--sentences_out", default="data/sign/demo_sentences.json")
 a = ap.parse_args()
 
 root = Path(a.root).expanduser()

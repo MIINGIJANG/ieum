@@ -1,7 +1,7 @@
 """이음 FastAPI 서버 — 웹 화면(React/Three.js 또는 web/index.html)과 붙는 지점.
 
 KSL_CKPT=checkpoints/run1/best.pt KSL_INDEX=checkpoints/kosha_index.pkl \
-KSL_LEXICON=data/lexicon.csv KSL_MOTION=data/motions KSL_SENTENCES=data/demo_sentences.json \
+KSL_LEXICON=data/sign/lexicon.csv KSL_MOTION=data/sign/motions KSL_SENTENCES=data/sign/demo_sentences.json \
 uvicorn api:app --port 8000
 
 브라우저: http://localhost:8000        (시연용 웹 화면)
@@ -50,9 +50,9 @@ _ensure_index(INDEX)
 pipe = SafetySignPipeline(
     os.environ.get("KSL_CKPT", "checkpoints/run1/best.pt"),
     INDEX,
-    os.environ.get("KSL_LEXICON", "data/lexicon.csv"),
-    os.environ.get("KSL_MOTION", "data/motions"),
-    os.environ.get("KSL_SENTENCES", "data/demo_sentences.json"),
+    os.environ.get("KSL_LEXICON", "data/sign/lexicon.csv"),
+    os.environ.get("KSL_MOTION", "data/sign/motions"),
+    os.environ.get("KSL_SENTENCES", "data/sign/demo_sentences.json"),
 )
 
 

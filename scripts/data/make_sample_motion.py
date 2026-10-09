@@ -9,7 +9,7 @@ import math
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from ksl.motion import FPS, MotionDict, neutral_frame  # noqa: E402
 
 OUT = Path(sys.argv[2] if len(sys.argv) > 2 else "data/sample/motions")
