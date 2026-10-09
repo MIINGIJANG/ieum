@@ -274,11 +274,71 @@ class MotionDict:
 
 # ---------------------------------------------------------------- 이어붙이기
 def _resample(frames, n):
+    """n 프레임으로 다시 뽑기. 프레임 사이는 보간 (느리게 재생할 때 같은 프레임이 반복돼 끊겨 보이지 않게)."""
     if n <= 0 or not frames:
         return []
     if len(frames) == n:
         return frames
-    return [frames[min(len(frames) - 1, round(i * (len(frames) - 1) / max(n - 1, 1)))] for i in range(n)]
+    out = []
+    for i in range(n):
+        x = i * (len(frames) - 1) / max(n - 1, 1)
+        k = min(int(x), len(frames) - 2) if len(frames) > 1 else 0
+        out.append(_lerp(frames[k], frames[k + 1], x - k) if len(frames) > 1 else frames[0])
+    return out
+
+
+def _smooth(frames):
+    """관절 좌표 떨림 줄이기: 앞뒤 프레임과 [1,2,1]/4 가중 평균 (첫·끝 프레임은 그대로)."""
+    if len(frames) < 3:
+        return frames
+    out = [frames[0]]
+    for a, b, c in zip(frames, frames[1:], frames[2:]):
+        f = dict(b)
+        for k in ("body", "lh", "rh"):
+            pa, pb, pc = a.get(k), b.get(k), c.get(k)
+            if pa and pb and pc:
+                f[k] = [None if (u is None or v is None or w is None) else
+                        [round((x + 2 * y + z) / 4, 4) for x, y, z in zip(u, v, w)] for u, v, w in zip(pa, pb, pc)]
+        out.append(f)
+    out.append(frames[-1])
+    return out
+
+
+def _relax_low_hands(frames, y_rest=1.15):
+    """수어를 하지 않고 아래로 내린 손(손목이 허리 아래)은 손 모양 데이터를 버림 → 아바타가 힘 뺀 손으로 둠.
+    (내린 손의 추정 좌표는 떨림이 커서 손목이 꺾이거나 다리에 파묻혀 어색해 보임)"""
+    out = []
+    for f in frames:
+        b = f.get("body")
+        if b:
+            f = dict(f)
+            for wi, k in ((4, "rh"), (7, "lh")):
+                if wi < len(b) and b[wi] and b[wi][1] > y_rest:
+                    f[k] = None
+        out.append(f)
+    return out
+
+
+def _fix_hands(frames, ratio=0.7):
+    """손 점이 한꺼번에 뭉친 프레임(손바닥 길이가 평소의 70% 미만 = 추정 실패)은 가장 가까운 정상 프레임의 손으로 바꿈."""
+    import statistics
+    out = [dict(f) for f in frames]
+    for k in ("rh", "lh"):
+        L = [math.dist(f[k][0], f[k][9]) if f.get(k) and f[k][0] and f[k][9] else None for f in frames]
+        good = [x for x in L if x]
+        if len(good) < 3:
+            continue
+        med = statistics.median(good)
+        ok = [x is not None and x >= ratio * med for x in L]
+        for i, f in enumerate(out):
+            if f.get(k) and not ok[i]:
+                near = min((j for j in range(len(out)) if ok[j]), key=lambda j: abs(j - i), default=None)
+                f[k] = frames[near][k] if near is not None else None
+    return out
+
+
+def _ease(t):
+    return t * t * (3 - 2 * t)     # 천천히 출발해서 천천히 멈춤 (smoothstep)
 
 
 def _lerp_pts(a, b, t):
@@ -308,18 +368,34 @@ def neutral_frame():
     return {"body": body, "lh": None, "rh": None}
 
 
-def compose(glosses, mdict: MotionDict, fps=FPS, transition=0.2, missing_sec=0.6, speed=1.0, skip_missing=True):
-    """글로스 순서대로 동작 클립을 이어붙임. 클립 사이는 transition 초 동안 선형 보간.
+def compose(glosses, mdict: MotionDict, fps=FPS, transition=0.25, missing_sec=0.6, speed=0.8, skip_missing=True,
+            lead=0.35):
+    """글로스 순서대로 동작 클립을 이어붙임.
 
+    - speed: 재생 속도 (조원 자료는 문장 수어에서 단어만 잘라 0.4~0.8초로 짧음 → 0.8배로 조금 천천히)
+    - 클립 사이는 transition 초 동안 부드럽게(천천히 출발·멈춤) 보간
+    - 처음·끝: 손을 내린 기본 자세에서 lead 초 동안 올라오고, 끝나면 다시 내려감 (갑자기 튀지 않게)
+    - 관절 좌표 떨림은 앞뒤 프레임 평균으로 줄임
     skip_missing=True: 동작이 없는 글로스는 건너뜀 (프레임 없음, segment 의 start/end = None)
     반환: {"fps", "frames", "segments": [{"gloss","start","end","has_motion"}]}  (start/end 는 프레임 번호)
     """
     frames, segments = [], []
     n_tr = max(1, round(transition * fps))
+    n_lead = max(1, round(lead * fps))
+    rest = neutral_frame()
+
+    def toward_rest(f, t):      # 몸은 기본 자세 쪽으로, 손 모양은 그대로 (손 방향이 갑자기 바뀌지 않게)
+        out = _lerp(f, rest, t)
+        keep = t < 0.5             # 손 모양은 절반까지 유지, 내려온 뒤에는 힘 뺀 손 (손목이 꺾인 채 내려가지 않게)
+        out["lh"], out["rh"] = (f.get("lh"), f.get("rh")) if keep else (None, None)
+        return out
+
     for g in glosses:
         clip = mdict.get(g) if mdict else None
+        if clip and str(clip.get("source", "")).endswith("(2D)"):
+            clip = None        # 2D 자료(깊이 없음)는 손가락·팔 방향이 뒤틀려 보여서 쓰지 않음 → 회색 단어 (3D 자료를 구하면 다시 사용)
         if clip and clip["frames"]:
-            src = clip["frames"]
+            src = _relax_low_hands(_smooth(_fix_hands(clip["frames"])))
             n = max(2, round(len(src) * fps / clip.get("fps", fps) / speed))
             seg = _resample(src, n)
             has = True
@@ -332,8 +408,13 @@ def compose(glosses, mdict: MotionDict, fps=FPS, transition=0.2, missing_sec=0.6
             has = False
         if frames:
             a, b = frames[-1], seg[0]
-            frames += [_lerp(a, b, (i + 1) / (n_tr + 1)) for i in range(n_tr)]
+            frames += [_lerp(a, b, _ease((i + 1) / (n_tr + 1))) for i in range(n_tr)]
+        elif has:
+            frames += [toward_rest(seg[0], 1 - _ease(i / n_lead)) for i in range(n_lead)]   # 기본 자세 → 첫 동작
         start = len(frames)
         frames += seg
         segments.append({"gloss": g, "start": start, "end": len(frames) - 1, "has_motion": has})
+    if frames:
+        last = frames[-1]
+        frames += [toward_rest(last, _ease((i + 1) / n_lead)) for i in range(n_lead)]           # 마지막 동작 → 기본 자세
     return {"fps": fps, "frames": frames, "segments": segments}

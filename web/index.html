@@ -534,7 +534,7 @@ function currentItem(f) {
   return items[items.length - 1];
 }
 let playId = 0;
-const HOLD_MS = 600, LOWER_MS = 350;   // 마지막 손 모양 유지 → 손 내리기 (이 동안도 마지막 단어 강조 유지)
+const HOLD_MS = 100, LOWER_MS = 200;   // 손 내리기는 동작 데이터 끝에 포함됨 → 짧게 마무리
 function play() {
   cancelAnimationFrame(raf);
   const id = ++playId;

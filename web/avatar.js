@@ -37,10 +37,10 @@ export const NMS = {
   "조심1":    { face: { angry: 0.4, surprised: 0.2 }, head: { type: "nod", n: 1, deg: 7 } },     // 주의: 진지하게 한 번 끄덕
   "멈추다1":  { face: { angry: 0.65 }, head: { type: "nod", n: 1, deg: 10 } },                   // 단호하게
   "낙하물0#": { face: { surprised: 0.6 }, head: { type: "up", deg: 10 } },                        // 위를 보며 놀람
-  "감전0":    { face: { surprised: 0.75, angry: 0.2 }, head: { type: "back", deg: 6 } },          // 움찔
+  "감전0":    { face: { surprised: 0.5, angry: 0.25 }, head: { type: "back", deg: 4 } },          // 움찔
   "없다1":    { face: { sad: 0.3 }, head: { type: "shake", n: 2, deg: 14 } },                     // 부정: 고개 젓기
   "확인1":    { face: { surprised: 0.25 }, head: { type: "nod", n: 2, deg: 8 } },                 // 확인: 끄덕끄덕
-  "이상하다1": { face: { sad: 0.45, angry: 0.15 }, head: { type: "tilt", deg: 10 } },             // 의아: 갸웃
+  "이상하다1": { face: { sad: 0.35, angry: 0.15 }, head: { type: "tilt", deg: 6 } },             // 의아: 갸웃
 };
 const FACE_KEYS = ["aa", "ou", "ee", "blink", "surprised", "angry", "sad", "relaxed"];
 
@@ -133,6 +133,7 @@ export class SignAvatar {
       R.sho = pos(P + "UpperArm");
       R.a = pos(P + "LowerArm").distanceTo(R.sho);
       R.b = pos(P + "Hand").distanceTo(pos(P + "LowerArm"));
+      R.handLen = pos(P + "Hand").distanceTo(pos(P + "MiddleDistal")) + 0.025;   // 손목 → 손끝 (손가락이 얼굴을 뚫는지 볼 때 사용)
     }
     this.headY = pos("head").y;
     this.neckY = pos("neck").y;
@@ -884,6 +885,24 @@ export class SignAvatar {
     this.driven.add(b);
   }
 
+  // 손가락 관절 범위 제한: 추정 좌표의 떨림으로 손가락이 손등 쪽으로 꺾이거나 옆으로 비틀리는 것 방지
+  //  - 굽힘: 손바닥 쪽으로만 (뿌리 마디 -15°~90°, 가운데 0°~80°, 끝 0°~55°)
+  //  - 옆으로 벌림: 뿌리 마디만 ±20°, 나머지 마디는 0°
+  _fingerLimit(restDir, target, parentW, j) {
+    const p = restDir.clone().applyQuaternion(parentW).normalize();            // 지금 마디가 펴졌을 때 방향
+    let n = new THREE.Vector3(0, -1, 0).applyQuaternion(parentW);             // 손바닥 쪽 (T자세에서 손바닥이 아래)
+    n.sub(p.clone().multiplyScalar(n.dot(p))).normalize();
+    const l = new THREE.Vector3().crossVectors(p, n);
+    const t = target.clone().normalize();
+    const D = THREE.MathUtils.degToRad;
+    let flex = Math.atan2(t.dot(n), t.dot(p));
+    let side = Math.asin(THREE.MathUtils.clamp(t.dot(l), -1, 1));
+    flex = THREE.MathUtils.clamp(flex, j === 0 ? D(-15) : 0, [D(90), D(80), D(55)][j]);   // 끝마디일수록 덜 굽힘 (갈고리처럼 꺾인 손 방지)
+    side = j === 0 ? THREE.MathUtils.clamp(side, D(-20), D(20)) : 0;
+    return p.multiplyScalar(Math.cos(flex)).add(n.multiplyScalar(Math.sin(flex))).multiplyScalar(Math.cos(side))
+      .add(l.multiplyScalar(Math.sin(side)));
+  }
+
   // 손바닥 두 축으로 손목 전체 회전
   _basis(f, s) {
     const x = f.clone().normalize();
@@ -920,6 +939,17 @@ export class SignAvatar {
           fromHead.z = Math.max(fromHead.z, 0.02);
           W.copy(this.headCenter).add(fromHead.normalize().multiplyScalar(this.headR));
         }
+        // 손가락 끝도 얼굴 안으로 들어가지 않게 (코·눈을 짚는 수어에서 손가락이 얼굴을 뚫고 들어가 보이던 문제)
+        const hd = fr[s.hand];
+        if (hd && hd[0]) {
+          for (const tipIdx of [8, 12]) {
+            if (!hd[tipIdx]) continue;
+            const dir = V(hd[tipIdx]).sub(V(hd[0])).normalize();
+            const tip = W.clone().add(dir.multiplyScalar(R.handLen));
+            const ft = tip.clone().sub(this.headCenter), d = ft.length(), need = this.headR * 1.02 - d;
+            if (need > 0) { ft.z = Math.max(ft.z, 0.02); W.add(ft.normalize().multiplyScalar(need)); }
+          }
+        }
         if (Math.abs(W.x) < this.torsoHalf) {
           const fz = this.frontZ(W.y);
           if (isFinite(fz) && W.z < fz + this.margin) W.z = fz + this.margin;   // 몸 안으로 파묻히지 않게
@@ -943,7 +973,10 @@ export class SignAvatar {
           let parentW = handW;
           names.forEach((n, j) => {
             const a = h[idx[j]], c = h[idx[j + 1]];
-            if (a && c) parentW = this._aim(P + n, R.fingers[fi][j], V(c).sub(V(a)), parentW);
+            if (a && c) {
+              const t = fi === 0 ? V(c).sub(V(a)) : this._fingerLimit(R.fingers[fi][j], V(c).sub(V(a)), parentW, j);
+              parentW = this._aim(P + n, R.fingers[fi][j], t, parentW);
+            }
           });
         });
       } else {
@@ -982,6 +1015,7 @@ export class SignAvatar {
         if (!key) continue;
         let tgt = e[name] || 0;
         if (name === "surprised" || name === "angry") tgt *= 0.4;          // 데이터의 눈썹 값은 흔들림이 커서 약하게
+        if (name === "aa" || name === "ou" || name === "ee") tgt *= 0.45;   // 입 모양도 약하게 (계속 입을 벌리거나 내밀면 멍해 보임)
         if (nm && nm.face[name]) tgt = Math.max(tgt, nm.face[name] * env);
         if (name === "blink") {
           tgt = Math.max(tgt, idleBlink);
@@ -995,7 +1029,7 @@ export class SignAvatar {
       for (const [name, v] of Object.entries(this.baseSmile)) if (this._expr(name)) em.setValue(this._expr(name), v * (1 - other));
     }
     // 고개: 데이터 방향 + 단어별 움직임 (yaw, pitch(+위), roll)
-    const h = ((fr && fr.head) || [0, 0, 0]).map((v) => Math.max(-15, Math.min(15, v)));   // 데이터 고개 각도는 ±15° 까지만 (튀는 값 방지)
+    const h = ((fr && fr.head) || [0, 0, 0]).map((v) => Math.max(-10, Math.min(10, v)));   // 데이터 고개 각도는 ±10° 까지만 (고개가 크게 꺾이면 어색함)
     if (nm && nm.head) {
       const H = nm.head, wave = Math.sin(Math.PI * 2 * (H.n || 1) * t), bump = Math.sin(Math.PI * t);
       if (H.type === "nod") h[1] += H.deg * Math.max(0, wave);               // 아래로 끄덕 (이 모델은 + 가 아래)
