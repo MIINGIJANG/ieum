@@ -149,6 +149,8 @@
   .src li:last-child { margin-bottom: 0; }   /* 박스 아래 여백 = 좌우 여백 */
   .src li p { margin: 2px 0 0; }
   .src b { color: var(--ink); font-weight: 500; }
+  .src b .t2 { white-space: nowrap; }
+  @media (max-width: 760px) { .src b .t1 { display: block; } }   /* 휴대폰: 제목 앞부분 / 마지막 단어 + 페이지 두 줄 */
   .src .tbl { overflow-x: auto; margin: 6px 0 8px; }
   .src .pdf { overflow: hidden; margin: 8px 0 0; border: 1px solid var(--line); border-radius: 6px; background: #f2f2f2; }   /* 쪽 이미지 바탕과 같은 회색 */
   .src .pdf img { display: block; max-width: none; height: auto; }
@@ -396,6 +398,12 @@ const esc = (s) => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">
 // 'FS:' 지문자 표시, '위험1'·'낙하물0#' 같은 동형어 번호는 화면에서 숨김
 const label = (g) => (g.startsWith("FS:") ? g.slice(3) : g).replace(/[_\-]?\d+#?$/, "");
 
+// 출처 제목: 휴대폰에서는 "…관한 / 기술지원규정 23페이지" 처럼 마지막 단어부터 다음 줄로
+function srcTitle(s) {
+  const words = String(s.title || s.doc).split(" "), last = words.pop();
+  const head = words.length ? `<span class="t1">${esc(words.join(" "))}</span> ` : "";
+  return `${head}<span class="t2">${esc(last)} ${esc(s.page)}페이지</span>`;
+}
 // 출처: 원본 PDF의 해당 부분을 그대로 잘라 보여줌 (번호·들여쓰기·표 모양 유지). 글은 대체 텍스트로
 function sourceImg(s) {
   // 미리 만든 쪽 이미지(web/pages)에서 region 부분만 보이게 자름 (서버에 PDF 라이브러리 불필요)
@@ -490,7 +498,7 @@ function render() {
   if (data.mode === "ask") {
     // 출처: 쪽 번호 순
     const src = [...(data.sources || [])].sort((x, y) => x.page - y.page).map(s =>
-      `<li><b>${esc(s.title || s.doc)} ${esc(s.page)}페이지</b>${s.region ? sourceImg(s) : ""}
+      `<li><b>${srcTitle(s)}</b>${s.region ? sourceImg(s) : ""}
         <div class="srctext"${s.region ? " hidden" : ""}>${(s.blocks || s.text.split("\n").map(t => ({type: "text", text: t})))
         .map(b => b.type === "table" ? tableHTML(b.rows) : `<p>${esc(b.text)}</p>`).join("")}</div></li>`).join("");
     a.innerHTML = `
