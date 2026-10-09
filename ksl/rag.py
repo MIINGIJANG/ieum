@@ -242,6 +242,8 @@ class SafetyRAG:
         )
         r.raise_for_status()
         text = "".join(b.get("text", "") for b in r.json()["content"])
+        LLM_STATUS["raw"] = text.strip()[:300]
+        LLM_STATUS["pages"] = [h["page"] for h in hits]
         return [s.strip() for s in text.split("\n") if s.strip()][:n]
 
 

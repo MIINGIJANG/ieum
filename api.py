@@ -119,7 +119,8 @@ def llm_check():
     r = pipe.ask("정화통은 언제 교체해요?")
     ok = r.get("answer_mode") == "llm"
     return {"연결": "됨" if ok else "안 됨", "답변 방식": r.get("answer_mode"),
-            "Claude 호출 결과": LLM_STATUS["last"], "답변": r.get("answer_text")}
+            "Claude 호출 결과": LLM_STATUS["last"], "답변": r.get("answer_text"),
+            "Claude 원문": LLM_STATUS.get("raw"), "보낸 문서 쪽": LLM_STATUS.get("pages")}
 
 
 _WARM = {"done": False}
