@@ -4,7 +4,7 @@
 cd "$(dirname "$0")"
 source ~/.zshrc 2>/dev/null
 lsof -ti tcp:8000 | xargs kill 2>/dev/null
-python -c "import pdfplumber, pypdfium2, PIL" 2>/dev/null || python -m pip install -q -U pdfplumber pypdfium2 pillow
+python -c "import pdfplumber, pypdfium2, PIL, kiwipiepy" 2>/dev/null || python -m pip install -q -U pdfplumber pypdfium2 pillow kiwipiepy
 export KSL_CKPT="${KSL_CKPT:-checkpoints/test/best.pt}"
 
 # 1) 터널 프로그램(cloudflared) 준비: 없으면 처음 한 번만 내려받음

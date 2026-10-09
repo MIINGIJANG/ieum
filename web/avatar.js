@@ -789,7 +789,8 @@ export class SignAvatar {
       if (!o.isMesh) return;
       for (const m of [].concat(o.material)) {
         if ("outlineWidthFactor" in m && m.outlineWidthFactor > 0) {
-          m.outlineWidthFactor *= /SKIN/i.test(m.name) ? 1.8 : 1.3;
+          // 얼굴 윤곽은 또렷하게, 몸(손 포함) 피부는 얇게: 손가락을 굽히면 굵은 윤곽선이 손등·마디에 검게 비쳐 보임
+          m.outlineWidthFactor *= /SKIN/i.test(m.name) ? (/Body/i.test(m.name) ? 0.5 : 1.8) : 1.3;
           if (m.outlineColorFactor) m.outlineColorFactor.set(0x2a2220);
         }
         if (/Tops/i.test(m.name) && m.color && !this._workwearDone) {

@@ -80,7 +80,92 @@ class SignWords:
     def __call__(self, sentence):
         return [g for g, _ in self.with_words(sentence)]
 
+    # ---- 형태소 분석으로 답변의 내용어(명사·동사·형용사)를 모두 뽑기 (kiwipiepy) ----
+    _kiwi = None
+    KEEP = {"NNG", "NNP", "VV", "VA", "VV-I", "VA-I", "VV-R", "VA-R", "XR"}
+    STOP_N = {"것", "수", "등", "경우", "때문", "정도", "데", "바", "여부", "사항", "예", "이", "그", "및", "또는", "각", "해당",
+              "이하", "이내", "다음", "가지", "자체"}
+    STOP_V = {"하다", "되다", "이다", "아니다", "싶다", "보다", "주다", "가지다", "따르다", "위하다", "들다", "대하다", "통하다", "관하다"}
+    ADV = {"반드시", "항상", "즉시", "늘", "바로", "절대", "미리", "충분히", "자주", "수시로", "완전히", "정기적으로"}
+
+    @classmethod
+    def kiwi(cls):
+        if cls._kiwi is None:
+            try:
+                from kiwipiepy import Kiwi
+                cls._kiwi = Kiwi()
+                # 보호구 이름 같은 전문 용어는 한 단어로 (정화통 → 정화+통 으로 쪼개지지 않게)
+                for w in ("정화통", "방진마스크", "방독마스크", "송기마스크", "보안경", "보안면", "안전대", "안전화", "안전모",
+                          "귀마개", "귀덮개", "핏테스트", "정전기", "절연용", "보호구", "개인보호구", "청력보호구", "호흡보호구",
+                          "낙하물", "사업주", "세정제", "여과재", "방열복", "보호복", "보호장갑", "안전보건표지"):
+                    cls._kiwi.add_user_word(w, "NNG", 0)
+            except Exception:                       # 설치 안 됨 → 단어표 방식으로
+                cls._kiwi = False
+        return cls._kiwi
+
+    def _gloss_for(self, lemma, eojeol):
+        """뽑은 말 → 수어 단어(글로스). 단어표(sign_words.csv)에 있으면 그 글로스(동작 있는 단어로 연결), 없으면 말 그대로."""
+        for word, exact, gloss in self.rules:
+            if exact and eojeol == word:
+                return gloss
+        for word, exact, gloss in self.rules:
+            if not exact and (lemma == word or lemma.startswith(word)):
+                return gloss
+        return lemma
+
     def with_words(self, sentence):
+        kw = self.kiwi()
+        if not kw:
+            return self._with_words_rules(sentence)
+        # 어절 위치 (화면에는 어절 모양 그대로 보여줌)
+        spans = [(m.start(), m.end()) for m in re.finditer(r"[^\s,·()（）:]+", sentence)]
+        def eoj(i):
+            for k, (a, b) in enumerate(spans):
+                if a <= i < b:
+                    return k
+            return None
+        toks = kw.tokenize(sentence)
+        items = []                                    # (글로스, 어절번호, 시작위치)
+        i = 0
+        while i < len(toks):
+            t = toks[i]
+            k = eoj(t.start)
+            lemma, start = None, t.start
+            if t.tag == "SN" and i + 1 < len(toks) and toks[i + 1].tag in ("NNB", "NNG") and eoj(toks[i + 1].start) == k:
+                lemma = t.form + toks[i + 1].form; i += 1                  # 6 + 개월 → 6개월
+            elif t.tag == "XPN" and i + 1 < len(toks) and toks[i + 1].tag in ("NNG", "NNP"):
+                lemma = t.form + toks[i + 1].form; i += 1                  # 비 + 마모
+            elif t.tag in self.KEEP:
+                lemma = t.form + ("다" if t.tag.startswith(("VV", "VA")) else "")
+            elif t.tag == "MAG" and t.form in self.ADV:
+                lemma = t.form
+            if lemma and i + 1 < len(toks) and toks[i + 1].tag == "XSN" and eoj(toks[i + 1].start) == k:
+                lemma += toks[i + 1].form; i += 1                          # 제조 + 자 → 제조자
+            i += 1
+            if not lemma or k is None or lemma in self.STOP_N or lemma in self.STOP_V:
+                continue
+            if lemma == "있다" and any(x.form == "수" and x.tag == "NNB" for x in toks[max(0, i - 3):i]):
+                continue                                                   # '할 수 있다'의 있다는 빼기
+            a, b = spans[k]
+            ej = sentence[a:b].strip("“”\"'[]").rstrip(".!?。")
+            items.append((self._gloss_for(lemma, ej), k, start))
+        out, seen = [], set()
+        for n, (g, k, start) in enumerate(items):
+            a, b = spans[k]
+            same = [x for x in items if x[1] == k]
+            last = same[-1][2] == start
+            nxt = next((x[2] for x in items[n + 1:] if x[1] == k), b)
+            # 어절에 단어가 하나면 어절 그대로('세척한'), 여러 개면 앞 단어는 그 부분만, 마지막은 어절 끝까지
+            shown = sentence[a:b] if len(same) == 1 else (sentence[same[0][2] if False else start:b] if last else sentence[start:nxt])
+            if len(same) > 1 and same[0][2] == start:
+                shown = sentence[a:nxt]                # 첫 단어는 어절 앞(숫자 등)부터
+            shown = shown.strip("“”\"'[]").rstrip(".!?。")
+            if g not in seen and shown:
+                seen.add(g)
+                out.append((g, shown))
+        return out
+
+    def _with_words_rules(self, sentence):
         """[(글로스, 답변에 쓰인 모양)] — 화면의 단어 블록은 답변과 같은 모양으로 보여줌
         (예: 이상하다1 → '이상이', 깨끗하다 → '깨끗하게'). 수어 동작은 글로스 그대로."""
         out, seen = [], set()

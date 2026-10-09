@@ -6,6 +6,7 @@ pypdf
 pdfplumber            # 출처에 원문 표 표시
 pypdfium2             # 출처를 원본 PDF 이미지로
 pillow
+kiwipiepy             # 답변에서 수어 단어 뽑기 (형태소 분석)
 fastapi
 uvicorn
 httpx
