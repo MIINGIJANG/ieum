@@ -105,6 +105,18 @@ def demo_sentences():
 _EXAMPLES = None
 
 
+@app.get("/llm_check")
+def llm_check():
+    """Claude(LLM 답변 모드) 연결 확인: 브라우저로 이 주소를 열면 됨. 질문 1번만큼 비용(약 3원)."""
+    from ksl.rag import LLM_STATUS
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        return {"연결": "안 됨", "이유": "ANTHROPIC_API_KEY 가 설정되지 않음 (Space Settings → Variables and secrets)"}
+    r = pipe.ask("정화통 관리 방법을 알려줘")
+    ok = r.get("answer_mode") == "llm"
+    return {"연결": "됨" if ok else "안 됨", "답변 방식": r.get("answer_mode"),
+            "Claude 호출 결과": LLM_STATUS["last"], "답변": r.get("answer_text")}
+
+
 _WARM = {"done": False}
 
 

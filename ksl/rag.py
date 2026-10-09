@@ -112,6 +112,9 @@ def expand_query(q):
 
 
 # ---------------- 검색기 ----------------
+LLM_STATUS = {"last": None}   # 마지막 Claude 호출 결과 (/llm_check 로 확인)
+
+
 class TfidfRetriever:
     kind = "tfidf"
 
@@ -188,8 +191,11 @@ class SafetyRAG:
         없으면 검색 chunk에서 질문과 가장 비슷한 문장을 그대로 추출(환각 없음)."""
         if os.environ.get("ANTHROPIC_API_KEY"):
             try:
-                return self._llm_answer(query, hits, max_sentences), "llm"
+                out = self._llm_answer(query, hits, max_sentences)
+                LLM_STATUS["last"] = "정상"
+                return out, "llm"
             except Exception as e:  # LLM 실패 시 추출식으로 대체
+                LLM_STATUS["last"] = f"오류: {str(e)[:200]}"
                 print(f"[rag] LLM 실패 → 추출식 사용: {e}")
         return self._extractive(query, hits, max_sentences), "extractive"
 
