@@ -130,6 +130,8 @@
     font-weight: 500; transition: background .15s, color .15s;
   }
   ol.glosses li.nomo { background: #d9dcd6; border-color: #d9dcd6; color: var(--ink); }   /* 동작 없는 단어: 재생 안 함 */
+  ol.glosses li.play { cursor: pointer; }   /* 동작 있는 단어: 누르면 그 단어만 다시 보기 */
+  ol.glosses li.play:hover { border-color: var(--ink); }
   ol.glosses li.active { background: var(--ink); color: #fff; border-color: var(--ink); }   /* 지금 표현 중 */
 
   /* ---------- 답변 · 출처 ---------- */
@@ -484,9 +486,16 @@ function render() {
       const li = document.createElement("li");
       li.textContent = label(g);
       const seg = motion ? motion.segments[k] : null;
+      const it = { gloss: g, li, seg };
       if (!(seg && seg.has_motion)) { li.className = "nomo"; li.title = "아직 아바타 동작이 없는 단어"; }
+      else {
+        li.className = "play"; li.title = "누르면 이 단어만 다시 보기";
+        li.tabIndex = 0; li.setAttribute("role", "button");
+        li.onclick = () => playWord(it);
+        li.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); playWord(it); } };
+      }
       ol.append(li);
-      items.push({ gloss: g, li, seg });
+      items.push(it);
       k++;
     });
   });
@@ -517,42 +526,45 @@ function render() {
 }
 
 // ---------- 재생 ----------
-function totalFrames() {
-  if (motion) return motion.frames.length;      // 동작 없는 단어는 프레임이 없어서 자동으로 건너뜀
+function totalFrames(m) {
+  if (m) return m.frames.length;               // 동작 없는 단어는 프레임이 없어서 자동으로 건너뜀
   // 동작 데이터가 없으면 timeline(예상 시간)으로 글로스만 순서대로 강조
   return Math.round((data?.sentences || []).flatMap(s => s.timeline).reduce((t, x) => t + x.duration, 0) * 30);
 }
-function currentItem(f) {
-  if (motion && motion.segments.length) {
+// 지금 강조할 단어와 그 단어의 구간(segment)
+function currentItem(f, m, only) {
+  if (only) return { it: only, seg: m.segments[0] };
+  if (m && m.segments.length) {
     let cur = null;
     for (const it of items) if (it.seg && it.seg.has_motion && f >= it.seg.start) cur = it;
-    return cur;
+    return cur && { it: cur, seg: cur.seg };
   }
   let t = f / 30, acc = 0;
   const tl = (data?.sentences || []).flatMap(s => s.timeline);
-  for (let i = 0; i < tl.length; i++) { acc += tl[i].duration; if (t < acc) return items[i]; }
-  return items[items.length - 1];
+  for (let i = 0; i < tl.length; i++) { acc += tl[i].duration; if (t < acc) return { it: items[i], seg: null }; }
+  return { it: items[items.length - 1], seg: null };
 }
 let playId = 0;
 const HOLD_MS = 100, LOWER_MS = 200;   // 손 내리기는 동작 데이터 끝에 포함됨 → 짧게 마무리
-function play() {
+// m: 재생할 동작 (기본: 답변 전체), only: 단어 하나만 다시 볼 때 그 단어
+function play(m = motion, only = null) {
   cancelAnimationFrame(raf);
   const id = ++playId;
   frameF = 0; lastT = performance.now();
   const loop = (now) => {
-    const fps = motion?.fps || 30;
+    const fps = m?.fps || 30;
     frameF += (now - lastT) / 1000 * fps; lastT = now;
-    const n = totalFrames();
+    const n = totalFrames(m);
     const f = Math.min(Math.floor(frameF), Math.max(n - 1, 0));
-    const fr = motion && motion.frames.length ? motion.frames[f] : null;
-    const it = currentItem(f);
-    const word = it && it.seg && it.seg.end > it.seg.start
-      ? { gloss: it.seg.gloss || it.gloss, t: (f - it.seg.start) / (it.seg.end - it.seg.start) } : null;
+    const fr = m && m.frames.length ? m.frames[f] : null;
+    const cur = currentItem(f, m, only), it = cur && cur.it, seg = cur && cur.seg;
+    const word = seg && seg.end > seg.start
+      ? { gloss: seg.gloss || it.gloss, t: (f - seg.start) / (seg.end - seg.start) } : null;
     if (window.avatar) window.avatar.setFrame(fr, word);   // 단어별 표정·고개 움직임을 위해 지금 단어도 전달
     items.forEach(x => x.li.classList.toggle("active", x === it));
     if (frameF < n) raf = requestAnimationFrame(loop);
     else {
-      // 동작이 화면에서 완전히 끝난 뒤(마지막 손 모양 유지 + 손 내리기)에 강조를 끔
+      // 동작이 화면에서 완전히 끝난 뒤(손 내리기까지)에 강조를 끔
       setTimeout(() => {
         if (id !== playId) return;               // 그 사이 다시 보기·새 질문이면 무시
         if (window.avatar) window.avatar.setFrame(null);
@@ -561,6 +573,21 @@ function play() {
     }
   };
   raf = requestAnimationFrame(loop);
+}
+// 단어 블록을 누르면 그 단어만 다시 보기 (손 올리기 → 그 단어 → 손 내리기)
+const wordMotion = new Map();
+async function playWord(it) {
+  const g = it.seg.gloss || it.gloss;
+  let m = wordMotion.get(g);
+  if (!m) {
+    try {
+      const r = await fetch(`${API}/motion`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ glosses: [g] }) });
+      m = r.ok ? await r.json() : null;
+    } catch { m = null; }
+    if (!m || !m.frames.length) return;
+    wordMotion.set(g, m);
+  }
+  play(m, it);
 }
 $("replay").onclick = () => data && play();
 

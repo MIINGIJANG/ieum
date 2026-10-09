@@ -337,6 +337,31 @@ def _fix_hands(frames, ratio=0.7):
     return out
 
 
+def _filter_face(frames, win=5):
+    """고개 각도·표정: 손이 얼굴을 가리면 얼굴 추정이 튐(예: 고개 -30° → +29°) → 중앙값으로 튀는 값 제거 후 부드럽게."""
+    import statistics
+    n = len(frames)
+    if n < 3:
+        return frames
+    out = [dict(f) for f in frames]
+    h = win // 2
+    heads = [f.get("head") for f in frames]
+    if all(heads):
+        med = [[statistics.median(heads[j][c] for j in range(max(0, i - h), min(n, i + h + 1))) for c in range(3)]
+               for i in range(n)]
+        for i in range(n):
+            a, b, c = med[max(0, i - 1)], med[i], med[min(n - 1, i + 1)]
+            out[i]["head"] = [round((x + 2 * y + z) / 4, 1) for x, y, z in zip(a, b, c)]
+    exprs = [f.get("expr") for f in frames]
+    if all(exprs):
+        for k in exprs[0]:
+            med = [statistics.median(exprs[j].get(k, 0) for j in range(max(0, i - h), min(n, i + h + 1))) for i in range(n)]
+            for i in range(n):
+                out[i]["expr"] = dict(out[i]["expr"])
+                out[i]["expr"][k] = round(med[i], 3)
+    return out
+
+
 def _ease(t):
     return t * t * (3 - 2 * t)     # 천천히 출발해서 천천히 멈춤 (smoothstep)
 
@@ -382,12 +407,14 @@ def compose(glosses, mdict: MotionDict, fps=FPS, transition=0.25, missing_sec=0.
     frames, segments = [], []
     n_tr = max(1, round(transition * fps))
     n_lead = max(1, round(lead * fps))
-    rest = neutral_frame()
 
-    def toward_rest(f, t):      # 몸은 기본 자세 쪽으로, 손 모양은 그대로 (손 방향이 갑자기 바뀌지 않게)
-        out = _lerp(f, rest, t)
-        keep = t < 0.5             # 손 모양은 절반까지 유지, 내려온 뒤에는 힘 뺀 손 (손목이 꺾인 채 내려가지 않게)
-        out["lh"], out["rh"] = (f.get("lh"), f.get("rh")) if keep else (None, None)
+    def toward_rest(f, t):      # t=0 이면 동작 그대로, 1 이면 기본 자세. 아바타가 관절 회전을 기본 자세 쪽으로 섞음
+        out = dict(f)
+        out["rest"] = round(t, 3)
+        if f.get("expr"):
+            out["expr"] = {k: round(v * (1 - t), 3) for k, v in f["expr"].items()}
+        if f.get("head"):
+            out["head"] = [round(v * (1 - t), 1) for v in f["head"]]
         return out
 
     for g in glosses:
@@ -395,7 +422,7 @@ def compose(glosses, mdict: MotionDict, fps=FPS, transition=0.25, missing_sec=0.
         if clip and str(clip.get("source", "")).endswith("(2D)"):
             clip = None        # 2D 자료(깊이 없음)는 손가락·팔 방향이 뒤틀려 보여서 쓰지 않음 → 회색 단어 (3D 자료를 구하면 다시 사용)
         if clip and clip["frames"]:
-            src = _relax_low_hands(_smooth(_fix_hands(clip["frames"])))
+            src = _relax_low_hands(_smooth(_filter_face(_fix_hands(clip["frames"]))))
             n = max(2, round(len(src) * fps / clip.get("fps", fps) / speed))
             seg = _resample(src, n)
             has = True

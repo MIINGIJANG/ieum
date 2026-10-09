@@ -916,6 +916,16 @@ export class SignAvatar {
     if (!this.vrm) return;
     this._face = fr;
     this._word = fr ? word : null;
+    const w = fr && fr.rest > 0 ? Math.min(1, fr.rest) : 0;
+    if (!w) return this._pose(fr);
+    // 시작·끝: 동작 자세와 기본 자세(팔 내림)를 관절마다 섞음 → 손이 자연스럽게 올라오고 내려감
+    this._pose(fr);
+    const a = new Map([...this.driven].map((o) => [o, o.userData.target.clone()]));
+    this._pose(null);
+    for (const [o, q] of a) o.userData.target = q.slerp(o.userData.target, w);
+  }
+
+  _pose(fr) {
     const neutral = !fr || !fr.body;
     for (const s of SIDES) {
       const P = s.pre, R = this.rest[P];
@@ -949,8 +959,17 @@ export class SignAvatar {
             const ft = tip.clone().sub(this.headCenter), d = ft.length(), need = this.headR * 1.02 - d;
             if (need > 0) { ft.z = Math.max(ft.z, 0.02); W.add(ft.normalize().multiplyScalar(need)); }
           }
+          // 손끝·손바닥 가운데가 몸통 안으로 들어가면 손 전체를 앞으로 (장소처럼 손끝이 몸 쪽을 향할 때 몸을 통과해 보이던 문제)
+          for (const [tipIdx, frac] of [[12, 1], [9, 0.55], [8, 1], [4, 0.8]]) {
+            if (!hd[tipIdx]) continue;
+            const dir = V(hd[tipIdx]).sub(V(hd[0])).normalize();
+            const tip = W.clone().add(dir.multiplyScalar(R.handLen * frac));
+            if (Math.abs(tip.x) > this.torsoHalf * 1.05 || tip.y < this._hipsY) continue;
+            const fz = this.frontZ(tip.y);
+            if (isFinite(fz) && tip.z < fz + 0.015) W.z += fz + 0.015 - tip.z;
+          }
         }
-        if (Math.abs(W.x) < this.torsoHalf) {
+        if (Math.abs(W.x) < this.torsoHalf && W.y > this._hipsY) {     // 몸통 높이에서만 (내린 손을 허벅지 앞으로 밀어내지 않게)
           const fz = this.frontZ(W.y);
           if (isFinite(fz) && W.z < fz + this.margin) W.z = fz + this.margin;   // 몸 안으로 파묻히지 않게
         }
