@@ -445,11 +445,9 @@ function renderNone() {
 
 // 단어 박스가 두 줄 이상이면 줄마다 개수가 비슷하도록: 줄 수가 늘지 않는 가장 좁은 폭을 찾아 그 폭으로 맞춤
 function balanceRows(box) {
-  // 1) PC 는 2줄 안에 들어가게 넘치면 글자를 조금씩 줄임. 휴대폰은 글자 크기를 그대로 두고 줄을 늘림
+  // 1) 글자 크기는 항상 그대로 (PC·휴대폰 모두). 단어가 많으면 줄이 늘어남
   box.style.maxWidth = ""; box.style.fontSize = "";
   const lines = () => new Set([...box.children].map(c => c.offsetTop)).size;
-  if (!matchMedia("(max-width: 760px)").matches)
-    for (let f = 1; lines() > 2 && f > 0.72; f -= 0.04) box.style.fontSize = f.toFixed(2) + "rem";
   // 2) 여러 줄이면 줄마다 개수가 비슷하도록: 줄 수가 늘지 않는 가장 좁은 폭 + 여유
   const n = lines();
   if (n <= 1) return;
