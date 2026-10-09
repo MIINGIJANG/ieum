@@ -156,9 +156,8 @@ class SignWords:
             last = same[-1][2] == start
             nxt = next((x[2] for x in items[n + 1:] if x[1] == k), b)
             # 어절에 단어가 하나면 어절 그대로('세척한'), 여러 개면 앞 단어는 그 부분만, 마지막은 어절 끝까지
-            shown = sentence[a:b] if len(same) == 1 else (sentence[same[0][2] if False else start:b] if last else sentence[start:nxt])
-            if len(same) > 1 and same[0][2] == start:
-                shown = sentence[a:nxt]                # 첫 단어는 어절 앞(숫자 등)부터
+            # (단어 앞에 붙은 조사·기호는 빼고: '(RH<70%)를유지해야' → '유지해야')
+            shown = sentence[start:b] if last else sentence[start:nxt]
             shown = shown.strip("“”\"'[]").rstrip(".!?。")
             if shown:                                    # 같은 단어가 다시 나와도 답변 순서 그대로 (수어도 반복함)
                 out.append((g, shown))
