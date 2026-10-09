@@ -50,6 +50,86 @@ def normalize(frames):
     return out
 
 
+# ---------------------------------------------------------------- 2D → 3D (깊이 추정)
+HAND_BONES = [(0, 1), (1, 2), (2, 3), (3, 4), (0, 5), (5, 6), (6, 7), (7, 8), (0, 9), (9, 10), (10, 11), (11, 12),
+              (0, 13), (13, 14), (14, 15), (15, 16), (0, 17), (17, 18), (18, 19), (19, 20)]
+ARM_BONES = [(2, 3), (3, 4), (5, 6), (6, 7)]          # 오른 어깨-팔꿈치, 팔꿈치-손목, 왼쪽 같음
+
+
+def bone_lengths(clips3d):
+    """3D 클립들(정규화된 것)에서 뼈 길이 중앙값 → 2D 클립 깊이 추정에 사용."""
+    import statistics
+    arm = {b: [] for b in ARM_BONES}
+    hand = {b: [] for b in HAND_BONES}
+    for frames in clips3d:
+        for f in frames:
+            b = f.get("body") or []
+            for i, j in ARM_BONES:
+                if i < len(b) and j < len(b) and b[i] and b[j] and len(b[i]) > 2:
+                    arm[(i, j)].append(math.dist(b[i], b[j]))
+            for k in ("lh", "rh"):
+                h = f.get(k)
+                if not h:
+                    continue
+                for i, j in HAND_BONES:
+                    if h[i] and h[j] and len(h[i]) > 2:
+                        hand[(i, j)].append(math.dist(h[i], h[j]))
+    med = lambda xs, d: statistics.median(xs) if xs else d
+    return {"arm": {b: med(v, 0.45) for b, v in arm.items()}, "hand": {b: med(v, 0.06) for b, v in hand.items()}}
+
+
+def lift_2d(frames, L):
+    """2D(정규화) 클립에 깊이를 추정해 3D 로: 3D 클립의 뼈 길이를 알고 있으므로
+    화면에서 짧아 보이는 만큼 앞(카메라 쪽, z 음수)으로 나온 것으로 봄 (수어는 몸 앞에서 하므로 앞쪽으로 가정).
+    손가락은 손바닥 방향으로 같은 비율만큼만 앞으로 (뒤로 꺾인 손가락이 생기지 않게)."""
+    def depth(a, b, length):
+        d = math.dist(a[:2], b[:2])
+        return math.sqrt(max(0.0, length * length - d * d))
+
+    # 뼈 길이: 이 클립 안에서 화면상 가장 길게 보인 길이(= 화면과 나란할 때의 실제 길이)와
+    # 3D 자료의 길이를 클립 크기에 맞춘 값 중 큰 것 (2D 정규화 크기가 3D 와 조금 달라서 클립 기준으로 맞춤)
+    def p95(xs):
+        xs = sorted(xs)
+        return xs[min(len(xs) - 1, int(0.95 * len(xs)))] if xs else 0.0
+    arm_len, hand_len = {}, {}
+    for (i, j) in ARM_BONES:
+        arm_len[(i, j)] = max(p95([math.dist(f["body"][i][:2], f["body"][j][:2]) for f in frames
+                                   if f.get("body") and f["body"][i] and f["body"][j]]), L["arm"][(i, j)])
+    palm2d = p95([math.dist(f[k][0][:2], f[k][9][:2]) for f in frames for k in ("rh", "lh") if f.get(k) and f[k][0] and f[k][9]])
+    hs = palm2d / L["hand"][(0, 9)] if palm2d else 1.0
+    for (i, j) in HAND_BONES:
+        hand_len[(i, j)] = max(p95([math.dist(f[k][i][:2], f[k][j][:2]) for f in frames for k in ("rh", "lh")
+                                    if f.get(k) and f[k][i] and f[k][j]]), L["hand"][(i, j)] * hs)
+    out = []
+    for f in frames:
+        g = dict(f)
+        b = f.get("body")
+        if b:
+            nb = [None if p is None else [p[0], p[1], 0.0] for p in b]
+            if nb[0]:
+                nb[0][2] = -0.4                                    # 코는 목보다 앞
+            for sho, elb, wri in ((2, 3, 4), (5, 6, 7)):
+                if nb[sho] and nb[elb]:
+                    nb[elb][2] = round(nb[sho][2] - 0.5 * depth(nb[sho], nb[elb], arm_len[(sho, elb)]), 4)
+                if nb[elb] and nb[wri]:
+                    nb[wri][2] = round(nb[elb][2] - depth(nb[elb], nb[wri], arm_len[(elb, wri)]), 4)
+            g["body"] = nb
+        for k, wi in (("rh", 4), ("lh", 7)):
+            h = f.get(k)
+            if not h:
+                continue
+            wz = g["body"][wi][2] if g.get("body") and g["body"][wi] else 0.0
+            nh = [None if p is None else [p[0], p[1], 0.0] for p in h]
+            if nh[0]:
+                nh[0][2] = wz
+            for i, j in HAND_BONES:                                 # 뿌리→끝 순서라 부모 깊이가 먼저 정해짐
+                if nh[i] and nh[j]:
+                    nh[j][2] = round(nh[i][2] - 0.6 * depth(nh[i], nh[j], hand_len[(i, j)]), 4)
+            g[k] = nh
+        out.append(g)
+    return out
+
+
 def load_team_clip(path):
     """조원 형식(글로스 1개 = JSON 1개) 읽기.
 
@@ -60,6 +140,9 @@ def load_team_clip(path):
     """
     d = json.loads(Path(path).read_text(encoding="utf-8"))
     L = d["landmarks"]
+    if "pose" in L:      # 조원 형식 2 (2026-10-10): landmarks = {pose, face, right_hand, left_hand} 픽셀 x,y,신뢰도
+        L = {"pose_keypoints_2d": L["pose"], "face_keypoints_2d": L.get("face") or [],
+             "hand_right_keypoints_2d": L.get("right_hand") or [], "hand_left_keypoints_2d": L.get("left_hand") or []}
     dim = 3 if any(k.endswith("_3d") for k in L) else 2
     sfx = "_3d" if dim == 3 else "_2d"
 
@@ -421,7 +504,7 @@ def compose(glosses, mdict: MotionDict, fps=FPS, transition=0.25, missing_sec=0.
     for g in glosses:
         clip = mdict.get(g) if mdict else None
         if clip and str(clip.get("source", "")).endswith("(2D)"):
-            clip = None        # 2D 자료(깊이 없음)는 손가락·팔 방향이 뒤틀려 보여서 쓰지 않음 → 회색 단어 (3D 자료를 구하면 다시 사용)
+            clip = None        # 깊이 추정을 하지 않은 2D 자료는 손가락·팔 방향이 뒤틀려 보여서 쓰지 않음 ('2D→3D' 로 저장된 것은 사용)
         if clip and clip["frames"]:
             src = _relax_low_hands(_smooth(_filter_face(_fix_hands(clip["frames"]))))
             n = max(2, round(len(src) * fps / clip.get("fps", fps) / speed))

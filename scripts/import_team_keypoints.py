@@ -17,10 +17,11 @@ import unicodedata
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from ksl.motion import MotionDict, calibrate_expressions, load_team_clip, normalize  # noqa: E402
+from ksl.motion import MotionDict, bone_lengths, calibrate_expressions, lift_2d, load_team_clip, normalize  # noqa: E402
 
 ap = argparse.ArgumentParser()
 ap.add_argument("root")
+ap.add_argument("--extra", nargs="*", default=[], help="문장 폴더 밖의 단어 키포인트 JSON (조원 형식 2: gloss_raw 사용)")
 ap.add_argument("--out", default="data/motions")
 ap.add_argument("--sentences_out", default="data/demo_sentences.json")
 a = ap.parse_args()
@@ -43,10 +44,25 @@ for sf in sorted(root.glob("*/sentence.json")):
     sentences.append({"korean": meta["sentence"], "gloss": glosses, "complete": "일부" not in folder,
                       "folder": folder})
 
+for f in a.extra:
+    meta = json.loads(Path(f).read_text(encoding="utf-8"))
+    g = meta.get("gloss_raw") or meta.get("gloss") or Path(f).stem
+    if g in clips:
+        continue
+    frames, fps, dim = load_team_clip(f)
+    clips[g] = (frames, fps, dim, f"{unicodedata.normalize('NFC', Path(f).name)} ({dim}D)")
+    report.append(f"  {g:<8} {len(frames):>3}프레임 {dim}D  ← 추가 파일")
+
 # 표정: 전체 클립 얼굴 특징 분포로 보정한 뒤 저장
 calibrate_expressions([c[0] for c in clips.values()])
+# 2D 자료는 3D 자료의 뼈 길이로 깊이를 추정해 3D 로 바꿔 저장
+L = bone_lengths([normalize(c[0]) for c in clips.values() if c[2] == 3])
 for g, (frames, fps, dim, src) in clips.items():
-    MotionDict.save_clip(a.out, g, normalize(frames), round(fps), source=src)
+    fr = normalize(frames)
+    if dim == 2:
+        fr = lift_2d(fr, L)
+        src = src.replace("(2D)", "(2D→3D)")
+    MotionDict.save_clip(a.out, g, fr, round(fps), source=src)
 saved = clips
 
 Path(a.sentences_out).parent.mkdir(parents=True, exist_ok=True)
