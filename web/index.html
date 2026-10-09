@@ -479,9 +479,9 @@ function render() {
       li.textContent = (s.words && s.words[i]) || label(g);   // 답변에 쓰인 모양 그대로 (예: '이상이', '깨끗하게')
       const seg = motion ? motion.segments[k] : null;
       const it = { gloss: g, li, seg };
-      if (!(seg && seg.has_motion)) { li.className = "nomo"; li.title = "아직 아바타 동작이 없는 단어"; }
+      if (!(seg && seg.has_motion)) li.className = "nomo";
       else {
-        li.className = "play"; li.title = "누르면 이 단어만 다시 보기";
+        li.className = "play";
         li.tabIndex = 0; li.setAttribute("role", "button");
         li.onclick = () => playWord(it);
         li.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); playWord(it); } };

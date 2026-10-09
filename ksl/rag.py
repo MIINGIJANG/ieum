@@ -112,7 +112,9 @@ def expand_query(q):
 
 
 # ---------------- 검색기 ----------------
-LLM_STATUS = {"last": None}   # 마지막 Claude 호출 결과 (/llm_check 로 확인)
+LLM_STATUS = {"last": None}
+_LLM_CACHE = {}               # (질문, 검색 결과) → Claude 답변
+_HTTP = None   # 마지막 Claude 호출 결과 (/llm_check 로 확인)
 
 
 class TfidfRetriever:
@@ -233,19 +235,28 @@ class SafetyRAG:
             "- 문서에 관련 내용이 전혀 없을 때만 '문서에서 찾을 수 없습니다' 한 줄만\n\n"
             f"[문서]\n{ctx}\n\n[질문]\n{query}"
         )
-        r = httpx.post(
+        key = (query.strip(), tuple((h["page"], h["text"][:40]) for h in hits), n)
+        if key in _LLM_CACHE:                                   # 같은 질문은 다시 부르지 않음 (바로 답 + 비용 0)
+            return list(_LLM_CACHE[key])
+        global _HTTP
+        if _HTTP is None:
+            _HTTP = httpx.Client(timeout=30)                    # 연결 재사용 → 질문마다 접속하는 시간 절약
+        r = _HTTP.post(
             "https://api.anthropic.com/v1/messages",
             headers={"x-api-key": os.environ["ANTHROPIC_API_KEY"],
                      "anthropic-version": "2023-06-01", "content-type": "application/json"},
             json={"model": os.environ.get("LLM_MODEL", "claude-haiku-4-5-20251001"),
                   "max_tokens": 300, "messages": [{"role": "user", "content": prompt}]},
-            timeout=30,
         )
         r.raise_for_status()
         text = "".join(b.get("text", "") for b in r.json()["content"])
         LLM_STATUS["raw"] = text.strip()[:300]
         LLM_STATUS["pages"] = [h["page"] for h in hits]
-        return [s.strip() for s in text.split("\n") if s.strip()][:n]
+        out = [s.strip() for s in text.split("\n") if s.strip()][:n]
+        if len(_LLM_CACHE) > 500:
+            _LLM_CACHE.clear()
+        _LLM_CACHE[key] = out
+        return list(out)
 
 
 def load_questions(path):

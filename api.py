@@ -178,6 +178,18 @@ def warmup():
 def _warm_on_start():
     """서버가 켜질 때(메인 스레드) 미리 준비 → 첫 방문자의 로딩 화면이 서버를 기다리지 않음."""
     warmup()
+    # Claude 답변 모드면 예시 질문의 답을 뒤에서 미리 만들어 둠 → 예시 질문을 누르면 바로 답 (서버가 켜질 때 1번, 약 40원)
+    # (번역 모델은 위에서 메인 스레드로 이미 불러왔으므로, 여기서는 Claude 호출만 함)
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        import threading
+
+        def prefetch():
+            for e in examples():
+                try:
+                    pipe.query(e["question"])
+                except Exception as err:
+                    print("[이음] 예시 답 미리 만들기 실패:", err)
+        threading.Thread(target=prefetch, daemon=True).start()
 
 
 @app.get("/pages")
