@@ -8,7 +8,6 @@
 비교: 거절 기능 끈 상태(min_score=0, 핵심어 검사 없음) vs 켠 상태
 """
 import argparse
-import csv
 import os
 import sys
 import warnings
@@ -17,31 +16,13 @@ warnings.filterwarnings("ignore")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from ksl.pipeline import SafetySignPipeline  # noqa: E402
 
-K = "data/kosha"
-rows = lambda f: list(csv.DictReader(open(f"{K}/{f}", encoding="utf-8")))
+from ksl.evaluation import evaluate  # noqa: E402
+import json  # noqa: E402
 
 
 def run(p, label):
-    inq = rows("eval_questions.csv") + rows("heldout_questions.csv")
-    answered = hit = 0
-    for r in inq:
-        out = p.query(r["question"])
-        if out["mode"] != "none":
-            answered += 1
-            if r["gold_page"] and any(s["page"] == int(r["gold_page"]) for s in out.get("sources", [])):
-                hit += 1
-    gold = sum(1 for r in inq if r["gold_page"])
-    oos = rows("out_of_scope_questions.csv")
-    refused = [r for r in oos if p.query(r["question"])["mode"] == "none"]
-    leaked = [r["question"] for r in oos if r not in refused]
-    sents = rows("safety_sentences.csv")
-    translated = sum(1 for r in sents if p.query(r["sentence"])["mode"] == "translate")
     print(f"\n[{label}]")
-    print(f"  문서 안 질문 {len(inq)}개: 답함 {answered} ({answered/len(inq):.0%}), "
-          f"정답 쪽이 출처에 있음 {hit}/{gold}")
-    print(f"  문서 밖 입력 {len(oos)}개: 답하지 않음 {len(refused)} ({len(refused)/len(oos):.0%})"
-          + (f"  ← 새어 나간 것: {leaked}" if leaked else ""))
-    print(f"  안전 안내 문장 {len(sents)}개: 번역함 {translated}")
+    print(json.dumps(evaluate(p)["요약"], ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

@@ -123,6 +123,34 @@ def llm_check():
             "Claude 원문": LLM_STATUS.get("raw"), "보낸 문서 쪽": LLM_STATUS.get("pages")}
 
 
+_EVAL = {"state": "대기", "result": None}
+
+
+@app.get("/eval")
+def eval_now(detail: bool = False):
+    """환각 방지 평가를 이 서버(Claude 키가 있으면 Claude 답변 모드)로 한 번 실행. 브라우저로 열면 됨.
+    처음 열면 뒤에서 시작(질문 약 80개, 1~3분, Claude 비용 약 250원) → 다시 열면 결과.
+    한 번 끝난 결과는 서버가 다시 켜질 때까지 그대로 보여줌 (여러 번 열어도 비용 1번)."""
+    import threading
+    if _EVAL["state"] == "대기":
+        _EVAL["state"] = "진행 중"
+
+        def job():
+            from ksl.evaluation import evaluate
+            try:
+                _EVAL["result"] = evaluate(pipe, detail=True)
+                _EVAL["state"] = "완료"
+            except Exception as e:
+                _EVAL["result"], _EVAL["state"] = {"오류": str(e)}, "완료"
+        threading.Thread(target=job, daemon=True).start()
+    if _EVAL["state"] != "완료":
+        return {"상태": "평가 진행 중입니다. 1~2분 뒤 이 페이지를 새로고침하세요.",
+                "Claude 답변 모드": bool(os.environ.get("ANTHROPIC_API_KEY"))}
+    r = _EVAL["result"]
+    return {"상태": "완료", "Claude 답변 모드": bool(os.environ.get("ANTHROPIC_API_KEY")),
+            **(r if detail else {k: v for k, v in r.items() if k != "자세히"})}
+
+
 _WARM = {"done": False}
 
 
