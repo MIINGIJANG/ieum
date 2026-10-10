@@ -83,6 +83,14 @@ KSL_CKPT=checkpoints/test/best.pt KSL_INDEX=checkpoints/sample_index.pkl uvicorn
 - 질문 모드에서 질문이 안내 문장과 충분히 비슷하면 그 문장으로 답함 (`answer_mode: "demo"`)
 - 같은 글로스는 문장이 달라도 동작을 재사용 → 동작사전에 있는 글로스끼리는 새 문장도 이어붙일 수 있음
 
+### AI Hub 단어 동작 추가 (재난 안전 수어영상 VL 형태소)
+```bash
+# 형태소 JSON 에서 단어 구간을 잘라낸 후보(<글로스>__n.json.gz)를 data/raw/aihub_sel3 에 두고
+python scripts/data/import_aihub_clips.py data/raw/aihub_sel3 --skip_existing --out data/sign/motions
+```
+- 글로스마다 후보 중 3D 이면서 손이 잘 잡히고 키포인트가 튀지 않는 것 1개를 골라 저장 (조원 동작은 그대로)
+- 말 → 글로스 연결은 `data/sign/sign_words.csv` 에서 (예: 교체·바꾸 → 바꾸다1, 분진 → 먼지1#)
+
 ### 샘플로 웹 화면까지 바로 보기
 ```bash
 python scripts/data/make_sample_data.py && python scripts/data/make_sample_motion.py
