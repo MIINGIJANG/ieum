@@ -100,7 +100,7 @@ KSL_CKPT=checkpoints/run1/best.pt KSL_INDEX=checkpoints/kosha_index.pkl KSL_MOTI
 python scripts/data/import_team_keypoints.py ~/Downloads/문장별_수어키포인트 --out data/sign/motions
 KSL_CKPT=checkpoints/test/best.pt KSL_INDEX=checkpoints/sample_index.pkl uvicorn api:app --port 8000
 ```
-- 5개 안내 문장은 **번역 메모리**: 입력이 이 문장과 같으면 모델 대신 조원이 확정한 글로스를 사용 (`method: "memory"`)
+- 11개 안내 문장은 **번역 메모리**: 입력이 이 문장과 같으면 모델 대신 조원이 확정한 글로스를 사용 (`method: "memory"`)
 - 질문 모드에서 질문이 안내 문장과 충분히 비슷하면 그 문장으로 답함 (`answer_mode: "demo"`)
 - 같은 글로스는 문장이 달라도 동작을 재사용 → 동작사전에 있는 글로스끼리는 새 문장도 이어붙일 수 있음
 
@@ -111,6 +111,9 @@ python scripts/data/import_aihub_clips.py data/raw/aihub_sel3 --skip_existing --
 ```
 - 글로스마다 후보 중 3D 이면서 손이 잘 잡히고 키포인트가 튀지 않는 것 1개를 골라 저장 (조원 동작은 그대로)
 - 말 → 글로스 연결은 `data/sign/sign_words.csv` 에서 (예: 교체·바꾸 → 바꾸다1, 분진 → 먼지1#)
+- 조원 추가 안내 문장 5개(07~11: 보안경·안전화·귀마개·안전대·호흡용 보호구)는 조원 키포인트 대부분이 1프레임짜리라,
+  같은 뜻의 글로스를 AI Hub VL 에서 잘라 씀 (쓰러지다0·발0·흩날리다0·일어나다0·나쁘다1·안전벨트0 추가, 용품→물건1, 운동화→신발1, 상부→높다1 등).
+  소음·귀마개·보안경처럼 맞는 수어가 없는 단어는 빠져 있어 `complete: false` — 수어 의미 검수 필요
 
 ### 샘플로 웹 화면까지 바로 보기
 ```bash
