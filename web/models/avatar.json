@@ -47,6 +47,5 @@
   "undershirt": true,
   "neckLength": 1.15,
   "shoulderLift": 8,
-  "frameMargin": 0.07,
-  "vestMarks": 0.06
+  "frameMargin": 0.07
 }
