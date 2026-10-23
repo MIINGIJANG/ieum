@@ -1,6 +1,12 @@
 # avatar.glb 출처·라이선스
 
-- 원본: `mpfb.glb` — https://github.com/met4citizen/TalkingHead (avatars/mpfb.glb)
-- 만든 도구: Blender + MPFB (MakeHuman), 라이선스 **CC0 1.0** (TalkingHead README: "The avatar is licensed under CC0")
-- 바꾼 점: `scripts/deploy/slim_glb.mjs` 로 모프 법선·눈동자 모프 제거, 텍스처 WebP 2048 (37MB → 8.5MB).
-  화면에서 옷 색을 짙게, 안전모를 씌움 (web/avatar.js)
+- 원본: Microsoft Rocketbox `Assets/Avatars/Professions/Construction_Male_07` — https://github.com/microsoft/Microsoft-Rocketbox
+- 라이선스: **MIT** (Copyright (c) Microsoft Corporation). 상업적 사용·수정·재배포 허용, 저작권·라이선스 고지 유지
+- 바꾼 점: `scripts/avatar/rocketbox_to_glb.py` (Blender) 로 표정 있는 FBX → GLB, 셰이프키는 ARKit 52(눈동자 제외)·입 모양 15개만,
+  `scripts/deploy/slim_glb.mjs` 로 텍스처 WebP 2048 (31MB → 5MB)
+
+MIT License — Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+documentation files, to deal in the Software without restriction, including without limitation the rights to use, copy, modify,
+merge, publish, distribute, sublicense, and/or sell copies, subject to the following conditions: The above copyright notice and
+this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS",
+WITHOUT WARRANTY OF ANY KIND.

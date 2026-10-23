@@ -1,4 +1,4 @@
-// 일반 GLB 캐릭터(Character Creator 4, Mixamo/MPFB/Ready Player Me 이름 규칙 등) → VRM 과 같은 '사람 뼈대'로 묶기.
+// 일반 GLB 캐릭터(Character Creator 4, Mixamo/MPFB/Ready Player Me, Rocketbox(3ds Max Biped 'Bip01 ...') 이름 규칙 등) → VRM 과 같은 '사람 뼈대'로 묶기.
 // three-vrm 의 VRMHumanoid 를 그대로 써서 '정규화 뼈대'(기본 자세에서 모든 회전 0)를 만들면
 // 아바타 코드(avatar.js)는 VRM 이든 CC4 든 같은 방식으로 움직일 수 있다.
 //
@@ -10,40 +10,41 @@ const SIDE = { left: ["l", "left"], right: ["r", "right"] };
 
 // VRM 뼈 이름 → 후보 이름들 (소문자, 접두어 'cc_base_' · 'mixamorig' · 'rl_' 뗀 뒤 비교). {s} 는 l/left 또는 r/right
 const CANDIDATES = {
-  hips: ["hip", "hips", "pelvis"],
-  spine: ["waist", "spine", "spine01"],
-  chest: ["spine01", "spine1", "spine02", "chest"],
-  upperChest: ["spine02", "spine2", "upperchest"],
-  neck: ["necktwist01", "neck", "neck1"],
-  head: ["head"],
-  jaw: ["jawroot", "jaw"],
-  "{S}Eye": ["{s}_eye", "{s}eye"],
-  "{S}Shoulder": ["{s}_clavicle", "{s}shoulder", "{s}_shoulder"],
-  "{S}UpperArm": ["{s}_upperarm", "{s}arm", "{s}upperarm"],
-  "{S}LowerArm": ["{s}_forearm", "{s}forearm", "{s}lowerarm"],
-  "{S}Hand": ["{s}_hand", "{s}hand"],
-  "{S}ThumbMetacarpal": ["{s}_thumb1", "{s}handthumb1"],
-  "{S}ThumbProximal": ["{s}_thumb2", "{s}handthumb2"],
-  "{S}ThumbDistal": ["{s}_thumb3", "{s}handthumb3"],
-  "{S}IndexProximal": ["{s}_index1", "{s}handindex1"],
-  "{S}IndexIntermediate": ["{s}_index2", "{s}handindex2"],
-  "{S}IndexDistal": ["{s}_index3", "{s}handindex3"],
-  "{S}MiddleProximal": ["{s}_mid1", "{s}handmiddle1", "{s}_middle1"],
-  "{S}MiddleIntermediate": ["{s}_mid2", "{s}handmiddle2", "{s}_middle2"],
-  "{S}MiddleDistal": ["{s}_mid3", "{s}handmiddle3", "{s}_middle3"],
-  "{S}RingProximal": ["{s}_ring1", "{s}handring1"],
-  "{S}RingIntermediate": ["{s}_ring2", "{s}handring2"],
-  "{S}RingDistal": ["{s}_ring3", "{s}handring3"],
-  "{S}LittleProximal": ["{s}_pinky1", "{s}handpinky1"],
-  "{S}LittleIntermediate": ["{s}_pinky2", "{s}handpinky2"],
-  "{S}LittleDistal": ["{s}_pinky3", "{s}handpinky3"],
-  "{S}UpperLeg": ["{s}_thigh", "{s}upleg", "{s}upperleg"],
-  "{S}LowerLeg": ["{s}_calf", "{s}leg", "{s}lowerleg"],
-  "{S}Foot": ["{s}_foot", "{s}foot"],
-  "{S}Toes": ["{s}_toebase", "{s}toebase", "{s}toes"],
+  hips: ["hip", "hips", "pelvis", "bip01pelvis"],
+  spine: ["waist", "spine", "spine01", "bip01spine"],
+  chest: ["spine01", "spine1", "spine02", "chest", "bip01spine1"],
+  upperChest: ["spine02", "spine2", "upperchest", "bip01spine2"],
+  neck: ["necktwist01", "neck", "neck1", "bip01neck"],
+  head: ["head", "bip01head"],
+  jaw: ["jawroot", "jaw", "bip01mjaw"],
+  "{S}Eye": ["{s}_eye", "{s}eye", "bip01{s}eye"],
+  "{S}Shoulder": ["{s}_clavicle", "{s}shoulder", "{s}_shoulder", "bip01{s}clavicle"],
+  "{S}UpperArm": ["{s}_upperarm", "{s}arm", "{s}upperarm", "bip01{s}upperarm"],
+  "{S}LowerArm": ["{s}_forearm", "{s}forearm", "{s}lowerarm", "bip01{s}forearm"],
+  "{S}Hand": ["{s}_hand", "{s}hand", "bip01{s}hand"],
+  "{S}ThumbMetacarpal": ["{s}_thumb1", "{s}handthumb1", "bip01{s}finger0"],
+  "{S}ThumbProximal": ["{s}_thumb2", "{s}handthumb2", "bip01{s}finger01"],
+  "{S}ThumbDistal": ["{s}_thumb3", "{s}handthumb3", "bip01{s}finger02"],
+  "{S}IndexProximal": ["{s}_index1", "{s}handindex1", "bip01{s}finger1"],
+  "{S}IndexIntermediate": ["{s}_index2", "{s}handindex2", "bip01{s}finger11"],
+  "{S}IndexDistal": ["{s}_index3", "{s}handindex3", "bip01{s}finger12"],
+  "{S}MiddleProximal": ["{s}_mid1", "{s}handmiddle1", "{s}_middle1", "bip01{s}finger2"],
+  "{S}MiddleIntermediate": ["{s}_mid2", "{s}handmiddle2", "{s}_middle2", "bip01{s}finger21"],
+  "{S}MiddleDistal": ["{s}_mid3", "{s}handmiddle3", "{s}_middle3", "bip01{s}finger22"],
+  "{S}RingProximal": ["{s}_ring1", "{s}handring1", "bip01{s}finger3"],
+  "{S}RingIntermediate": ["{s}_ring2", "{s}handring2", "bip01{s}finger31"],
+  "{S}RingDistal": ["{s}_ring3", "{s}handring3", "bip01{s}finger32"],
+  "{S}LittleProximal": ["{s}_pinky1", "{s}handpinky1", "bip01{s}finger4"],
+  "{S}LittleIntermediate": ["{s}_pinky2", "{s}handpinky2", "bip01{s}finger41"],
+  "{S}LittleDistal": ["{s}_pinky3", "{s}handpinky3", "bip01{s}finger42"],
+  "{S}UpperLeg": ["{s}_thigh", "{s}upleg", "{s}upperleg", "bip01{s}thigh"],
+  "{S}LowerLeg": ["{s}_calf", "{s}leg", "{s}lowerleg", "bip01{s}calf"],
+  "{S}Foot": ["{s}_foot", "{s}foot", "bip01{s}foot"],
+  "{S}Toes": ["{s}_toebase", "{s}toebase", "{s}toes", "bip01{s}toe0"],
 };
 
-const norm = (n) => n.toLowerCase().replace(/^(cc_base_|rl_|mixamorig:?|armature[_|:]?)/, "").replace(/[\s.]/g, "");
+// 비교용 이름: 소문자, 접두어 떼고, 공백·점·밑줄 제거 (three.js 는 노드 이름의 공백을 밑줄로 바꿈: 'Bip01 L Hand' → 'Bip01_L_Hand')
+const norm = (n) => n.toLowerCase().replace(/^(cc_base_|rl_|mixamorig:?|armature[_|:]?)/, "").replace(/[\s._]/g, "");
 
 export function findBones(root, overrides = {}) {
   const byName = new Map();
@@ -55,7 +56,7 @@ export function findBones(root, overrides = {}) {
           abbr.flatMap((s) => cands.map((c) => c.replace("{s}", s)))])
       : [[vrmName, cands]];
     for (const [name, list] of variants) {
-      const hit = list.map((c) => byName.get(c)).find((o) => o && (o.isBone || o.children.length || /eye|jaw/i.test(name)));
+      const hit = list.map((c) => byName.get(norm(c))).find((o) => o && (o.isBone || o.children.length || /eye|jaw/i.test(name)));
       if (hit) out[name] = hit;
     }
   }
