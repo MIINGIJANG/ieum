@@ -112,6 +112,44 @@ def expand_query(q):
 
 
 # ---------------- 검색기 ----------------
+# 단어 BM25 를 글자 TF-IDF 에 더하는 비율. 새로 쓴 질문(heldout2)에서 Recall@3 0.70 → 0.85
+# (0.3~1.5 가 개발용·heldout 질문에서 같은 성능이라 그 가운데쯤 0.8 선택. scripts/eval/eval_retrieval.py)
+HYBRID_W = 0.8
+_KIWI = None
+
+
+def _words(text):
+    """형태소 분석으로 명사·동사·형용사 어간 등 내용어만 (조사·어미 제외)."""
+    global _KIWI
+    if _KIWI is None:
+        from kiwipiepy import Kiwi
+        _KIWI = Kiwi()
+    return [t.form for t in _KIWI.tokenize(text) if t.tag.startswith(("NN", "VV", "VA", "SL", "SN", "XR"))]
+
+
+class BM25:
+    """Okapi BM25 (k1=1.5, b=0.75)."""
+
+    def __init__(self, docs, k1=1.5, b=0.75):
+        from collections import Counter
+        self.k1, self.b = k1, b
+        self.tf = [Counter(d) for d in docs]
+        self.len = np.array([len(d) for d in docs], dtype=float)
+        self.avg = self.len.mean() or 1.0
+        n, df = len(docs), Counter(w for d in docs for w in set(d))
+        self.idf = {w: np.log((n - c + 0.5) / (c + 0.5) + 1) for w, c in df.items()}
+
+    def scores(self, q):
+        out = np.zeros(len(self.tf))
+        norm = self.k1 * (1 - self.b + self.b * self.len / self.avg)
+        for w in q:
+            if w not in self.idf:
+                continue
+            f = np.array([tf.get(w, 0) for tf in self.tf], dtype=float)
+            out += self.idf[w] * f * (self.k1 + 1) / (f + norm)
+        return out
+
+
 LLM_STATUS = {"last": None}
 _LLM_CACHE = {}               # (질문, 검색 결과) → Claude 답변
 _HTTP = None   # 마지막 Claude 호출 결과 (/llm_check 로 확인)
@@ -183,9 +221,25 @@ class SafetyRAG:
         return cls(d["chunks"], d["retriever"])
 
     def search(self, query, k=3, expand=True):
-        s = self.retriever.scores(expand_query(query) if expand else query)
-        idx = np.argsort(-s)[:k]
+        """순위 = 글자 TF-IDF + HYBRID_W × 단어 BM25 (둘 다 1위=1 로 맞춤).
+        'score' 는 TF-IDF 점수 그대로 (답변 거절 기준 min_score 가 이 점수 기준)."""
+        q = expand_query(query) if expand else query
+        s = self.retriever.scores(q)
+        rank = s / (s.max() or 1)
+        bm = self._bm25()
+        if bm is not None and HYBRID_W:
+            b = bm.scores(_words(q))
+            rank = rank + HYBRID_W * b / (b.max() or 1)
+        idx = np.argsort(-rank)[:k]
         return [{**self.chunks[i], "score": round(float(s[i]), 4)} for i in idx]
+
+    def _bm25(self):
+        if not hasattr(self, "_bm"):
+            try:
+                self._bm = BM25([_words(c["text"]) for c in self.chunks])
+            except ImportError:          # kiwipiepy 없으면 글자 TF-IDF 만
+                self._bm = None
+        return self._bm
 
     # ---------- 답변 문장 만들기 ----------
     def answer(self, query, hits, max_sentences=2):
