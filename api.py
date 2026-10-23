@@ -9,23 +9,31 @@ uvicorn api:app --port 8000
 명세: docs/API.md
 """
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
-
-
-class UTF8JSON(JSONResponse):
-    media_type = "application/json; charset=utf-8"   # 브라우저(Safari 등)에서 한글이 깨지지 않게
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from ksl.pipeline import SafetySignPipeline
 
+
+class UTF8JSON(JSONResponse):
+    media_type = "application/json; charset=utf-8"   # 브라우저(Safari 등)에서 한글이 깨지지 않게
+
+
+@asynccontextmanager
+async def lifespan(app):
+    _warm_on_start()
+    yield
+
+
 ROOT = Path(__file__).resolve().parent
-app = FastAPI(title="이음 — 산업안전 수어 안내 API", version="0.3.0", default_response_class=UTF8JSON)
+app = FastAPI(title="이음 — 산업안전 수어 안내 API", version="0.4.0", default_response_class=UTF8JSON, lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.add_middleware(GZipMiddleware, minimum_size=1000)   # 아바타(6MB→2.5MB)·동작 JSON 압축 → 휴대폰 로딩 빠르게
 
@@ -174,9 +182,11 @@ def warmup():
     return {"ok": True, "ms": round((time.time() - t0) * 1000)}
 
 
-@app.on_event("startup")
 def _warm_on_start():
-    """서버가 켜질 때(메인 스레드) 미리 준비 → 첫 방문자의 로딩 화면이 서버를 기다리지 않음."""
+    """서버가 켜질 때(lifespan, 메인 스레드) 미리 준비 → 첫 방문자의 로딩 화면이 서버를 기다리지 않음.
+    KSL_NO_WARMUP=1 이면 건너뜀 (테스트용)."""
+    if os.environ.get("KSL_NO_WARMUP"):
+        return
     warmup()
     # Claude 답변 모드면 예시 질문의 답을 뒤에서 미리 만들어 둠 → 예시 질문을 누르면 바로 답 (서버가 켜질 때 1번, 약 40원)
     # (번역 모델은 위에서 메인 스레드로 이미 불러왔으므로, 여기서는 Claude 호출만 함)

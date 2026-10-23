@@ -477,7 +477,7 @@ function render() {
       const li = document.createElement("li");
       li.textContent = (s.words && s.words[i]) || label(g);   // 답변에 쓰인 모양 그대로 (예: '이상이', '깨끗하게')
       const seg = motion ? motion.segments[k] : null;
-      const it = { gloss: g, li, seg };
+      const it = { gloss: g, li, seg, nms: (s.nms && s.nms[i]) || null };   // 문법 표정·고개 (부정·조건·필요 등)
       if (!(seg && seg.has_motion)) li.className = "nomo";
       else {
         li.className = "play";
@@ -550,7 +550,7 @@ function play(m = motion, only = null) {
     const fr = m && m.frames.length ? m.frames[f] : null;
     const cur = currentItem(f, m, only), it = cur && cur.it, seg = cur && cur.seg;
     const word = seg && seg.end > seg.start
-      ? { gloss: seg.gloss || it.gloss, t: (f - seg.start) / (seg.end - seg.start) } : null;
+      ? { gloss: seg.gloss || it.gloss, t: (f - seg.start) / (seg.end - seg.start), nms: it && it.nms } : null;
     if (window.avatar) window.avatar.setFrame(fr, word);   // 단어별 표정·고개 움직임을 위해 지금 단어도 전달
     items.forEach(x => x.li.classList.toggle("active", x === it));
     if (frameF < n) raf = requestAnimationFrame(loop);

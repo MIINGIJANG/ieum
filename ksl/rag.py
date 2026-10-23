@@ -58,19 +58,65 @@ def _sentences(text):
     return [s for s in sents if len(s) > 3]
 
 
-def chunk_pages(pages, doc_name, max_chars=350, overlap=1):
-    """문장 경계를 지키며 max_chars 이하로 묶고, 앞 chunk의 마지막 문장 overlap개를 겹침."""
-    chunks = []
+_HEAD = re.compile(r"^\s*(\d{1,2})\.((?:\d{1,2}\.?){0,2})\s*(.*)$")
+
+
+def _heading(line, top):
+    """'7.2안전화의 종류' 같은 절 제목이면 (큰 번호, 제목), 아니면 None.
+    표 안의 '1.용광로, 평로…' 같은 번호 목록과 구분: 큰 절은 번호가 차례대로(top+1), 작은 절은 지금 큰 절 번호로 시작,
+    제목은 짧고 쉼표가 없어야 함."""
+    m = _HEAD.match(line)
+    if not m:
+        return None
+    major, sub = int(m.group(1)), m.group(2).rstrip(".")
+    title = re.sub(r"\s+", " ", m.group(3).split("(")[0]).strip()
+    if not re.match(r"[가-힣]", title) or len(title) > 24 or "," in title:
+        return None
+    if sub:
+        return (major, f"{major}.{sub} {title}") if major == top else None
+    if re.search(r"장소|업무|하는|하거나", title):        # '7.녹인 금속을 운반하거나 주입하는 장소' (표 안 번호 목록)
+        return None
+    return (major, f"{major}. {title}") if major == top + 1 else None
+
+
+def _page_sections(pages):
+    """쪽마다 [((큰 절, 작은 절), 그 절의 글)] — 절이 쪽을 넘어가도 이어짐."""
+    top, big, small, out = 0, "", "", []
     for page, text in pages:
-        sents = _sentences(text)
+        segs, buf = [], []
+        for line in text.split("\n"):
+            h = _heading(line, top)
+            if h:
+                segs.append(((big, small), "\n".join(buf)))
+                buf = []
+                if h[1].startswith(f"{h[0]}. "):
+                    top, big, small = h[0], h[1], ""
+                else:
+                    small = h[1]
+            buf.append(line)
+        segs.append(((big, small), "\n".join(buf)))
+        out.append((page, [(sec, t) for sec, t in segs if t.strip()]))
+    return out
+
+
+def chunk_pages(pages, doc_name, max_chars=350, overlap=1):
+    """문장 경계를 지키며 max_chars 이하로 묶고, 앞 chunk의 마지막 문장 overlap개를 겹침.
+    chunk 마다 속한 절 제목(section)도 기록 → 검색 때 '7.2 안전화의 종류' 같은 문맥으로 씀 (표 칸만 있는 chunk 도 찾게)."""
+    chunks = []
+    for page, segs in _page_sections(pages):
+        sents = [(s, sec) for sec, t in segs for s in _sentences(t)]
         cur = []
+
+        def flush():
+            secs = list(dict.fromkeys(x for _, sec in cur for x in sec if x))   # 큰 절·작은 절 제목 (겹치지 않게)
+            chunks.append({"doc": doc_name, "page": page, "text": "\n".join(s for s, _ in cur), "section": " ".join(secs)})
         for s in sents:
-            if cur and sum(len(x) for x in cur) + len(s) > max_chars:
-                chunks.append({"doc": doc_name, "page": page, "text": "\n".join(cur)})
+            if cur and sum(len(x) for x, _ in cur) + len(s[0]) > max_chars:
+                flush()
                 cur = cur[-overlap:] if overlap else []
             cur.append(s)
         if cur:
-            chunks.append({"doc": doc_name, "page": page, "text": "\n".join(cur)})
+            flush()
     for i, c in enumerate(chunks):
         c["id"] = i
     return chunks
@@ -88,9 +134,10 @@ QUERY_SYNONYMS = {
     r"높은\s*곳|추락|떨어[져지질]": "추락 떨어질 안전대",
     r"먼지|가루": "분진 방진",
     r"뜨거|열기|화상": "고열 방열",
+    r"용광로|제련|쇳물|녹인\s*금속|용해로": "고열작업 방열복 방열장갑",
     r"(?<!정)전기|감전|전압": "감전 절연 내전압성",
-    r"추운|냉동|영하": "저온 방한",
-    r"신발|구두|장화": "안전화",
+    r"추운|냉동|영하|차가|차갑": "저온 저온물체 방한",
+    r"신발|구두|장화|작업화|운동화": "안전화",
     r"장갑": "안전장갑",
     r"눈\s|눈을|눈에": "눈 보호구 보안경",
     r"얼굴": "보안면 안면",
@@ -103,6 +150,9 @@ QUERY_SYNONYMS = {
     r"필터": "필터 교환 충분한 양",
     r"AE|ABE|AB형": "안전모 종류 내전압성",
     r"마지막|최후": "최후의 수단",
+    r"오토바이|헬멧|이륜": "이륜자동차 승차용 안전모",
+    r"여러\s*(개|가지)|겹쳐|(같이|함께)\s*(착용|입|끼)": "한 종류 이상 착용 조화",
+    r"누가\s*(확인|점검|검사)|착용.{0,8}(확인|점검|검사)": "사용되고 있는지 정기적으로 검사",
 }
 
 
@@ -112,9 +162,10 @@ def expand_query(q):
 
 
 # ---------------- 검색기 ----------------
-# 단어 BM25 를 글자 TF-IDF 에 더하는 비율. 새로 쓴 질문(heldout2)에서 Recall@3 0.70 → 0.85
-# (0.3~1.5 가 개발용·heldout 질문에서 같은 성능이라 그 가운데쯤 0.8 선택. scripts/eval/eval_retrieval.py)
-HYBRID_W = 0.8
+# 단어 BM25(절 제목 포함)를 글자 TF-IDF 에 더하는 비율, 같은 쪽 앞·뒤 chunk 점수를 더하는 비율.
+# 개발용·heldout·heldout2 에서 1.0~2.0 / 0.1~0.15 가 같은 성능이라 그 가운데 (heldout3 은 비교용, README 검색 성능)
+HYBRID_W = 1.2
+NEIGHBOR_W = 0.15
 _KIWI = None
 
 
@@ -143,16 +194,18 @@ class BM25:
         out = np.zeros(len(self.tf))
         norm = self.k1 * (1 - self.b + self.b * self.len / self.avg)
         for w in q:
-            if w not in self.idf:
-                continue
+            if w not in self.idf:        # 문서에 없는 합성어는 앞부분으로 ('잠수부' → '잠수', '작업화' → '작업')
+                w = next((w[:n] for n in range(len(w) - 1, 1, -1) if w[:n] in self.idf), None)
+                if w is None:
+                    continue
             f = np.array([tf.get(w, 0) for tf in self.tf], dtype=float)
             out += self.idf[w] * f * (self.k1 + 1) / (f + norm)
         return out
 
 
-LLM_STATUS = {"last": None}
+LLM_STATUS = {"last": None}  # 마지막 Claude 호출 결과 (/llm_check 로 확인)
 _LLM_CACHE = {}               # (질문, 검색 결과) → Claude 답변
-_HTTP = None   # 마지막 Claude 호출 결과 (/llm_check 로 확인)
+_CLIENT = None                # Anthropic SDK 클라이언트 (연결 재사용)
 
 
 class TfidfRetriever:
@@ -194,6 +247,9 @@ class DenseRetriever:
         return d
 
 
+INDEX_VERSION = 2     # 2: chunk 마다 절 제목(section)
+
+
 class SafetyRAG:
     def __init__(self, chunks, retriever):
         self.chunks, self.retriever = chunks, retriever
@@ -212,17 +268,20 @@ class SafetyRAG:
     def save(self, path):
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         with open(path, "wb") as f:
-            pickle.dump({"chunks": self.chunks, "retriever": self.retriever}, f)
+            pickle.dump({"version": INDEX_VERSION, "chunks": self.chunks, "retriever": self.retriever}, f)
 
     @classmethod
     def load(cls, path):
         with open(path, "rb") as f:
             d = pickle.load(f)   # 우리 팀이 만든 인덱스 파일만 로드할 것
+        if d.get("version") != INDEX_VERSION:     # 예전 인덱스(절 제목 없음) → 서버는 새로 만듦 (api.py _ensure_index)
+            raise ValueError(f"예전 형식의 인덱스입니다: {path} — scripts/data/build_index.py 로 다시 만드세요")
         return cls(d["chunks"], d["retriever"])
 
     def search(self, query, k=3, expand=True):
-        """순위 = 글자 TF-IDF + HYBRID_W × 단어 BM25 (둘 다 1위=1 로 맞춤).
-        'score' 는 TF-IDF 점수 그대로 (답변 거절 기준 min_score 가 이 점수 기준)."""
+        """순위 = 글자 TF-IDF + HYBRID_W × 단어 BM25(절 제목 포함) (둘 다 1위=1 로 맞춤)
+                 + NEIGHBOR_W × 같은 쪽 바로 앞·뒤 chunk 의 순위 점수 중 큰 것.
+        'score' 는 그 chunk 의 TF-IDF 점수 (답변 거절 기준 min_score 는 상위 k 개 중 가장 높은 score 기준)."""
         q = expand_query(query) if expand else query
         s = self.retriever.scores(q)
         rank = s / (s.max() or 1)
@@ -230,13 +289,25 @@ class SafetyRAG:
         if bm is not None and HYBRID_W:
             b = bm.scores(_words(q))
             rank = rank + HYBRID_W * b / (b.max() or 1)
+        if NEIGHBOR_W:
+            rank = rank + NEIGHBOR_W * self._neighbor_max(rank)
         idx = np.argsort(-rank)[:k]
         return [{**self.chunks[i], "score": round(float(s[i]), 4)} for i in idx]
+
+    def _neighbor_max(self, rank):
+        """표가 여러 chunk 로 잘리면 '용광로'(작업 칸)와 '방열복'(보호구 칸)이 다른 chunk 에 들어감
+        → 같은 쪽 바로 옆 chunk 가 질문과 맞으면 이 chunk 도 조금 올려 줌."""
+        out = np.zeros_like(rank)
+        for i, c in enumerate(self.chunks):
+            nb = [rank[j] for j in (i - 1, i + 1)
+                  if 0 <= j < len(self.chunks) and self.chunks[j]["page"] == c["page"] and self.chunks[j]["doc"] == c["doc"]]
+            out[i] = max(nb, default=0.0)
+        return out
 
     def _bm25(self):
         if not hasattr(self, "_bm"):
             try:
-                self._bm = BM25([_words(c["text"]) for c in self.chunks])
+                self._bm = BM25([_words(c.get("section", "") + " " + c["text"]) for c in self.chunks])
             except ImportError:          # kiwipiepy 없으면 글자 TF-IDF 만
                 self._bm = None
         return self._bm
@@ -279,7 +350,6 @@ class SafetyRAG:
         return [sents[i] for i in top]
 
     def _llm_answer(self, query, hits, n):
-        import httpx
         ctx = "\n".join(f"[{h['doc']} p.{h['page']}] {h['text']}" for h in hits)
         prompt = (
             "아래 산업안전 문서 내용만 근거로 질문에 답하세요. 문서에 없는 내용은 만들지 마세요.\n"
@@ -292,18 +362,19 @@ class SafetyRAG:
         key = (query.strip(), tuple((h["page"], h["text"][:40]) for h in hits), n)
         if key in _LLM_CACHE:                                   # 같은 질문은 다시 부르지 않음 (바로 답 + 비용 0)
             return list(_LLM_CACHE[key])
-        global _HTTP
-        if _HTTP is None:
-            _HTTP = httpx.Client(timeout=30)                    # 연결 재사용 → 질문마다 접속하는 시간 절약
-        r = _HTTP.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={"x-api-key": os.environ["ANTHROPIC_API_KEY"],
-                     "anthropic-version": "2023-06-01", "content-type": "application/json"},
-            json={"model": os.environ.get("LLM_MODEL", "claude-haiku-4-5-20251001"),
-                  "max_tokens": 300, "messages": [{"role": "user", "content": prompt}]},
+        global _CLIENT
+        if _CLIENT is None:
+            import anthropic
+            # 연결 재사용 → 질문마다 접속하는 시간 절약. 429·5xx·연결 오류는 SDK 가 2번까지 다시 시도
+            _CLIENT = anthropic.Anthropic(timeout=30.0, max_retries=2)
+        r = _CLIENT.messages.create(
+            model=os.environ.get("LLM_MODEL", "claude-haiku-4-5-20251001"),
+            max_tokens=300,
+            messages=[{"role": "user", "content": prompt}],
         )
-        r.raise_for_status()
-        text = "".join(b.get("text", "") for b in r.json()["content"])
+        if r.stop_reason == "refusal":                          # 거절 → answer() 가 추출식으로 대체
+            raise RuntimeError("Claude 가 답변을 거절함")
+        text = "".join(b.text for b in r.content if b.type == "text")
         LLM_STATUS["raw"] = text.strip()[:300]
         LLM_STATUS["pages"] = [h["page"] for h in hits]
         out = [s.strip() for s in text.split("\n") if s.strip()][:n]

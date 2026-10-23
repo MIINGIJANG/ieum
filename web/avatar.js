@@ -44,6 +44,16 @@ export const NMS = {
 };
 const FACE_KEYS = ["aa", "ou", "ee", "blink", "surprised", "angry", "sad", "relaxed"];
 
+// 단어 뜻 표정(NMS 표) + 문장 문법 표정(서버 ksl/order.py: 부정 고개 젓기, 조건절 눈썹 올림, '해야' 끄덕임 …)
+// 표정은 큰 값끼리 합치고, 고개 움직임은 문법 쪽이 우선
+function mergeNMS(word, gram) {
+  if (!word) return gram || null;
+  if (!gram) return word;
+  const face = { ...word.face };
+  for (const [k, v] of Object.entries(gram.face || {})) face[k] = Math.max(face[k] || 0, v);
+  return { face, head: gram.head || word.head };
+}
+
 export class SignAvatar {
   constructor(canvas) {
     this.canvas = canvas;
@@ -1062,7 +1072,7 @@ export class SignAvatar {
   _applyFace(fr) {
     const em = this.vrm.expressionManager;
     const e = (fr && fr.expr) || {};
-    const w = this._word, nm = w && NMS[w.gloss];
+    const w = this._word, nm = w && mergeNMS(NMS[w.gloss], w.nms);
     const t = w ? Math.max(0, Math.min(1, w.t)) : 0;
     const env = nm ? Math.min(1, t / 0.2, (1 - t) / 0.15 + 0.3) : 0;     // 단어 시작에 표정이 올라오고 끝에 조금 풀림
     const now = performance.now();

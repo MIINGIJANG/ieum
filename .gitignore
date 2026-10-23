@@ -25,3 +25,6 @@ data/sample/motions/
 
 # 공개 실행용 터널 프로그램·로그
 .cloudflared/
+
+# 테스트 부산물
+.pytest_cache/

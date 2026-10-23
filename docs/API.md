@@ -31,7 +31,10 @@ KSL_LEXICON=data/sign/lexicon.csv KSL_MOTION=data/sign/motions uvicorn api:app -
   "sentences": [{
     "korean": "분진이 많이 발생하는 작업에서는 방진마스크를 착용합니다.",
     "gloss": ["있다", "작업", "FS:방진마스크", "사용"],
-    "timeline": [{"gloss": "있다", "start": 0.0, "duration": 0.81}, ...],  // 동작 데이터 없을 때 쓰는 예상 시간(초)
+    "words": ["발생하는", ...],          // 화면 단어 블록 (답변에 쓰인 모양, 넣은 문법 단어는 '안 함'·'해야 함' 등)
+    "nms": [null, {"roles": ["neg"], "face": {"sad": 0.3, "angry": 0.25}, "head": {"type": "shake", "n": 2, "deg": 14}}, ...],
+                                        // 글로스마다 문법 표정·고개 (ksl/order.py, roles: neg|prohibit|must|emph|can|cond)
+    "timeline": [{"gloss": "있다", "start": 0.0, "duration": 0.81, "nms": null}, ...],  // 동작 데이터 없을 때 쓰는 예상 시간(초)
     "lexicon_terms": [],                // 용어사전으로 번역된 전문용어
     "unverified_terms": ["방진마스크"],  // 수어 표현 미확보 → 화면에 '지문자/확인 필요' 표시 권장
     "dropped_terms": [],                // 모델이 빠뜨려서 보정한 용어 (디버그용)
@@ -42,7 +45,7 @@ KSL_LEXICON=data/sign/lexicon.csv KSL_MOTION=data/sign/motions uvicorn api:app -
   "motion": {                           // 동작사전(KSL_MOTION)이 없으면 null
     "fps": 30,
     "frames": [ {"body": [[x,y] x8], "rh": [[x,y] x21] | null, "lh": [...] | null}, ... ],
-    "segments": [{"gloss": "있다", "start": 0, "end": 24, "has_motion": true}, ...]   // 프레임 번호
+    "segments": [{"gloss": "있다", "start": 0, "end": 24, "has_motion": true, "nms": null}, ...]   // 프레임 번호, nms 는 위와 같음
   },
   "sources": [{"doc": "A-G-12-2026", "title": "개인보호구의 사용 및 관리에 관한 기술지원규정",
                "page": 4, "score": 0.20, "text": "문장1\n문장2"}]  // 출처: 같은 쪽은 합침, 앞 번호 표시 제거 (제목은 data/kosha/titles.json)
