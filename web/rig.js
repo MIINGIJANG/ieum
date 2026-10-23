@@ -124,7 +124,8 @@ function applyPhysique(bones, P, scene) {
 }
 
 // GLB 를 VRM 비슷한 객체로: { scene, humanoid, update(dt) }
-export function buildRig(gltf, config = {}) {
+// beforeShape(bones): 체격 조절 전, 기본 자세 그대로일 때 부르는 함수 (메시·텍스처 손보기용)
+export function buildRig(gltf, config = {}, beforeShape = null) {
   const scene = gltf.scene;
   scene.updateMatrixWorld(true);
   // 단위: 키가 10 이 넘으면 cm 로 보고 m 로 (FBX → GLB 에서 흔함)
@@ -136,16 +137,17 @@ export function buildRig(gltf, config = {}) {
   const need = ["hips", "spine", "head", "leftUpperArm", "leftLowerArm", "leftHand", "rightUpperArm", "rightLowerArm", "rightHand"];
   const missing = need.filter((n) => !bones[n]);
   if (missing.length) throw new Error("아바타 뼈를 찾지 못함: " + missing.join(", ") + " (web/models/avatar.json 의 bones 로 지정)");
+  // 정면: 왼팔이 +x 쪽이어야 +z(카메라)를 보는 것 (VRM 규칙). 반대면 180° 돌림
+  const lx = bones.leftUpperArm.getWorldPosition(new THREE.Vector3()).x;
+  const rx = bones.rightUpperArm.getWorldPosition(new THREE.Vector3()).x;
+  if (lx < rx) { scene.rotation.y += Math.PI; scene.updateMatrixWorld(true); }
+  if (beforeShape) beforeShape(bones);
   if (config.physique) applyPhysique(bones, config.physique, scene);
   // 상체 비율: config.torsoScale (예: 0.9) 이면 척추 마디 사이 간격을 그만큼 줄임 (뼈를 따라 몸통 메시도 줄어듦)
   if (config.torsoScale && config.torsoScale !== 1) {
     for (const n of ["chest", "upperChest", "neck"]) if (bones[n]) bones[n].position.multiplyScalar(config.torsoScale);
     scene.updateMatrixWorld(true);
   }
-  // 정면: 왼팔이 +x 쪽이어야 +z(카메라)를 보는 것 (VRM 규칙). 반대면 180° 돌림
-  const lx = bones.leftUpperArm.getWorldPosition(new THREE.Vector3()).x;
-  const rx = bones.rightUpperArm.getWorldPosition(new THREE.Vector3()).x;
-  if (lx < rx) { scene.rotation.y += Math.PI; scene.updateMatrixWorld(true); }
   const humanBones = Object.fromEntries(Object.entries(bones).map(([k, node]) => [k, { node }]));
   const humanoid = new VRMHumanoid(humanBones, { autoUpdateHumanBones: true });
   scene.add(humanoid.normalizedHumanBonesRoot);
