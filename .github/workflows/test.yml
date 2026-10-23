@@ -15,3 +15,5 @@ jobs:
           cache: pip
       - run: grep -v '^torch' requirements.txt > /tmp/req.txt && pip install -r /tmp/req.txt pytest httpx
       - run: python -m pytest -q tests
+      - name: 웹 화면 JS 문법 확인
+        run: for f in web/*.js; do node --check "$f"; done

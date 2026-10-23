@@ -175,6 +175,7 @@ export class SignAvatar {
       step("hardHat", () => { if (config.hat !== false) this._hardHat(); });
       this.face = new FaceRig(this.root);
     }
+    try { const r = await fetch(new URL("handshapes.json", new URL(url, location.href).href.replace(/models\/[^/]*$/, ""))); if (r.ok) this.handshapes = await r.json(); } catch { /* 없으면 손 모양 끌어당김 안 함 */ }
     step("measureBodyFront", () => this._measureBodyFront(this._hipsY, this.neckY));
     this._frameCamera();
     this.setFrame(null);
@@ -566,7 +567,7 @@ export class SignAvatar {
         }
         // ---- 쇄골: 손을 어깨보다 높이 들면 들어 올리고, 앞으로 뻗거나 몸 반대쪽으로 넘기면 앞으로 내밈
         const shoW = rotAbout(R.sho, this.spinePos, chestWorldRot);
-        const raise = clamp((W.y - (shoW.y - 0.05)) / 0.3, 0, 1) * D(14);
+        const raise = clamp((W.y - (shoW.y - 0.05)) / 0.3, 0, 1) * D(10);
         const reach = clamp((W.z - shoW.z - 0.22) / 0.25, 0, 1) * D(6) + clamp((-sign * W.x) / (this.shoulderW * 0.6), 0, 1) * D(6);
         const clavQ = this._W2M(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, -sign * reach, sign * raise, "YXZ")));
         let sho2 = shoW;
@@ -586,7 +587,14 @@ export class SignAvatar {
         const prevPole = this.st.pole[P];
         if (prevPole && !this.st.pure) pole = prevPole.clone().lerp(pole, 1 - Math.exp(-this._dt / 0.12)).normalize();
         this.st.pole[P] = pole;
-        const [E, W2] = this._ik(sho2, W, R.a, R.b, pole);
+        let [E, W2] = this._ik(sho2, W, R.a, R.b, pole);
+        // 팔꿈치가 몸통 안으로 들어가면(손을 몸 반대쪽으로 넘길 때 흔함) 팔꿈치 방향을 바깥쪽으로 돌려 다시 계산
+        for (let k = 0; k < 3; k++) {
+          const fz = this.frontZ(E.y);
+          if (!(Math.abs(E.x) < this.shoulderW * 0.42 && E.y > this._hipsY && isFinite(fz) && E.z < fz + 0.02)) break;
+          pole = pole.clone().add(new THREE.Vector3(sign * 0.6, 0, 0.25)).normalize();
+          [E, W2] = this._ik(sho2, W, R.a, R.b, pole);
+        }
         upperW = this._aim(P + "UpperArm", R.upper, E.clone().sub(sho2), clavW);
         lowerW = this._aim(P + "LowerArm", R.lower, W2.clone().sub(E), upperW);
       } else {
@@ -644,7 +652,7 @@ export class SignAvatar {
       names.forEach((n, j) => {
         const a = h[idx[j]], c = h[idx[j + 1]];
         if (!a || !c || !R.fingers[fi][j]) return;
-        const pr = prior && fi > 0 ? { val: D(prior.c[fi * 3 + j]), w: prior.w } : null;
+        const pr = prior && fi > 0 && j > 0 ? { val: D(prior.c[fi * 3 + j]), w: prior.w } : null;   // 뿌리 마디는 기준 방향이 달라 가운데·끝 마디만
         const t = this._fingerTarget(R, fi, j, V(c).sub(V(a)), parentW, pr, prevFlex);
         prevFlex = t.flex ?? null;
         parentW = this._aim(P + n, R.fingers[fi][j], t, parentW);
@@ -690,7 +698,7 @@ export class SignAvatar {
     let mouthing = false;
     if (w && w.text) {
       if (this._sylText !== w.text) { this._sylText = w.text; this._syl = mouthSyllables(w.text); }
-      const mo = mouthAt(this._syl, t, 0.5);
+      const mo = mouthAt(this._syl, t, 0.4);
       for (const [k, v] of Object.entries(mo)) { f.set(k, v); mouthing = true; }
     }
     // 수어자 얼굴 데이터 (입 모양·눈 깜빡임·눈썹) → ARKit

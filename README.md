@@ -49,8 +49,12 @@
 │   └── evaluation.py, metrics.py 평가
 ├── web/                      화면
 │   ├── index.html            웹 화면
-│   ├── avatar.js             3D 수어 아바타 (Three.js + VRM)
-│   ├── models/avatar.vrm     아바타 모델 (VRoid 샘플, 수정·재배포 허용)
+│   ├── avatar.js             3D 수어 아바타 (Three.js): 몸통·팔·손가락·고개·표정
+│   ├── rig.js, face.js       GLB 뼈 이름 자동 인식 / ARKit 표정·한국어 입 모양
+│   ├── avatar-vrm.js         예전 VRM 아바타 꾸미기 (?avatar=vrm)
+│   ├── handshapes.json       자주 나오는 손 모양 (scripts/data/build_handshapes.py)
+│   ├── models/avatar.glb     반실사 아바타 (대역: MakeHuman/MPFB CC0, TalkingHead 저장소)
+│   ├── models/avatar.vrm     예전 아바타 (VRoid 샘플, 수정·재배포 허용)
 │   ├── pages/                출처용 PDF 쪽 이미지
 │   └── vendor/               라이브러리 (인터넷 없이 시연 가능)
 ├── data/
@@ -247,6 +251,30 @@ BLEU 는 낮은데 글로스 F1 이 높으면 → "어휘는 맞고 어순이 �
 - 문법 표정은 `sentences[].nms`·`motion.segments[].nms` 로 내려가고, `web/avatar.js` 가 단어 뜻 표정 표(`NMS`)와 합쳐 씀 (고개 움직임은 문법 쪽 우선)
 - 조원 확정 안내 문장(번역 메모리)은 확정 글로스 그대로
 
+## 3D 아바타 (`web/avatar.js`)
+
+기본 아바타는 **반실사 GLB** (`web/models/avatar.glb`). 예전 애니메이션풍 VRM 은 주소 뒤에 `?avatar=vrm` 을 붙이면 비교용으로 볼 수 있음.
+지금 GLB 는 대역 모델: [TalkingHead](https://github.com/met4citizen/TalkingHead) 저장소의 `mpfb.glb` (MakeHuman/MPFB, **CC0**) 를 37MB → 8.5MB 로 줄인 것.
+MakeHuman 으로 30대 한국인 남성 작업자 모델을 따로 만드는 중 (완성되면 `web/models/avatar.glb` 교체, 다른 이름은 `?avatar=파일이름`).
+
+| 부분 | 하는 일 |
+|---|---|
+| 모델 연결 (`web/rig.js`) | CC4(`CC_Base_*`)·Mixamo·MPFB·Ready Player Me 뼈 이름 자동 인식 → VRM 과 같은 정규화 뼈대. 이름이 다르면 `web/models/avatar.json` 의 `bones` 로 지정. cm 단위·뒤를 보는 모델도 자동 보정 |
+| 렌더링 | ACES 톤 매핑 + 실내 환경광 + 3점 조명(주광·보조광·윤곽광), 피부는 덜 번들거리게, 옷은 짙게(손이 잘 보이게), 옷이 몸 위에 그려지게 |
+| 몸통·쇄골 | 데이터 어깨선의 기울기·회전으로 척추·가슴을 나눠 돌림, 손을 앞으로 뻗으면 살짝 숙임, 숨쉬기. 손을 어깨 위로 들면 쇄골을 들고, 앞으로 뻗거나 몸 반대쪽으로 넘기면 내밈 |
+| 팔 | 팔꿈치 방향 = 데이터 70% + 기본(아래·바깥·뒤) 30%, 위로 들리지 않게, 시간에 따라 부드럽게. 팔꿈치가 몸통 안으로 들어가면 바깥으로 돌려 다시 계산. 손목 비틀림의 45% 는 아래팔에 (CC4 비틀림 뼈가 있으면 그 뼈에) → 손목이 꼬여 보이지 않음 |
+| 손가락 | 엄지 포함 관절 범위 제한, 끝마디는 가운데 마디의 2/3 쯤으로 연동, 옆 손가락과 겹치지 않게 벌림 제한, 자주 나오는 손 모양(`web/handshapes.json`, 동작 데이터 24개 군집) 쪽으로 최대 35% 끌어당김, 손이 잠깐 안 잡히면 0.5초 동안 마지막 손 모양 유지 |
+| 단어 사이 | 서버가 연결 구간을 표시(`tr`) → 앞·뒤 자세의 뼈 회전을 최소 저크 곡선으로 섞음. 손이 멀리 움직일수록 연결이 길고, 단어 끝엔 짧게 멈춤 |
+| 부드러움 | 서버: 관절 좌표에 One Euro 필터 (느릴 땐 떨림 제거, 빠를 땐 늦지 않게). 아바타: 뼈마다 따라가는 빠르기(손가락 0.03초 ~ 몸통 0.12초)를 프레임 간 시간으로 계산 → 화면 주사율과 상관없이 같은 속도 |
+| 고개 | 데이터 각도 + 단어·문법 움직임(끄덕·젓기·갸웃)을 스프링으로(살짝 넘쳤다 돌아옴), 목 40%·머리 60% |
+| 얼굴 (`web/face.js`) | ARKit 52 표정 이름으로 통일(VRM 은 비슷한 기본 표정으로 바꿔 씀). 문법 표정은 1.25배 과장. 단어의 한국어를 입 모양으로(모음 → 입 모양, ㅁ·ㅂ·ㅍ 는 입술 닫힘). 시선은 보는 사람 쪽 + 손이 얼굴 앞에 오면 살짝 손 쪽, 미세한 눈 움직임, 고개를 크게 돌린 뒤 깜빡임 |
+| 안전모 | 머리 뼈를 따르는 꼭짓점으로 머리통 크기를 재서 이마를 덮게 씌움 |
+
+- 모델을 바꿀 때: GLB(손가락 뼈 포함, ARKit 표정 셰이프키 권장)를 `node scripts/deploy/slim_glb.mjs 원본.glb web/models/avatar.glb 2048` 로 줄여서 넣기
+  (모프 법선·눈동자 모프 제거, 텍스처 WebP 2048. `npm i @gltf-transform/core @gltf-transform/extensions @gltf-transform/functions sharp` 필요)
+- 손 모양 다시 만들기: `python scripts/data/build_handshapes.py` (동작 데이터가 바뀌었을 때)
+- 남은 일: 영상에서 관절 점 대신 뼈 회전을 바로 추정하는 모델(손 HaMeR, 몸 SMPLer-X 계열)로 동작사전 다시 만들기 — GPU 와 원본 영상 필요
+
 ## 테스트 (`tests/`, GitHub Actions `.github/workflows/test.yml`)
 
 ```bash
@@ -254,6 +282,7 @@ pip install pytest httpx && python -m pytest -q tests     # 약 15초, 번역 �
 ```
 - 검색 Recall@3 기준 (개발용 ≥0.95, heldout ≥0.9, heldout2 ≥0.85, heldout3 ≥0.7), 절 제목 인식
 - 답변 거절: 문서 밖 28개 모두 거절, 문서 안 40개 중 38개 이상 답함
+- 동작 이어붙이기(연결 구간 표시·멈춤·One Euro 필터), 손 모양 파일, 웹 JS 문법
 - 수어 어순·문법 표정, API 응답 형식, Claude 답변 모드(실제 API 대신 가짜 응답: 거절이면 추출식으로 대체)
 - 푸시·PR 마다 자동 실행
 
