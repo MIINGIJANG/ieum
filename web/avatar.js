@@ -409,10 +409,11 @@ export class SignAvatar {
   }
 
   // 손가락 관절 범위: 추정 좌표 떨림으로 손등 쪽으로 꺾이거나 옆으로 비틀리는 것 방지
-  //  일반 손가락: 굽힘 (뿌리 -10°~90°, 가운데 0°~100°, 끝 0°~75°), 벌림은 뿌리만 (바깥 20° / 안쪽 6°: 옆 손가락과 겹치지 않게)
+  //  일반 손가락의 굽힘은 '데이터의 마디 사이 각도'(flexData)로 정함 → 손바닥 방향 추정이 틀어져도 손가락이 갈고리처럼 꺾이지 않음
+  //  굽힘 범위 (뿌리 0°~90°, 가운데 0°~100°, 끝 0°~75°), 벌림은 뿌리만 (바깥 12° / 안쪽 6°: 옆 손가락과 겹치지 않게)
   //  엄지: 뿌리(손바닥 안 마디)는 원뿔 안 60°, 가운데·끝은 손바닥 쪽으로만 굽힘
   //  끝마디는 가운데 마디의 2/3 정도로 연동 (사람 손가락 힘줄 구조)
-  _fingerTarget(R, fi, j, target, parentW, prior, prev) {
+  _fingerTarget(R, fi, j, target, parentW, prior, prev, flexData = null) {
     const restDir = R.fingers[fi][j];
     const p = restDir.clone().applyQuaternion(parentW).normalize();
     const t = target.clone().normalize();
@@ -427,16 +428,16 @@ export class SignAvatar {
     if (fi === 0) n.multiplyScalar(0.6).add(R.out[1].clone().negate().applyQuaternion(this._handWQ).multiplyScalar(0.8));   // 엄지는 손바닥·새끼손가락 쪽으로 감김
     n.sub(p.clone().multiplyScalar(n.dot(p))).normalize();
     const l = new THREE.Vector3().crossVectors(p, n);
-    let flex = Math.atan2(t.dot(n), t.dot(p));
+    let flex = flexData != null ? flexData : Math.atan2(t.dot(n), t.dot(p));
     let side = Math.asin(clamp(t.dot(l), -1, 1));
     const MAX = fi === 0 ? [0, D(70), D(85)] : [D(90), D(100), D(75)];
-    const MIN = fi === 0 ? [0, D(-5), D(-10)] : [D(-10), 0, 0];
+    const MIN = fi === 0 ? [0, D(-5), D(-10)] : [0, 0, 0];
     flex = clamp(flex, MIN[j], MAX[j]);
     if (prior) flex += (prior.val - flex) * prior.w;                         // 자주 나오는 손 모양 쪽으로
     if (j === 2 && prev != null && fi > 0) flex = flex * 0.5 + prev * 0.67 * 0.5;   // 끝마디 연동
     if (j === 0 && fi > 0) {
       const outSign = Math.sign(R.out[fi].clone().applyQuaternion(this._handWQ).dot(l)) || 1;
-      const lo = fi === 2 ? -D(10) : -D(6), hi = fi === 2 ? D(10) : D(20);
+      const lo = fi === 2 ? -D(6) : -D(6), hi = fi === 2 ? D(6) : D(12);
       const s = side * outSign;
       side = clamp(s, lo, hi) * outSign;
     } else side = 0;
@@ -643,17 +644,35 @@ export class SignAvatar {
       this.st.twist[P] = 0;
     }
     local = lowerW2.clone().invert().multiply(handW);
+    // ---- 손목 꺾임 한계: 60° (손 데이터의 손목과 팔 데이터의 손목이 많이 어긋나면 손 추정이 불확실 → 40°)
+    //  넘으면 '꺾임'만 줄이고 비틀림은 그대로. 손이 축 처지거나 뒤로 젖혀져 보이던 문제
+    const bw = fr.body && fr.body[s.wri];
+    const gap = bw && h[0] ? Math.hypot(bw[0] - h[0][0], bw[1] - h[0][1]) : 0;
+    const maxBend = D(gap > 0.08 ? 40 : 60);
+    const cur = R.handF.clone().applyQuaternion(local).normalize();
+    const bend = R.handF.angleTo(cur);
+    if (bend > maxBend) {
+      const swing = new THREE.Quaternion().setFromUnitVectors(R.handF, cur);
+      const twistQ = swing.clone().invert().multiply(local);
+      const ax = new THREE.Vector3().crossVectors(R.handF, cur).normalize();
+      local = new THREE.Quaternion().setFromAxisAngle(ax, maxBend).multiply(twistQ);
+    }
+    const handW2 = lowerW2.clone().multiply(local);
     this._set(P + "Hand", local);
-    this._handWQ = handW;
-    // ---- 손가락
-    const prior = this._handPrior(h);
+    this._handWQ = handW2;
+    // ---- 손가락: 데이터의 마디 사이 각도 - 편 상태 기준(handshapes.base)
+    const x = this._handAngles(h);
+    const base = (this.handshapes && this.handshapes.base) || new Array(15).fill(10);
+    const prior = x ? this._handPrior(x) : null;
     FINGERS.forEach(([names, idx], fi) => {
-      let parentW = handW, prevFlex = null;
+      let parentW = handW2, prevFlex = null;
       names.forEach((n, j) => {
         const a = h[idx[j]], c = h[idx[j + 1]];
         if (!a || !c || !R.fingers[fi][j]) return;
-        const pr = prior && fi > 0 && j > 0 ? { val: D(prior.c[fi * 3 + j]), w: prior.w } : null;   // 뿌리 마디는 기준 방향이 달라 가운데·끝 마디만
-        const t = this._fingerTarget(R, fi, j, V(c).sub(V(a)), parentW, pr, prevFlex);
+        const k = fi * 3 + j;
+        const pr = prior && fi > 0 ? { val: D(Math.max(0, prior.c[k] - base[k])), w: prior.w } : null;
+        const fd = x && fi > 0 ? D(Math.max(0, x[k] - base[k])) : null;
+        const t = this._fingerTarget(R, fi, j, V(c).sub(V(a)), parentW, pr, prevFlex, fd);
         prevFlex = t.flex ?? null;
         parentW = this._aim(P + n, R.fingers[fi][j], t, parentW);
       });
@@ -661,9 +680,8 @@ export class SignAvatar {
   }
 
   // 자주 나오는 손 모양(web/handshapes.json, 동작 데이터 군집): 가장 가까운 모양 쪽으로 최대 35% 끌어당김
-  _handPrior(h) {
-    const S = this.handshapes;
-    if (!S || !S.centers) return null;
+  // 손가락 15마디 굽힘 각도(도): 앞 마디 방향과 이번 마디 방향 사이 각 (scripts/data/build_handshapes.py 와 같은 계산)
+  _handAngles(h) {
     const ang = (a, b, c) => {
       if (!a || !b || !c) return null;
       const u = V(b).sub(V(a)), v = V(c).sub(V(b));
@@ -674,7 +692,12 @@ export class SignAvatar {
       const chain = [0, ...idx];
       for (let j = 0; j < 3; j++) x.push(ang(h[chain[j]], h[chain[j + 1]], h[chain[j + 2]]));
     }
-    if (x.some((v) => v == null)) return null;
+    return x.some((v) => v == null) ? null : x;
+  }
+
+  _handPrior(x) {
+    const S = this.handshapes;
+    if (!S || !S.centers || !x) return null;
     let best = null, bd = Infinity;
     for (const c of S.centers) {
       let d = 0;

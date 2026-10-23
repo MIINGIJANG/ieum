@@ -3,7 +3,7 @@
 python scripts/data/build_handshapes.py --motions data/sign/motions --k 24
 
 손 프레임마다 손가락 15개 마디의 굽힘 각도(도)를 구해 k-means 로 묶음.
-아바타(web/avatar.js _handPrior)는 프레임마다 가장 가까운 손 모양 쪽으로 손가락을 살짝(최대 35%) 끌어당김
+아바타(web/avatar.js)는 손가락 굽힘을 이 각도(- base)로 정하고, 가장 가까운 손 모양 쪽으로 살짝(최대 35%) 끌어당김
 → 추정 떨림으로 생기는 불가능한 손 모양·꺾임이 줄어듦.
 (언어학적으로 정리된 한국수어 수형 목록이 아니라 우리 동작 데이터에서 자주 나온 모양)
 """
@@ -68,6 +68,8 @@ def main():
         "about": "손가락 15마디 굽힘 각도(도) 군집. 순서: 엄지·검지·중지·약지·소지 × 뿌리·가운데·끝. scripts/data/build_handshapes.py",
         "frames": int(len(X)),
         "scale": round(float(np.median(d)), 2),
+        # 손가락을 다 폈을 때도 마디 각도가 0 이 아님 (손바닥 점 위치 때문) → 마디마다 하위 10% 값을 '편 상태' 기준으로
+        "base": [round(float(v), 1) for v in np.percentile(X, 10, axis=0)],
         "centers": [[round(float(v), 1) for v in km.cluster_centers_[i]] for i in order],
         "counts": [int(counts[i]) for i in order],
     }
