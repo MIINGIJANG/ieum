@@ -1,0 +1,19 @@
+# 푸시·PR 마다 테스트: 검색 성능(Recall@3), 답변 거절, 수어 어순·표정, API (tests/)
+# 번역 모델(torch)은 쓰지 않으므로 설치하지 않음 → 빠름
+name: 테스트
+on:
+  push:
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: grep -v '^torch' requirements.txt > /tmp/req.txt && pip install -r /tmp/req.txt pytest httpx
+      - run: python -m pytest -q tests
+      - name: 웹 화면 JS 문법 확인
+        run: for f in web/*.js; do node --check "$f"; done

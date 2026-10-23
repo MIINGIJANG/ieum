@@ -12,6 +12,7 @@ from pathlib import Path
 import numpy as np
 
 from .motion import MotionDict, compose
+from .order import arrange
 from .rag import SafetyRAG
 from .translate import Translator, split_sentences
 
@@ -80,13 +81,17 @@ class SignWords:
     def __call__(self, sentence):
         return [g for g, _ in self.with_words(sentence)]
 
+    def with_words(self, sentence):
+        """[(글로스, 화면에 보일 말)] — 수어 어순."""
+        return [(u["gloss"], u["word"]) for u in self.analyze(sentence)]
+
     # ---- 형태소 분석으로 답변의 내용어(명사·동사·형용사)를 모두 뽑기 (kiwipiepy) ----
     _kiwi = None
     KEEP = {"NNG", "NNP", "VV", "VA", "VV-I", "VA-I", "VV-R", "VA-R", "XR"}
     STOP_N = {"것", "수", "등", "경우", "때문", "정도", "데", "바", "여부", "사항", "예", "이", "그", "및", "또는", "각", "해당",
               "이하", "이내", "다음", "가지", "자체"}
     STOP_V = {"하다", "되다", "이다", "아니다", "싶다", "보다", "주다", "가지다", "따르다", "위하다", "들다", "대하다", "통하다", "관하다"}
-    ADV = {"반드시", "항상", "즉시", "늘", "바로", "절대", "미리", "충분히", "자주", "수시로", "완전히", "정기적으로"}
+    ADV = {"반드시", "꼭", "절대로", "매일", "평소", "항상", "즉시", "늘", "바로", "절대", "미리", "충분히", "자주", "수시로", "완전히", "정기적으로"}
 
     @classmethod
     def kiwi(cls):
@@ -113,10 +118,11 @@ class SignWords:
                 return gloss
         return lemma
 
-    def with_words(self, sentence):
+    def analyze(self, sentence):
+        """답변 문장 → 수어 단어 [{gloss, word(화면에 보일 말), nms(문법 표정·고개)}], 한국수어 어순 (ksl/order.py)."""
         kw = self.kiwi()
         if not kw:
-            return self._with_words_rules(sentence)
+            return [{"gloss": g, "word": w, "nms": None} for g, w in self._with_words_rules(sentence)]
         # 어절 위치 (화면에는 어절 모양 그대로 보여줌)
         spans = [(m.start(), m.end()) for m in re.finditer(r"[^\s,·()（）:]+", sentence)]
         def eoj(i):
@@ -125,10 +131,10 @@ class SignWords:
                     return k
             return None
         toks = kw.tokenize(sentence)
-        items = []                                    # (글로스, 어절번호, 시작위치)
+        items = []                                    # (글로스, 어절번호, 시작위치, 말, 토큰번호)
         i = 0
         while i < len(toks):
-            t = toks[i]
+            t, ti = toks[i], i
             k = eoj(t.start)
             lemma, start = None, t.start
             if t.tag == "SN" and i + 1 < len(toks) and toks[i + 1].tag in ("NNB", "NNG") and eoj(toks[i + 1].start) == k:
@@ -144,13 +150,13 @@ class SignWords:
             i += 1
             if not lemma or k is None or lemma in self.STOP_N or lemma in self.STOP_V:
                 continue
-            if lemma == "있다" and any(x.form == "수" and x.tag == "NNB" for x in toks[max(0, i - 3):i]):
-                continue                                                   # '할 수 있다'의 있다는 빼기
+            if lemma in ("있다", "없다") and any(x.form == "수" and x.tag == "NNB" for x in toks[max(0, i - 3):i]):
+                continue                                                   # '할 수 있다/없다' 는 가능·못하다로 (ksl/order.py)
             a, b = spans[k]
             ej = sentence[a:b].strip("“”\"'[]").rstrip(".!?。")
-            items.append((self._gloss_for(lemma, ej), k, start))
-        out, seen = [], set()
-        for n, (g, k, start) in enumerate(items):
+            items.append((self._gloss_for(lemma, ej), k, start, lemma, ti))
+        units = []
+        for n, (g, k, start, lemma, ti) in enumerate(items):
             a, b = spans[k]
             same = [x for x in items if x[1] == k]
             last = same[-1][2] == start
@@ -159,9 +165,9 @@ class SignWords:
             # (단어 앞에 붙은 조사·기호는 빼고: '(RH<70%)를유지해야' → '유지해야')
             shown = sentence[start:b] if last else sentence[start:nxt]
             shown = shown.strip("“”\"'[]").rstrip(".!?。")
-            if shown:                                    # 같은 단어가 다시 나와도 답변 순서 그대로 (수어도 반복함)
-                out.append((g, shown))
-        return out
+            if shown:                                    # 같은 단어가 다시 나와도 그대로 (수어도 반복함)
+                units.append({"gloss": g, "word": shown, "lemma": lemma, "ti": ti})
+        return arrange(units, toks)
 
     def _with_words_rules(self, sentence):
         """[(글로스, 답변에 쓰인 모양)] — 화면의 단어 블록은 답변과 같은 모양으로 보여줌
@@ -227,9 +233,15 @@ class SafetySignPipeline:
             self._dv = TfidfVectorizer(analyzer="char_wb", ngram_range=(2, 3)).fit([d["korean"] for d in self.demo])
             self._dm = self._dv.transform([d["korean"] for d in self.demo])
 
-    def motion_for(self, glosses):
-        """글로스 리스트 → 이어붙인 동작. 동작사전이 없으면 None."""
-        return compose(glosses, self.motion) if self.motion else None
+    def motion_for(self, glosses, nms=None):
+        """글로스 리스트 → 이어붙인 동작. 동작사전이 없으면 None.
+        nms: 글로스마다 문법 표정·고개 (ksl/order.py) → segment 의 'nms' 로 (아바타가 그 단어 동안 표정·고개)."""
+        if not self.motion:
+            return None
+        m = compose(glosses, self.motion)
+        for seg, n in zip(m["segments"], nms or []):
+            seg["nms"] = n
+        return m
 
     def translate_one(self, text, beam=4):
         hit = self._memory.get(_norm(text))
@@ -250,15 +262,16 @@ class SafetySignPipeline:
 
     def sign_sentence(self, text, skip=()):
         """답변 문장 하나 → 그 문장에서 뽑은 수어 단어 + 재생 시간."""
-        pairs = [(g, w) for g, w in self.sign_words.with_words(text) if g not in skip]
-        glosses = [g for g, _ in pairs]
+        units = [u for u in self.sign_words.analyze(text) if u["gloss"] not in skip]   # 한국수어 어순 (ksl/order.py)
+        glosses = [u["gloss"] for u in units]
         tl, t = [], 0.0
-        for g in glosses:
-            clip = self.motion.get(g) if self.motion else None
+        for u in units:
+            clip = self.motion.get(u["gloss"]) if self.motion else None
             d = round(len(clip["frames"]) / clip.get("fps", 30), 3) if clip else 0.0
-            tl.append({"gloss": g, "start": round(t, 3), "duration": d})
+            tl.append({"gloss": u["gloss"], "start": round(t, 3), "duration": d, "nms": u["nms"]})
             t += d
-        return {"korean": text, "gloss": glosses, "words": [w for _, w in pairs], "timeline": tl, "lexicon_terms": [], "dropped_terms": [],
+        return {"korean": text, "gloss": glosses, "words": [u["word"] for u in units], "nms": [u["nms"] for u in units],
+                "timeline": tl, "lexicon_terms": [], "dropped_terms": [],
                 "unverified_terms": [], "has_unk": False, "method": "extract",   # 답변 문장에서 단어 추출
                 "complete": all(self.motion and self.motion.get(g) for g in glosses)}
 
@@ -316,7 +329,7 @@ class SafetySignPipeline:
         if self._demo_ok(text, demo, score):
             return "demo:" + demo["korean"]
         h = self.rag.search(text, 1)
-        if h and h[0]["score"] >= self.min_score:
+        if h and self._evidence(self.rag.search(text, self.k)) >= self.min_score:
             return f"chunk:{self._order.get(h[0]['text'], h[0]['page'])}"   # 같은 문단으로 답이 가면 같은 주제
         return None
 
@@ -352,6 +365,12 @@ class SafetySignPipeline:
         kws = self.answers.get(demo["korean"], {}).get("keywords")
         return not kws or any(k in re.sub(r"\s", "", question) for k in kws)
 
+    @staticmethod
+    def _evidence(hits):
+        """문서 근거의 세기: 검색 상위 k 개 중 글자 TF-IDF 점수가 가장 높은 것.
+        (단어 BM25 가 1위를 바꿔도, 상위 안에 질문과 글자가 많이 겹치는 문단이 있으면 근거 있음)"""
+        return max((h["score"] for h in hits), default=0.0)
+
     def ask(self, question, beam=4):
         hits = self.rag.search(question, self.k)
         demo, score = self.best_demo(question)
@@ -367,7 +386,7 @@ class SafetySignPipeline:
                 found, _ = self.rag.answer(question, hits)
                 answer_text = " ".join(" ".join(strip_marks(t).split("\n")) for t in found)
         else:
-            top = hits[0]["score"] if hits else 0.0
+            top = self._evidence(hits)
             if top < self.min_score:                       # 근거 약함 → 답하지 않음
                 return self._abstain(question, top)
             texts, mode = self.rag.answer(question, hits)
@@ -389,6 +408,7 @@ class SafetySignPipeline:
             "answer_text": answer_text,                # 화면에 보여줄 답변 (문서 근거)
             "sign_text": answer_text,                  # 수어 단어를 뽑은 문장 (= 답변)
             "sentences": sents,                        # 문장별 글로스 + 타임라인
-            "motion": self.motion_for([g for s in sents for g in s["gloss"]]),   # 전체 문장 이어붙인 동작
+            "motion": self.motion_for([g for s in sents for g in s["gloss"]],     # 전체 문장 이어붙인 동작
+                                      [n for s in sents for n in s["nms"]]),
             "sources": merge_sources(hits, self.titles, self._order, self.tables, self.images),   # 출처: 문서 제목·쪽·전체 문장
         }

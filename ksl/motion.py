@@ -370,20 +370,44 @@ def _resample(frames, n):
     return out
 
 
-def _smooth(frames):
-    """관절 좌표 떨림 줄이기: 앞뒤 프레임과 [1,2,1]/4 가중 평균 (첫·끝 프레임은 그대로)."""
+def _one_euro(frames, fps=FPS, min_cutoff=1.5, beta=0.5, d_cutoff=1.0):
+    """관절 좌표 떨림 줄이기: One Euro 필터 (Casiez 2012).
+    천천히 움직일 땐 많이 걸러 떨림을 없애고, 빠르게 움직일 땐 덜 걸러 늦게 따라가지 않음
+    (이동평균은 둘 중 하나만 됨: 많이 거르면 빠른 동작이 뭉개지고, 적게 거르면 떨림이 남음).
+    단위: 좌표는 어깨너비=1, 속도는 어깨너비/초. 점이 안 보인 프레임(None)에서는 그 점의 필터를 처음부터 다시 시작."""
     if len(frames) < 3:
         return frames
-    out = [frames[0]]
-    for a, b, c in zip(frames, frames[1:], frames[2:]):
-        f = dict(b)
-        for k in ("body", "lh", "rh"):
-            pa, pb, pc = a.get(k), b.get(k), c.get(k)
-            if pa and pb and pc:
-                f[k] = [None if (u is None or v is None or w is None) else
-                        [round((x + 2 * y + z) / 4, 4) for x, y, z in zip(u, v, w)] for u, v, w in zip(pa, pb, pc)]
-        out.append(f)
-    out.append(frames[-1])
+    te = 1.0 / fps
+    alpha = lambda cutoff: 1.0 / (1.0 + (1.0 / (2 * math.pi * cutoff)) / te)
+    out = [dict(f) for f in frames]
+    for k in ("body", "lh", "rh"):
+        state = {}                                         # (점 번호) → (이전 값, 이전 속도)
+        for f in out:
+            pts = f.get(k)
+            if not pts:
+                state.clear()
+                continue
+            new = []
+            for j, p in enumerate(pts):
+                if p is None:
+                    state.pop(j, None)
+                    new.append(None)
+                    continue
+                prev = state.get(j)
+                if prev is None:
+                    state[j] = (list(p), [0.0] * len(p))
+                    new.append(list(p))
+                    continue
+                xp, dxp = prev
+                dx = [(a - b) / te for a, b in zip(p, xp)]
+                ad = alpha(d_cutoff)
+                dxh = [ad * a + (1 - ad) * b for a, b in zip(dx, dxp)]
+                speed = math.sqrt(sum(v * v for v in dxh[:2]))
+                a = alpha(min_cutoff + beta * speed)
+                xh = [a * u + (1 - a) * v for u, v in zip(p, xp)]
+                state[j] = (xh, dxh)
+                new.append([round(v, 4) for v in xh])
+            f[k] = new
     return out
 
 
@@ -449,6 +473,17 @@ def _ease(t):
     return t * t * (3 - 2 * t)     # 천천히 출발해서 천천히 멈춤 (smoothstep)
 
 
+def _min_jerk(t):
+    return t * t * t * (10 - 15 * t + 6 * t * t)     # 가속도 변화가 가장 작은 곡선 (사람이 손을 옮길 때와 비슷)
+
+
+def _wrist_gap(fa, fb):
+    """두 프레임 손목 사이 거리 중 큰 것 (어깨너비 단위) → 단어 사이 연결 시간 정할 때."""
+    ba, bb = fa.get("body") or [], fb.get("body") or []
+    d = [math.dist(ba[i][:2], bb[i][:2]) for i in (4, 7) if i < len(ba) and i < len(bb) and ba[i] and bb[i]]
+    return max(d) if d else 0.5
+
+
 def _lerp_pts(a, b, t):
     if a is None or b is None:
         return b if t >= 0.5 else a
@@ -477,18 +512,20 @@ def neutral_frame():
 
 
 def compose(glosses, mdict: MotionDict, fps=FPS, transition=0.25, missing_sec=0.6, speed=0.8, skip_missing=True,
-            lead=0.45, lead_out=0.8):
+            lead=0.45, lead_out=0.8, hold=0.07):
     """글로스 순서대로 동작 클립을 이어붙임.
 
     - speed: 재생 속도 (조원 자료는 문장 수어에서 단어만 잘라 0.4~0.8초로 짧음 → 0.8배로 조금 천천히)
-    - 클립 사이는 transition 초 동안 부드럽게(천천히 출발·멈춤) 보간
+    - 클립 사이: 손이 멀리 움직일수록 길게 (transition × 0.6~1.8), 최소 저크 곡선으로 보간.
+      연결 프레임에는 tr={"a": 앞 단어 마지막 프레임, "b": 뒤 단어 첫 프레임, "t": 0~1} → 아바타는 두 자세의 '회전'을 섞음
+      (관절 좌표를 직선으로 섞으면 팔이 짧아졌다 길어지고 손목이 꺾임)
+    - 단어 끝에서 hold 초 동안 멈춤 (수어의 '멈춤-움직임-멈춤' 리듬: 단어 경계가 보임)
     - 처음·끝: 손을 내린 기본 자세에서 lead 초 동안 올라오고, 끝나면 lead_out 초 동안 천천히 내려감 (갑자기 튀지 않게)
-    - 관절 좌표 떨림은 앞뒤 프레임 평균으로 줄임
+    - 관절 좌표 떨림은 One Euro 필터로 줄임
     skip_missing=True: 동작이 없는 글로스는 건너뜀 (프레임 없음, segment 의 start/end = None)
     반환: {"fps", "frames", "segments": [{"gloss","start","end","has_motion"}]}  (start/end 는 프레임 번호)
     """
     frames, segments = [], []
-    n_tr = max(1, round(transition * fps))
     n_lead = max(1, round(lead * fps))
     n_out = max(1, round(lead_out * fps))
 
@@ -506,7 +543,7 @@ def compose(glosses, mdict: MotionDict, fps=FPS, transition=0.25, missing_sec=0.
         if clip and str(clip.get("source", "")).endswith("(2D)"):
             clip = None        # 깊이 추정을 하지 않은 2D 자료는 손가락·팔 방향이 뒤틀려 보여서 쓰지 않음 ('2D→3D' 로 저장된 것은 사용)
         if clip and clip["frames"]:
-            src = _relax_low_hands(_smooth(_filter_face(_fix_hands(clip["frames"]))))
+            src = _relax_low_hands(_one_euro(_filter_face(_fix_hands(clip["frames"])), clip.get("fps", fps)))
             n = max(2, round(len(src) * fps / clip.get("fps", fps) / speed))
             seg = _resample(src, n)
             has = True
@@ -519,12 +556,21 @@ def compose(glosses, mdict: MotionDict, fps=FPS, transition=0.25, missing_sec=0.
             has = False
         if frames:
             a, b = frames[-1], seg[0]
-            frames += [_lerp(a, b, _ease((i + 1) / (n_tr + 1))) for i in range(n_tr)]
+            dur = transition * min(1.8, max(0.6, 0.5 + 0.6 * _wrist_gap(a, b)))
+            n_tr = max(2, round(dur * fps))
+            ia, ib = len(frames) - 1, len(frames) + n_tr
+            for i in range(n_tr):
+                u = (i + 1) / (n_tr + 1)
+                f = _lerp(a, b, _min_jerk(u))
+                f["tr"] = {"a": ia, "b": ib, "t": round(u, 3)}
+                frames.append(f)
         elif has:
             frames += [toward_rest(seg[0], 1 - _ease(i / n_lead)) for i in range(n_lead)]   # 기본 자세 → 첫 동작
         start = len(frames)
         frames += seg
         segments.append({"gloss": g, "start": start, "end": len(frames) - 1, "has_motion": has})
+        if has and hold > 0:
+            frames += [dict(seg[-1])] * max(1, round(hold * fps))                       # 단어 끝 멈춤
     if frames:
         last = frames[-1]
         frames += [last] * round(0.15 * fps)                                                     # 마지막 손 모양 잠깐 유지

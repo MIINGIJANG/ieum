@@ -1,0 +1,6 @@
+{
+  "about": "avatar.glb 설정 (web/rig.js·avatar.js). bones: 뼈 이름이 자동 인식되지 않을 때 {\"leftUpperArm\": \"뼈 이름\"} 처럼 지정. clothes: 옷 재질 이름 정규식, clothTint: 옷 색에 곱할 색(false 면 그대로), hat: false 면 안전모 안 씌움",
+  "bones": {},
+  "clothTint": 4871528,
+  "hat": true
+}
