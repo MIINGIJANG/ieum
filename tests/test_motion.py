@@ -3,7 +3,7 @@ import json
 import math
 import random
 
-from ksl.motion import MotionDict, _hand_basis, _one_euro, _smooth_hand_rot, compose
+from ksl.motion import MotionDict, _despike, _hand_basis, _one_euro, _smooth_hand_rot, compose
 
 from conftest import ROOT
 
@@ -61,6 +61,15 @@ def test_hand_flip_removed():
     B = [_hand_basis(f["rh"]) for f in out]
     assert max(ang(B[i], B[i + 1]) for i in range(len(B) - 1)) < 20
     assert out[5]["rh"][0] == hand[0]
+
+
+def test_despike_depth_jump():
+    """2D 영상에서 깊이를 추정한 자료: 한 프레임만 앞뒤 깊이가 튐 → 앞뒤 프레임 쪽으로 (천천히 움직이는 건 그대로)."""
+    body = lambda z: [[0, 0, 0]] * 4 + [[-0.2, 0.1, z]] + [[0, 0, 0]] * 3
+    zs = [-0.4, -0.42, -0.44, -0.1, -0.46, -0.48, -0.5]
+    out = _despike([{"body": body(z)} for z in zs])
+    assert abs(out[3]["body"][4][2] - (-0.44)) < 0.03
+    assert [f["body"][4][2] for i, f in enumerate(out) if i != 3] == [z for i, z in enumerate(zs) if i != 3]
 
 
 def test_handshapes_file():

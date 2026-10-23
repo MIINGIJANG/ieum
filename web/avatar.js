@@ -770,11 +770,28 @@ export class SignAvatar {
       let clavW = chestW;
       if (!neutral && b[s.sho] && b[s.elb] && b[s.wri]) {
         const sh = V(b[s.sho]), el = V(b[s.elb]), wr = V(b[s.wri]);
-        // 손목 목표 = 목 위치 + (데이터의 목→손목) × 아바타 어깨너비 (얼굴 높이는 코 높이 비율로)
+        // 손목 목표
+        //  얼굴 근처(목 위): 목 위치 + (데이터의 목→손목) × 아바타 어깨너비, 높이는 코 높이 비율로 → 얼굴에 닿는 자리가 맞게
+        //  그 아래·앞뒤: 어깨 + (데이터의 어깨→손목) × (아바타 팔 길이 / 데이터 팔 길이) → 팔을 뻗는 정도(팔꿈치 각)가 같게
+        //  (어깨너비로만 맞추면 어깨가 넓고 팔이 짧은 아바타는 손이 너무 멀리 가서 팔이 쭉 펴져 버림)
+        //  옆(x)은 몸 가운데 기준이 맞아야 하므로 어깨너비로
+        const shoW = rotAbout(R.sho, this.spinePos, chestWorldRot);
         const off = wr.clone();
         const dn = b[0] ? -b[0][1] : 0;
         if (off.y > 0 && dn > 0.1) off.y *= Math.min(2.2, Math.max(0.8, this.noseAbove / dn));
-        const W = this.neckPos.clone().add(off.multiplyScalar(this.shoulderW));
+        const Wn = this.neckPos.clone().add(off.multiplyScalar(this.shoulderW));
+        const k = (R.a + R.b) / ((this.config && this.config.dataArm) || 1.5);
+        // 앞뒤는 조금 줄임 (config.depthScale, 기본 0.8): 수어 공간은 몸 앞 가까이, 3D 추정은 앞으로 뻗은 손을 길게 잡는 편
+        const dz = (this.config && this.config.depthScale) ?? 0.8;
+        const Wa = shoW.clone().add(wr.clone().sub(sh).multiply(new THREE.Vector3(k, k, k * dz)));
+        const face = smooth01(wr.y, -0.1, 0.25);                              // 0: 목 아래, 1: 얼굴 높이
+        const W = new THREE.Vector3(Wn.x, Wa.y + (Wn.y - Wa.y) * face, Wa.z + (Wn.z - Wa.z) * face);
+        // 팔이 다 펴지지 않게: 어깨에서 팔 길이의 70% 를 넘으면 서서히 88% 까지만
+        //  (수어하는 손은 몸 앞 가까이 — 팔을 쭉 뻗으면 앞으로 나란히처럼 어색함. 팔꿈치가 굽고 아래로 내려옴)
+        {
+          const L = R.a + R.b, dv = W.clone().sub(shoW), d = dv.length(), d2 = softLimit(d, 0.88 * L, 0.8);
+          if (d2 < d) W.copy(shoW).add(dv.multiplyScalar(d2 / d));
+        }
         // 얼굴 안으로 들어가면 얼굴 앞쪽으로
         const fromHead = W.clone().sub(this.headCenter);
         if (fromHead.length() < this.headR) {
@@ -807,7 +824,6 @@ export class SignAvatar {
           if (k > 0 && isFinite(fz) && W.z < fz + this.margin) W.z += (fz + this.margin - W.z) * k;
         }
         // ---- 쇄골: 손을 어깨보다 높이 들면 들어 올리고, 앞으로 뻗거나 몸 반대쪽으로 넘기면 앞으로 내밈
-        const shoW = rotAbout(R.sho, this.spinePos, chestWorldRot);
         const raise = this._shoulderLift + clamp((W.y - (shoW.y - 0.05)) / 0.3, 0, 1) * D(10);   // 기본 들림 + 손을 들면 더
         const reach = clamp((W.z - shoW.z - 0.22) / 0.25, 0, 1) * D(6) + clamp((-sign * W.x) / (this.shoulderW * 0.6), 0, 1) * D(6);
         const clavQ = this._W2M(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, -sign * reach, sign * raise, "YXZ")));
@@ -819,10 +835,11 @@ export class SignAvatar {
           const clavWorldRot = I.clone().multiply(chestQ).multiply(clavQ).multiply(I.clone().invert());
           sho2 = R.sho.clone().sub(R.clav).applyQuaternion(clavWorldRot).add(clavPos);
         }
-        // ---- 팔꿈치 방향: 데이터 70% + 기본(아래·바깥·뒤) 30%, 위로 들리지 않게, 시간에 따라 부드럽게
+        // ---- 팔꿈치 방향: 데이터 55% + 기본(아래·바깥·뒤) 45%, 위로 들리지 않게, 시간에 따라 부드럽게
+        //  (데이터대로만 하면 팔꿈치가 앞으로 들려 '앞으로 나란히'처럼 보임 → 아래로 늘어진 쪽으로 더)
         const raw = el.clone().sub(sh).normalize();
         const def = new THREE.Vector3(sign * 0.35, -1, -0.3).normalize();
-        let pole = raw.multiplyScalar(0.7).add(def.multiplyScalar(0.3));
+        let pole = raw.multiplyScalar(0.55).add(def.multiplyScalar(0.45));
         pole.y = Math.min(pole.y, -0.2);
         pole.normalize();
         const prevPole = this.st.pole[P];

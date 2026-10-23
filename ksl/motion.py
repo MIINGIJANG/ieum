@@ -444,6 +444,46 @@ def _fix_hands(frames, ratio=0.7):
     return out
 
 
+def _despike(frames, half=2, thr=0.15):
+    """관절 위치가 한두 프레임만 튄 것 지우기 (2D 영상에서 깊이를 추정한 자료는 앞뒤 깊이가 프레임마다 크게 튐).
+    앞뒤 half 프레임의 중앙값에서 thr(어깨너비 단위) 넘게 벗어난 몸 관절은 중앙값으로,
+    손은 손목이 벗어나면 손 모양은 그대로 두고 손 전체를 옮김."""
+    import statistics
+    n = len(frames)
+    if n < 3:
+        return frames
+    out = [dict(f) for f in frames]
+
+    def med(get, i, c):
+        vals = [v[c] for v in (get(j) for j in range(max(0, i - half), min(n, i + half + 1))) if v is not None and len(v) > c]
+        return statistics.median(vals) if len(vals) >= 3 else None
+
+    nb = max((len(f.get("body") or []) for f in frames), default=0)
+    for jt in range(nb):
+        get = lambda j: (frames[j].get("body") or [None] * nb)[jt] if jt < len(frames[j].get("body") or []) else None
+        for i in range(n):
+            p = get(i)
+            if p is None:
+                continue
+            m = [med(get, i, c) for c in range(len(p))]
+            if None in m:
+                continue
+            if math.dist(p, m) > thr:
+                out[i]["body"] = list(out[i]["body"])
+                out[i]["body"][jt] = [round(v, 4) for v in m]
+    for k in ("rh", "lh"):
+        get = lambda j: frames[j][k][0] if frames[j].get(k) and frames[j][k][0] else None
+        for i in range(n):
+            p = get(i)
+            if p is None:
+                continue
+            m = [med(get, i, c) for c in range(len(p))]
+            if None not in m and math.dist(p, m) > thr:
+                dv = [a - b for a, b in zip(m, p)]
+                out[i][k] = [None if q is None else [round(a + b, 4) for a, b in zip(q, dv)] for q in frames[i][k]]
+    return out
+
+
 def _hand_basis(h):
     """손 방향(3×3 회전): x = 손목→가운데 손가락 뿌리, z = x × (검지 뿌리→새끼 뿌리). 점이 모자라면 None."""
     import numpy as np
@@ -636,7 +676,7 @@ def compose(glosses, mdict: MotionDict, fps=FPS, transition=0.25, missing_sec=0.
             clip = None        # 깊이 추정을 하지 않은 2D 자료는 손가락·팔 방향이 뒤틀려 보여서 쓰지 않음 ('2D→3D' 로 저장된 것은 사용)
         if clip and clip["frames"]:
             cf = clip.get("fps", fps)
-            src = _relax_low_hands(_one_euro(_smooth_hand_rot(_filter_face(_fix_hands(clip["frames"])), cf), cf))
+            src = _relax_low_hands(_one_euro(_smooth_hand_rot(_despike(_filter_face(_fix_hands(clip["frames"]))), cf), cf))
             n = max(2, round(len(src) * fps / cf / speed))
             seg = _resample(src, n)
             has = True
