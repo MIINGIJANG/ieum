@@ -251,6 +251,7 @@ export class SignAvatar {
       });
     }
     this.headY = pos("head").y;
+    this._modelTop = new THREE.Box3().setFromObject(this.root).max.y;
     this.neckY = pos("neck").y;
     this.neckPos = pos("neck");
     this._hipsY = pos("hips").y;
@@ -370,9 +371,10 @@ export class SignAvatar {
 
   // 화면: 안전모 위 ~ 배까지
   _frameCamera() {
-    const top = this._hat ? new THREE.Box3().setFromObject(this._hat).max.y : this.headY + 0.2;
-    const bottom = this._hipsY + 0.04;
-    const pad = 0.02, span = top - bottom + pad;
+    // 위: 씌운 안전모 끝, 없으면 모델 맨 위(모델에 있는 안전모·머리) / 아래: 골반 위 (config.frameBottom 로 조절)
+    const top = this._hat ? new THREE.Box3().setFromObject(this._hat).max.y : (this._modelTop ?? this.headY + 0.2);
+    const bottom = this._hipsY + ((this.config && this.config.frameBottom) ?? 0.04);
+    const pad = 0.05, span = top - bottom + pad;
     const half = D(this.camera.fov / 2);
     const dist = span / 2 / Math.tan(half);
     const cy = bottom + span / 2;
