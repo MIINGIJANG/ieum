@@ -274,7 +274,8 @@ export class SignAvatar {
         const neck = bindPos(rawB("neck")), chest = bindPos(rawB("upperChest") || rawB("chest"));
         let n = 0;
         if (neck && chest) {
-          const inRegion = (p) => p.y > chest.y - 0.3 && p.y < neck.y + 0.06 && p.z > chest.z - 0.03 && Math.abs(p.x - neck.x) < 0.16;
+          // 목 바로 아래만 (조끼 버클·반사띠의 회색·흰색은 건드리지 않게)
+          const inRegion = (p) => p.y > neck.y - 0.2 && p.y < neck.y + 0.06 && p.z > chest.z - 0.03 && Math.abs(p.x - neck.x) < 0.16;
           const greys = [];
           for (let i = 0; i < P.count; i++) if (inRegion(bp(i)) && isGrey(col(i))) greys.push(lum(col(i)));
           const gMean = greys.length ? greys.reduce((a, b) => a + b, 0) / greys.length : 160;
@@ -305,8 +306,8 @@ export class SignAvatar {
             const rel = bp(i).sub(S);
             if (rel.length() > R) continue;
             const d = rel.dot(adir);
-            if (d < -0.06) continue;                                          // 몸통 안쪽은 그대로
-            const t = sm(-0.04, 0.07, d);
+            if (d < -0.08) continue;                                          // 몸통 안쪽은 그대로
+            const t = sm(-0.07, 0.1, d);                                       // 넓고 완만하게 (어깨선이 각지지 않게)
             SI.setXYZW(i, iu, ic, 0, 0); SW.setXYZW(i, t, 1 - t, 0, 0); n++;
           }
         }

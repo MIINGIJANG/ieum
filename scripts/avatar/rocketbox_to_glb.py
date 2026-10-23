@@ -11,6 +11,8 @@
   (눈동자 eyeLook* 는 눈 뼈로 움직이므로 뺌, AU·HB·SR 표정 세트도 뺌 → 용량)
 - 재질: 색·법선 텍스처, 스페큘러 맵은 거칠기로 (밝을수록 덜 거칠게)
 - 뼈 이름(Bip01 ...)은 web/rig.js 가 자동 인식
+- --subdivide N: 몸(옷·손) 부분만 따로 떼어 N 단계 세분화 (원래 꼭짓점 4천 개라 윤곽이 각져 보임).
+  얼굴은 표정 셰이프키가 있어 그대로 둠. 목 경계가 벌어지지 않게 경계선은 움직이지 않음
 """
 import re
 import sys
@@ -18,6 +20,10 @@ from pathlib import Path
 
 import bpy
 
+SUB = 0
+for a in sys.argv:
+    if a.startswith("--subdivide="):
+        SUB = int(a.split("=")[1])
 src, out = Path(sys.argv[-2]), Path(sys.argv[-1])
 fbx = next(src.glob("Export/*_facial.fbx"))
 tex = src / "Textures"
@@ -80,6 +86,36 @@ for o in [o for o in bpy.data.objects if o.type == "MESH"]:
             nt.links.new(inv.outputs["Color"], sep.inputs["Color"])
             nt.links.new(sep.outputs["Green"], bsdf.inputs["Roughness"])
         bsdf.inputs["Metallic"].default_value = 0.0
+
+if SUB:
+    # 몸 재질 면만 따로 떼서 세분화 (셰이프키는 얼굴에만 의미 있음 → 몸 쪽은 지움)
+    mesh = next(o for o in bpy.data.objects if o.type == "MESH")
+    bpy.context.view_layer.objects.active = mesh
+    mesh.select_set(True)
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="DESELECT")
+    body_slot = next(i for i, m in enumerate(mesh.data.materials) if m.name.endswith("_body"))
+    mesh.active_material_index = body_slot
+    bpy.ops.object.material_slot_select()
+    bpy.ops.mesh.separate(type="SELECTED")
+    bpy.ops.object.mode_set(mode="OBJECT")
+    body = next(o for o in bpy.data.objects if o.type == "MESH" and o is not mesh)
+    for o in bpy.context.selected_objects:
+        o.select_set(False)
+    body.select_set(True)
+    bpy.context.view_layer.objects.active = body
+    if body.data.shape_keys:
+        bpy.ops.object.shape_key_remove(all=True)
+    mod = body.modifiers.new("sub", "SUBSURF")
+    mod.levels = SUB
+    mod.render_levels = SUB
+    mod.boundary_smooth = "PRESERVE_CORNERS"
+    mod.uv_smooth = "PRESERVE_BOUNDARIES"
+    # 아마추어 모디파이어보다 앞에 (세분화한 뒤 뼈에 묶이게)
+    while body.modifiers.find("sub") > 0:
+        bpy.ops.object.modifier_move_up(modifier="sub")
+    bpy.ops.object.modifier_apply(modifier="sub")
+    print("몸 세분화:", len(body.data.vertices), "꼭짓점")
 
 out.parent.mkdir(parents=True, exist_ok=True)
 bpy.ops.export_scene.gltf(filepath=str(out), export_format="GLB", export_skins=True, export_morph=True,
