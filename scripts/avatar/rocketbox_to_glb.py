@@ -15,6 +15,8 @@
   얼굴은 표정 셰이프키가 있어 그대로 둠. 목 경계가 벌어지지 않게 경계선은 움직이지 않음
 - --drop-islands=N: 몸 재질에서 꼭짓점 N 개 이하의 떨어진 조각 지우기 (조끼 버클처럼 투박한 작은 부품, 떠 있는 점)
 - --smooth-armpits=R: 어깨 관절 R m 안 꼭짓점의 뼈 가중치를 이웃과 평균내 매끄럽게 (겨드랑이에서 조끼·소매가 겹치거나 각지는 것)
+- --twist-bones=1: 아래팔 비틀림 뼈 2개(Bip01 L ForearmTwist1·2, 아래팔 가운데·손목 쪽)를 만들고 아래팔 가중치를 팔꿈치→손목 쪽으로
+  나눠 줌. 손목을 돌릴 때 아래팔 살이 손목 쪽일수록 많이 같이 돌아감 (없으면 손목에서만 꼬이거나 팔 전체가 돎). web/rig.js 가 자동 인식
 """
 import re
 import sys
@@ -26,6 +28,7 @@ opt = {a.split("=")[0][2:]: a.split("=")[1] for a in sys.argv if a.startswith("-
 SUB = int(opt.get("subdivide", 0))
 DROP = int(opt.get("drop-islands", 0))
 PIT = float(opt.get("smooth-armpits", 0))
+TWIST = int(opt.get("twist-bones", 0))
 src, out = Path(sys.argv[-2]), Path(sys.argv[-1])
 fbx = next(src.glob("Export/*_facial.fbx"))
 tex = src / "Textures"
@@ -153,6 +156,55 @@ if PIT:
                 else:
                     mesh0.vertex_groups[g].remove([i])
         print("겨드랑이 가중치 스무딩:", side, len(sel), "꼭짓점")
+
+if TWIST:
+    # 아래팔 비틀림 뼈: 팔꿈치→손목 1/3·2/3 지점부터. 가중치는 위치(팔꿈치 0 ~ 손목 1)에 따라
+    #   0.15 까지 아래팔, 0.15~0.5 아래팔→비틀림1, 0.5~0.9 비틀림1→비틀림2, 0.9 부터 비틀림2
+    bpy.context.view_layer.objects.active = arm
+    bpy.ops.object.mode_set(mode="EDIT")
+    eb = arm.data.edit_bones
+    span = {}
+    for side in ("L", "R"):
+        fa, hand = eb[f"Bip01 {side} Forearm"], eb[f"Bip01 {side} Hand"]
+        e, w = fa.head.copy(), hand.head.copy()
+        span[side] = (arm.matrix_world @ e, arm.matrix_world @ w)
+        for k, (a, b) in enumerate(((1 / 3, 2 / 3), (2 / 3, 1.0)), 1):
+            t = eb.new(f"Bip01 {side} ForearmTwist{k}")
+            t.head, t.tail = e.lerp(w, a), e.lerp(w, b)
+            t.roll = fa.roll
+            t.parent = fa
+            t.use_deform = True
+    bpy.ops.object.mode_set(mode="OBJECT")
+    me = mesh0.data
+    mw = mesh0.matrix_world
+    for side in ("L", "R"):
+        g0 = mesh0.vertex_groups[f"Bip01 {side} Forearm"]
+        g1 = mesh0.vertex_groups.new(name=f"Bip01 {side} ForearmTwist1")
+        g2 = mesh0.vertex_groups.new(name=f"Bip01 {side} ForearmTwist2")
+        E, W = span[side]
+        ax = W - E
+        L2 = ax.length_squared
+        n = 0
+        for v in me.vertices:
+            w = next((g.weight for g in v.groups if g.group == g0.index), 0)
+            if w <= 0:
+                continue
+            t = max(0.0, min(1.0, (mw @ v.co - E).dot(ax) / L2))
+            if t <= 0.15:
+                share = (1, 0, 0)
+            elif t <= 0.5:
+                u = (t - 0.15) / 0.35; share = (1 - u, u, 0)
+            elif t <= 0.9:
+                u = (t - 0.5) / 0.4; share = (0, 1 - u, u)
+            else:
+                share = (0, 0, 1)
+            for g, s in zip((g0, g1, g2), share):
+                if w * s > 1e-4:
+                    g.add([v.index], w * s, "REPLACE")
+                elif g is g0:
+                    g.remove([v.index])
+            n += 1
+        print("아래팔 비틀림 뼈:", side, n, "꼭짓점")
 
 if SUB:
     # 몸 재질 면만 따로 떼서 세분화 (셰이프키는 얼굴에만 의미 있음 → 몸 쪽은 지움)

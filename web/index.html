@@ -567,7 +567,8 @@ function play(m = motion, only = null) {
     const cur = currentItem(f, m, only), it = cur && cur.it, seg = cur && cur.seg;
     const word = seg && seg.end > seg.start
       ? { gloss: seg.gloss || it.gloss, t: (f - seg.start) / (seg.end - seg.start), nms: it && it.nms, text: mouthText(seg.gloss || it.gloss) } : null;
-    if (window.avatar) window.avatar.setFrame(fr, word, m);   // 단어 표정·고개·입 모양 + 단어 사이 연결 구간(회전으로 섞기)용 동작 전체
+    // 단어 표정·고개·입 모양 + 단어 사이 연결 구간(회전으로 섞기)용 동작 전체. 프레임 사이는 보간 (화면 주사율로 부드럽게)
+    if (window.avatar) { if (fr && window.avatar.setFrameAt) window.avatar.setFrameAt(m, Math.min(frameF, n - 1), word); else window.avatar.setFrame(fr, word, m); }
     items.forEach(x => x.li.classList.toggle("active", x === it));
     if (frameF < n) raf = requestAnimationFrame(loop);
     else {

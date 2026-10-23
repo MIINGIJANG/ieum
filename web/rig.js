@@ -71,14 +71,16 @@ export function findBones(root, overrides = {}) {
   return out;
 }
 
-// 팔뚝 비틀림 뼈 (CC4: CC_Base_L_ForearmTwist01·02) — 손목 회전의 일부를 나눠 줘서 손목이 꼬여 보이지 않게
+// 팔뚝 비틀림 뼈 (CC4: CC_Base_L_ForearmTwist01·02, Rocketbox 변환: Bip01 L ForearmTwist1·2) — 손목 회전의 일부를 나눠 줘서 손목이 꼬여 보이지 않게
+//  팔꿈치 쪽 → 손목 쪽 순서 (번호 순)
 export function findTwistBones(root) {
   const res = { left: [], right: [] };
   root.traverse((o) => {
     const k = norm(o.name || "");
-    const m = k.match(/^(l|r|left|right)_?forearmtwist0?(\d)?$/);
-    if (m) res[m[1].startsWith("l") ? "left" : "right"].push(o);
+    const m = k.match(/^(?:bip01)?(l|r|left|right)_?forearmtwist0?(\d)?$/);
+    if (m) res[m[1].startsWith("l") ? "left" : "right"].push([+(m[2] || 0), o]);
   });
+  for (const P in res) res[P] = res[P].sort((a, b) => a[0] - b[0]).map((x) => x[1]);
   return res;
 }
 
