@@ -244,7 +244,7 @@ export class SignAvatar {
       const col = (i) => at(UV.getX(i), UV.getY(i));
       const isOrange = (c) => c[0] > 170 && c[1] > 70 && c[1] < 190 && c[2] < 130 && c[0] - c[2] > 90;
       const isBlue = (c) => c[2] > c[0] + 35 && c[2] > 90;
-      const isGrey = (c) => Math.max(...c) - Math.min(...c) < 28 && c[0] > 70 && c[0] < 235;
+      const isGrey = (c) => Math.max(...c) - Math.min(...c) < 40 && c[0] > 60 && c[0] < 250;   // 회색~밝은 회색(옷깃 안쪽 얇은 띠 포함)
       const dom = (i) => { let best = 0, bi = -1; for (let k = 0; k < 4; k++) { const w = SW.getComponent(i, k); if (w > best) { best = w; bi = SI.getComponent(i, k); } } return sk.bones[bi]; };
       const bp = (i) => new THREE.Vector3().fromBufferAttribute(P, i).applyMatrix4(o.bindMatrix);
       const tris = idx.count / 3, triIds = (t) => [idx.getX(t * 3), idx.getX(t * 3 + 1), idx.getX(t * 3 + 2)];
@@ -281,7 +281,7 @@ export class SignAvatar {
           for (let t = 0; t < tris; t++) {
             const ids = triIds(t);
             if (!ids.some((i) => inRegion(bp(i))) || ids.some((i) => isOrange(col(i)))) continue;
-            paintTri(ids, (tc) => (isGrey(tc) ? c.map((v) => Math.min(255, v * Math.min(1.25, Math.max(0.6, lum(tc) / gMean)))) : null));
+            paintTri(ids, (tc) => (isGrey(tc) ? c.map((v) => Math.min(255, v * 0.9 * Math.min(1.15, Math.max(0.6, lum(tc) / gMean)))) : null));   // 바깥 작업복 톤에 맞춰 살짝 어둡게
             n++;
           }
         }
