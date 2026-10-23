@@ -165,7 +165,13 @@ export class SignAvatar {
       let config = {};
       try { const r = await fetch(url.replace(/\.glb$/i, ".json")); if (r.ok) config = await r.json(); } catch { /* 설정 없음 */ }
       this.config = config;
-      const rig = buildRig(gltf, config);
+      // 메시·텍스처 손보기는 체격 조절 전(기본 자세)에
+      const rig = buildRig(gltf, config, (bones) => {
+        this._rawB = bones;
+        const t = performance.now();
+        if (config.undershirt || config.armpitBlend) this._editBodyGLB(config, gltf.scene);
+        this.timings.editBody = Math.round(performance.now() - t);
+      });
       this.vrm = rig;
       this.root = rig.scene;
       this.root.traverse((o) => { o.frustumCulled = false; });
@@ -212,6 +218,111 @@ export class SignAvatar {
         // 비스듬히 보이는 텍스처가 반짝이며 떨리지 않게 (이방성 필터링)
         for (const t of [m.map, m.normalMap, m.roughnessMap]) if (t) { t.anisotropy = this.renderer.capabilities.getMaxAnisotropy(); t.needsUpdate = true; }
       }
+    });
+  }
+
+  // 몸 메시·텍스처 손보기 (한 덩어리 메시에 옷이 겹쳐 그려진 모델용, 불러올 때 한 번)
+  //  config.undershirt = "#색" → 목 아래 회색 속옷을 그 색(겉옷 색)으로 칠해 없앰
+  //  config.armpitBlend = 몇 m → 어깨 관절 이 거리 안의 꼭짓점을 쇄골·위팔에 매끄럽게 나눠 묶음 (겨드랑이에서 조끼·소매가 겹쳐 보이는 문제)
+  //  체격 조절 전 기본 자세에서 화면 좌표(m)로 계산하고, 꼭짓점은 메시 좌표로 되돌려 저장
+  _editBodyGLB(cfg, root) {
+    const rawB = (n) => this._rawB[n];
+    root.updateMatrixWorld(true);
+    root.traverse((o) => {
+      if (!o.isSkinnedMesh || !o.material || !o.material.map || !/body/i.test(o.material.name)) return;
+      const sk = o.skeleton, geo = o.geometry, P = geo.attributes.position, UV = geo.attributes.uv, N = geo.attributes.normal;
+      const SI = geo.attributes.skinIndex, SW = geo.attributes.skinWeight, idx = geo.index;
+      if (!UV || !SI || !idx) return;
+      // 바인드 공간: 메시 꼭짓점(position) × bindMatrix, 뼈는 boneInverse 의 역행렬 (glTF 에서는 화면 좌표 m 와 같음)
+      const bindPos = (bone) => { const i = sk.bones.indexOf(bone); return i < 0 ? null : new THREE.Vector3().applyMatrix4(sk.boneInverses[i].clone().invert()); };
+      const img = o.material.map.image, W = img.width, H = img.height;
+      const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+      const g = cv.getContext("2d", { willReadFrequently: true });
+      g.drawImage(img, 0, 0);
+      const data = g.getImageData(0, 0, W, H), D8 = data.data;
+      const at = (u, v) => { const x = Math.min(W - 1, Math.max(0, Math.floor(u * W))), y = Math.min(H - 1, Math.max(0, Math.floor(v * H))), k = (y * W + x) * 4; return [D8[k], D8[k + 1], D8[k + 2]]; };
+      const col = (i) => at(UV.getX(i), UV.getY(i));
+      const isOrange = (c) => c[0] > 170 && c[1] > 70 && c[1] < 190 && c[2] < 130 && c[0] - c[2] > 90;
+      const isBlue = (c) => c[2] > c[0] + 35 && c[2] > 90;
+      const isGrey = (c) => Math.max(...c) - Math.min(...c) < 28 && c[0] > 70 && c[0] < 235;
+      const dom = (i) => { let best = 0, bi = -1; for (let k = 0; k < 4; k++) { const w = SW.getComponent(i, k); if (w > best) { best = w; bi = SI.getComponent(i, k); } } return sk.bones[bi]; };
+      const bp = (i) => new THREE.Vector3().fromBufferAttribute(P, i).applyMatrix4(o.bindMatrix);
+      const tris = idx.count / 3, triIds = (t) => [idx.getX(t * 3), idx.getX(t * 3 + 1), idx.getX(t * 3 + 2)];
+      // 삼각형 안 텍셀마다 fn(텍셀 색, [꼭짓점별 무게 3개]) → 새 색(또는 null=그대로). 꼭짓점 값을 무게로 섞어 경계가 매끈하게
+      const paintTri = (ids, fn) => {
+        const pts = ids.map((i) => [UV.getX(i) * W, UV.getY(i) * H]);
+        const x0 = Math.max(0, Math.floor(Math.min(...pts.map((p) => p[0])))), x1 = Math.min(W - 1, Math.ceil(Math.max(...pts.map((p) => p[0]))));
+        const y0 = Math.max(0, Math.floor(Math.min(...pts.map((p) => p[1])))), y1 = Math.min(H - 1, Math.ceil(Math.max(...pts.map((p) => p[1]))));
+        const [a, b, d] = pts, area = (b[0] - a[0]) * (d[1] - a[1]) - (d[0] - a[0]) * (b[1] - a[1]);
+        if (Math.abs(area) < 1e-6) return;
+        for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+          const px = x + 0.5, py = y + 0.5;
+          const w0 = ((b[0] - px) * (d[1] - py) - (d[0] - px) * (b[1] - py)) / area, w1 = ((d[0] - px) * (a[1] - py) - (a[0] - px) * (d[1] - py)) / area, w2 = 1 - w0 - w1;
+          if (w0 < -0.02 || w1 < -0.02 || w2 < -0.02) continue;
+          const k = (y * W + x) * 4, out = fn([D8[k], D8[k + 1], D8[k + 2]], [w0, w1, w2]);
+          if (out) { D8[k] = out[0]; D8[k + 1] = out[1]; D8[k + 2] = out[2]; }
+        }
+      };
+      const lum = (c) => 0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2];
+      const avg = (list) => { const s = [0, 0, 0]; list.forEach((c) => { s[0] += c[0]; s[1] += c[1]; s[2] += c[2]; }); return s.map((v) => v / Math.max(1, list.length)); };
+      const blue = avg([...Array(P.count).keys()].filter((i) => i % 3 === 0).map(col).filter(isBlue));
+      let edited = 0;
+
+      // ---- 2) 회색 속옷 → 겉옷 색 (목 아래 가슴 앞쪽, 회색 텍셀만. 천의 명암은 살리고 색만 바꿈)
+      if (cfg.undershirt) {
+        const c = cfg.undershirt === true ? blue : new THREE.Color(cfg.undershirt).toArray().map((v) => Math.round(v * 255));
+        const neck = bindPos(rawB("neck")), chest = bindPos(rawB("upperChest") || rawB("chest"));
+        let n = 0;
+        if (neck && chest) {
+          const inRegion = (p) => p.y > chest.y - 0.3 && p.y < neck.y + 0.06 && p.z > chest.z - 0.03 && Math.abs(p.x - neck.x) < 0.16;
+          const greys = [];
+          for (let i = 0; i < P.count; i++) if (inRegion(bp(i)) && isGrey(col(i))) greys.push(lum(col(i)));
+          const gMean = greys.length ? greys.reduce((a, b) => a + b, 0) / greys.length : 160;
+          for (let t = 0; t < tris; t++) {
+            const ids = triIds(t);
+            if (!ids.some((i) => inRegion(bp(i))) || ids.some((i) => isOrange(col(i)))) continue;
+            paintTri(ids, (tc) => (isGrey(tc) ? c.map((v) => Math.min(255, v * Math.min(1.25, Math.max(0.6, lum(tc) / gMean)))) : null));
+            n++;
+          }
+        }
+        edited += n;
+      }
+
+      // ---- 3) 겨드랑이: 어깨 주변 꼭짓점이 쇄골·위팔을 따르는 비율을 '팔 방향 거리'로 매끄럽게 섞기
+      //  (조끼 쪽 면은 몸통·쇄골, 소매 쪽 면은 위팔만 따라가서 팔을 움직이면 서로 뚫고 겹쳐 보이던 문제)
+      if (cfg.armpitBlend) {
+        const R = cfg.armpitBlend, sm = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+        let n = 0;
+        for (const side of ["left", "right"]) {
+          const up = rawB(side + "UpperArm"), lo = rawB(side + "LowerArm"), cl = rawB(side + "Shoulder") || rawB("upperChest") || rawB("chest");
+          const S = up && bindPos(up), Eb = lo && bindPos(lo);
+          if (!S || !Eb || !cl) continue;
+          const iu = sk.bones.indexOf(up), ic = sk.bones.indexOf(cl);
+          const adir = Eb.clone().sub(S).normalize();
+          const near = new Set([up, cl, rawB("upperChest"), rawB("chest"), rawB("neck")].filter(Boolean));
+          for (let i = 0; i < P.count; i++) {
+            if (!near.has(dom(i))) continue;
+            const rel = bp(i).sub(S);
+            if (rel.length() > R) continue;
+            const d = rel.dot(adir);
+            if (d < -0.06) continue;                                          // 몸통 안쪽은 그대로
+            const t = sm(-0.04, 0.07, d);
+            SI.setXYZW(i, iu, ic, 0, 0); SW.setXYZW(i, t, 1 - t, 0, 0); n++;
+          }
+        }
+        SI.needsUpdate = true; SW.needsUpdate = true;
+        this._armpitVerts = n;
+        edited += n;
+      }
+
+      if (!edited) return;
+      P.needsUpdate = true; geo.computeBoundingSphere();
+      g.putImageData(data, 0, 0);
+      const old = o.material.map, tex = new THREE.CanvasTexture(cv);
+      tex.flipY = old.flipY; tex.colorSpace = old.colorSpace; tex.wrapS = old.wrapS; tex.wrapT = old.wrapT;
+      tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+      o.material.map = tex; o.material.needsUpdate = true;
+      this._bodyEdits = edited;
     });
   }
 
