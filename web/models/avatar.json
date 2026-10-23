@@ -1,9 +1,37 @@
 {
-  "about": "avatar.glb 설정 (web/rig.js·avatar.js). bones: 뼈 이름이 자동 인식되지 않을 때 {\"leftUpperArm\": \"뼈 이름\"} 처럼 지정. clothes: 옷 재질 이름 정규식, clothTint: 옷 색에 곱할 색(false 면 그대로), hat: false 면 안전모 안 씌움(모델에 안전모가 있을 때), roughness: 숫자면 모든 재질을 그 거칠기로(광택 맵 무시, 비닐처럼 번들거릴 때), torsoScale: 상체 길이 비율(척추 마디 간격), frameBottom: 화면 아래 끝 = 골반 + 이 값(m)",
+  "about": "avatar.glb 설정 (web/rig.js·avatar.js). bones: 뼈 이름이 자동 인식되지 않을 때 {\"leftUpperArm\": \"뼈 이름\"} 처럼 지정. clothes: 옷 재질 이름 정규식, clothTint: 옷 색에 곱할 색(false 면 그대로), hat: false 면 안전모 안 씌움(모델에 안전모가 있을 때), roughness: 숫자면 모든 재질을 그 거칠기로(광택 맵 무시, 비닐처럼 번들거릴 때), torsoScale: 상체 길이 비율(척추 마디 간격), frameBottom: 화면 아래 끝 = 골반 + 이 값(m), physique: 체격 배율 [가로,세로,앞뒤] (waist·chest·neck·upperArm·forearm, shoulders 는 어깨 너비 배율)",
   "bones": {},
   "clothTint": false,
   "hat": false,
   "roughness": 0.78,
   "torsoScale": 0.9,
-  "frameBottom": 0.12
+  "frameBottom": 0.12,
+  "physique": {
+    "waist": [
+      1.06,
+      1,
+      1.06
+    ],
+    "chest": [
+      1.08,
+      1,
+      1.06
+    ],
+    "neck": [
+      1.12,
+      1,
+      1.1
+    ],
+    "shoulders": 1.1,
+    "upperArm": [
+      1,
+      1.14,
+      1.14
+    ],
+    "forearm": [
+      1,
+      1.1,
+      1.1
+    ]
+  }
 }
