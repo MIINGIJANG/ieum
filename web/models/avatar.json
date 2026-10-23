@@ -1,6 +1,7 @@
 {
-  "about": "avatar.glb 설정 (web/rig.js·avatar.js). bones: 뼈 이름이 자동 인식되지 않을 때 {\"leftUpperArm\": \"뼈 이름\"} 처럼 지정. clothes: 옷 재질 이름 정규식, clothTint: 옷 색에 곱할 색(false 면 그대로), hat: false 면 안전모 안 씌움",
+  "about": "avatar.glb 설정 (web/rig.js·avatar.js). bones: 뼈 이름이 자동 인식되지 않을 때 {\"leftUpperArm\": \"뼈 이름\"} 처럼 지정. clothes: 옷 재질 이름 정규식, clothTint: 옷 색에 곱할 색(false 면 그대로), hat: false 면 안전모 안 씌움(모델에 안전모가 있을 때), roughness: 숫자면 모든 재질을 그 거칠기로(광택 맵 무시, 비닐처럼 번들거릴 때)",
   "bones": {},
-  "clothTint": 4871528,
-  "hat": true
+  "clothTint": false,
+  "hat": false,
+  "roughness": 0.78
 }

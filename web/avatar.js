@@ -203,6 +203,7 @@ export class SignAvatar {
           if ("roughness" in m) m.roughness = Math.max(m.roughness ?? 0.8, 0.8);
         }
         if (/hair|lash|brow/i.test(name) && m.map) { m.alphaTest = Math.max(m.alphaTest || 0, 0.4); m.transparent = false; }
+        if (config.roughness != null && "roughness" in m) { m.roughnessMap = null; m.roughness = config.roughness; m.needsUpdate = true; }   // 번들거림 없애기 (모델 설정)
       }
     });
   }
@@ -262,6 +263,8 @@ export class SignAvatar {
     this.headCenter = skull ? new THREE.Vector3(skull.cx, eye.y - 0.01, skull.cz) : new THREE.Vector3(pos("head").x, eye.y - 0.01, pos("head").z);
     this.headR = skull ? Math.max(skull.rx, skull.rz * 0.9) * 1.04 : this.shoulderW * 0.36;
     this._skullBox = skull;
+    const ls = this.raw("leftShoulder") || this.raw("leftUpperArm");
+    this._neckCarriesArms = !!(ls && this.raw("neck") && ls.parent === this.raw("neck"));
     // 시선: 눈 뼈 기본 회전
     this.eyes = ["leftEye", "rightEye"].map((n) => this.bone(n)).filter(Boolean);
   }
@@ -275,7 +278,7 @@ export class SignAvatar {
     head.traverse((o) => under.add(o));
     const box = new THREE.Box3(), v = new THREE.Vector3();
     this.root.traverse((o) => {
-      if (!o.isSkinnedMesh) return;
+      if (!o.isSkinnedMesh || /helmet|hat|cap/i.test([].concat(o.material).map((m) => m.name).join(" "))) return;   // 모델에 있는 안전모는 빼고 머리통만
       const sk = o.skeleton, idx = o.geometry.attributes.skinIndex, w = o.geometry.attributes.skinWeight, P = o.geometry.attributes.position;
       if (!idx || !w) return;
       for (let i = 0; i < P.count; i += 2) {
@@ -753,8 +756,9 @@ export class SignAvatar {
     const x = this.headSpring.step(tgt, dt);
     if (Math.abs(x[0] - prevYaw) / Math.max(dt, 1e-3) > 60 && now > this._nextBlink - 2000) this._nextBlink = now + 60;   // 큰 고개 돌림 뒤 깜빡
     const qOf = (k) => this._W2M(new THREE.Quaternion().setFromEuler(new THREE.Euler(D(x[1]) * k, D(x[0]) * k, D(x[2]) * k, "YXZ")));
-    this._setNow("neck", qOf(0.4));
-    this._setNow("head", qOf(0.6));
+    // Rocketbox(3ds Max Biped) 처럼 쇄골이 목에 붙은 뼈대는 목을 돌리면 팔까지 흔들림 → 고개 회전은 머리 뼈에만
+    if (this._neckCarriesArms) { this._setNow("neck", new THREE.Quaternion()); this._setNow("head", qOf(1)); }
+    else { this._setNow("neck", qOf(0.4)); this._setNow("head", qOf(0.6)); }
 
     // ---- 시선: 보통은 보는 사람(카메라), 단어 중 손이 얼굴 앞으로 오면 살짝 손 쪽. 가끔 아주 작은 눈 움직임
     if (!this._sacc || now > this._sacc.until) this._sacc = { x: (Math.random() - 0.5) * 2.4, y: (Math.random() - 0.5) * 1.6, until: now + 800 + Math.random() * 1400 };
