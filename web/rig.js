@@ -83,7 +83,7 @@ export function findTwistBones(root) {
 }
 
 // 체격 조절 (config.physique): 뼈 크기를 바꿔 몸 메시도 함께 커지게. 값은 화면 기준 [가로(x), 세로(y), 앞뒤(z)] 배율
-//   waist: 허리, chest: 가슴(허리 배율에 곱해짐), neck: 목 굵기, shoulders: 어깨 너비(쇄골 길이), upperArm·forearm: 팔 굵기
+//   waist: 허리, chest: 가슴(허리 배율에 곱해짐), upperChest: 윗가슴(가슴 배율에 곱해짐), neck: 목 굵기, shoulders: 어깨 너비(쇄골 길이), upperArm·forearm: 팔 굵기
 // 자식 뼈는 크기를 이어받으므로, 커지면 안 되는 곳(목 위·팔 아래)은 반대로 줄여 원래 크기로 되돌림
 // (기본 자세에서 뼈 축이 화면 축과 거의 나란하다고 보고, 뼈의 로컬 축마다 가장 가까운 화면 축의 배율을 씀)
 function applyPhysique(bones, P, scene) {
@@ -102,10 +102,12 @@ function applyPhysique(bones, P, scene) {
   };
   const mul = (bone, w) => { if (bone) bone.scale.multiply(toLocal(bone, w)); };
   const inv = (w) => new THREE.Vector3(1 / w.x, 1 / w.y, 1 / w.z);
-  const waist = V3(P.waist || 1), chest = V3(P.chest || 1), neck = V3(P.neck || 1);
+  // 허리 → 가슴 → 윗가슴 세 마디에 나눠 조금씩 (한 마디에서 크게 바뀌면 경계에서 살이 접히거나 불룩해짐)
+  const waist = V3(P.waist || 1), chest = V3(P.chest || 1), upper = V3(P.upperChest || 1), neck = V3(P.neck || 1);
   const trunk = waist.clone().multiply(chest);
   mul(bones.spine, waist);
   mul(bones.chest || bones.upperChest, chest);
+  if (bones.chest && bones.upperChest && P.upperChest) { mul(bones.upperChest, upper); trunk.multiply(upper); }
   // 목: 몸통 배율을 되돌린 뒤 목 굵기만. 머리는 목 배율도 되돌림
   mul(bones.neck, inv(trunk).multiply(neck));
   mul(bones.head, inv(neck));

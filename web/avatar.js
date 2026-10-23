@@ -306,8 +306,8 @@ export class SignAvatar {
             const rel = bp(i).sub(S);
             if (rel.length() > R) continue;
             const d = rel.dot(adir);
-            if (d < -0.06) continue;                                          // 몸통 안쪽은 그대로
-            const t = sm(-0.04, 0.07, d);
+            if (d < -0.08) continue;                                          // 몸통 안쪽은 그대로
+            const t = sm(-0.07, 0.1, d);                                       // 넓고 완만하게 (어깨선이 각지지 않게)
             SI.setXYZW(i, iu, ic, 0, 0); SW.setXYZW(i, t, 1 - t, 0, 0); n++;
           }
         }
