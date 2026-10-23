@@ -82,6 +82,47 @@ export function findTwistBones(root) {
   return res;
 }
 
+// 체격 조절 (config.physique): 뼈 크기를 바꿔 몸 메시도 함께 커지게. 값은 화면 기준 [가로(x), 세로(y), 앞뒤(z)] 배율
+//   waist: 허리, chest: 가슴(허리 배율에 곱해짐), neck: 목 굵기, shoulders: 어깨 너비(쇄골 길이), upperArm·forearm: 팔 굵기
+// 자식 뼈는 크기를 이어받으므로, 커지면 안 되는 곳(목 위·팔 아래)은 반대로 줄여 원래 크기로 되돌림
+// (기본 자세에서 뼈 축이 화면 축과 거의 나란하다고 보고, 뼈의 로컬 축마다 가장 가까운 화면 축의 배율을 씀)
+function applyPhysique(bones, P, scene) {
+  scene.updateMatrixWorld(true);
+  const V3 = (a) => new THREE.Vector3(...(Array.isArray(a) ? a : [a, a, a]));
+  const quat = new Map();
+  for (const b of Object.values(bones)) quat.set(b, b.getWorldQuaternion(new THREE.Quaternion()));
+  const toLocal = (bone, w) => {
+    const q = quat.get(bone), out = new THREE.Vector3();
+    ["x", "y", "z"].forEach((ax, i) => {
+      const d = new THREE.Vector3(i === 0 ? 1 : 0, i === 1 ? 1 : 0, i === 2 ? 1 : 0).applyQuaternion(q);
+      const a = [Math.abs(d.x), Math.abs(d.y), Math.abs(d.z)];
+      out[ax] = [w.x, w.y, w.z][a.indexOf(Math.max(...a))];
+    });
+    return out;
+  };
+  const mul = (bone, w) => { if (bone) bone.scale.multiply(toLocal(bone, w)); };
+  const inv = (w) => new THREE.Vector3(1 / w.x, 1 / w.y, 1 / w.z);
+  const waist = V3(P.waist || 1), chest = V3(P.chest || 1), neck = V3(P.neck || 1);
+  const trunk = waist.clone().multiply(chest);
+  mul(bones.spine, waist);
+  mul(bones.chest || bones.upperChest, chest);
+  // 목: 몸통 배율을 되돌린 뒤 목 굵기만. 머리는 목 배율도 되돌림
+  mul(bones.neck, inv(trunk).multiply(neck));
+  mul(bones.head, inv(neck));
+  const neckCarries = bones.leftShoulder && bones.leftShoulder.parent === bones.neck;
+  for (const side of ["left", "right"]) {
+    const sh = bones[side + "Shoulder"], up = bones[side + "UpperArm"], lo = bones[side + "LowerArm"], hand = bones[side + "Hand"];
+    if (sh && !neckCarries) mul(sh, inv(trunk));                // 쇄골이 가슴에 붙은 뼈대: 몸통 배율 되돌림
+    else if (sh) mul(sh, inv(neck));                              // 쇄골이 목에 붙은 뼈대(Biped): 목 배율 되돌림
+    if (up && P.shoulders) up.position.multiplyScalar(P.shoulders);   // 어깨 너비
+    const ua = V3(P.upperArm || 1), fa = V3(P.forearm || 1);
+    mul(up, ua);
+    mul(lo, inv(ua).multiply(fa));
+    mul(hand, inv(fa));
+  }
+  scene.updateMatrixWorld(true);
+}
+
 // GLB 를 VRM 비슷한 객체로: { scene, humanoid, update(dt) }
 export function buildRig(gltf, config = {}) {
   const scene = gltf.scene;
@@ -95,6 +136,7 @@ export function buildRig(gltf, config = {}) {
   const need = ["hips", "spine", "head", "leftUpperArm", "leftLowerArm", "leftHand", "rightUpperArm", "rightLowerArm", "rightHand"];
   const missing = need.filter((n) => !bones[n]);
   if (missing.length) throw new Error("아바타 뼈를 찾지 못함: " + missing.join(", ") + " (web/models/avatar.json 의 bones 로 지정)");
+  if (config.physique) applyPhysique(bones, config.physique, scene);
   // 상체 비율: config.torsoScale (예: 0.9) 이면 척추 마디 사이 간격을 그만큼 줄임 (뼈를 따라 몸통 메시도 줄어듦)
   if (config.torsoScale && config.torsoScale !== 1) {
     for (const n of ["chest", "upperChest", "neck"]) if (bones[n]) bones[n].position.multiplyScalar(config.torsoScale);
