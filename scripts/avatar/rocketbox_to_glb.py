@@ -13,6 +13,8 @@
 - 뼈 이름(Bip01 ...)은 web/rig.js 가 자동 인식
 - --subdivide N: 몸(옷·손) 부분만 따로 떼어 N 단계 세분화 (원래 꼭짓점 4천 개라 윤곽이 각져 보임).
   얼굴은 표정 셰이프키가 있어 그대로 둠. 목 경계가 벌어지지 않게 경계선은 움직이지 않음
+- --drop-islands=N: 몸 재질에서 꼭짓점 N 개 이하의 떨어진 조각 지우기 (조끼 버클처럼 투박한 작은 부품, 떠 있는 점)
+- --smooth-armpits=R: 어깨 관절 R m 안 꼭짓점의 뼈 가중치를 이웃과 평균내 매끄럽게 (겨드랑이에서 조끼·소매가 겹치거나 각지는 것)
 """
 import re
 import sys
@@ -20,10 +22,10 @@ from pathlib import Path
 
 import bpy
 
-SUB = 0
-for a in sys.argv:
-    if a.startswith("--subdivide="):
-        SUB = int(a.split("=")[1])
+opt = {a.split("=")[0][2:]: a.split("=")[1] for a in sys.argv if a.startswith("--") and "=" in a}
+SUB = int(opt.get("subdivide", 0))
+DROP = int(opt.get("drop-islands", 0))
+PIT = float(opt.get("smooth-armpits", 0))
 src, out = Path(sys.argv[-2]), Path(sys.argv[-1])
 fbx = next(src.glob("Export/*_facial.fbx"))
 tex = src / "Textures"
@@ -86,6 +88,71 @@ for o in [o for o in bpy.data.objects if o.type == "MESH"]:
             nt.links.new(inv.outputs["Color"], sep.inputs["Color"])
             nt.links.new(sep.outputs["Green"], bsdf.inputs["Roughness"])
         bsdf.inputs["Metallic"].default_value = 0.0
+
+import bmesh
+from mathutils import Vector
+
+mesh0 = next(o for o in bpy.data.objects if o.type == "MESH")
+arm = next(o for o in bpy.data.objects if o.type == "ARMATURE")
+
+if DROP:
+    bm = bmesh.new(); bm.from_mesh(mesh0.data); bm.verts.ensure_lookup_table()
+    seen, kill = set(), []
+    for v in bm.verts:
+        if v.index in seen:
+            continue
+        comp, stack = [], [v]
+        seen.add(v.index)
+        while stack:
+            x = stack.pop(); comp.append(x)
+            for e in x.link_edges:
+                y = e.other_vert(x)
+                if y.index not in seen:
+                    seen.add(y.index); stack.append(y)
+        mats = {mesh0.data.materials[f.material_index].name for x in comp for f in x.link_faces}
+        if len(comp) <= DROP and (not mats or all(m.endswith("_body") for m in mats)):
+            kill += comp
+    bmesh.ops.delete(bm, geom=kill, context="VERTS")
+    bm.to_mesh(mesh0.data); bm.free()
+    print("작은 조각 지움:", len(kill), "꼭짓점")
+
+if PIT:
+    # 어깨 관절 주변: 위팔·쇄골·가슴 뼈 가중치를 이웃 평균으로 여러 번 (메시 연결을 따라 매끄럽게 퍼짐)
+    vg = {g.name: g.index for g in mesh0.vertex_groups}
+    me = mesh0.data
+    bm = bmesh.new(); bm.from_mesh(me); bm.verts.ensure_lookup_table()
+    nbr = {v.index: [e.other_vert(v).index for e in v.link_edges] for v in bm.verts}
+    bm.free()
+    W = [{g.group: g.weight for g in v.groups} for v in me.vertices]
+    mw = mesh0.matrix_world
+    for side in ("L", "R"):
+        names = [f"Bip01 {side} UpperArm", f"Bip01 {side} Clavicle", "Bip01 Spine2", "Bip01 Spine1"]
+        groups = [vg[n] for n in names if n in vg]
+        S = arm.matrix_world @ arm.data.bones[f"Bip01 {side} UpperArm"].head_local
+        sel = [v.index for v in me.vertices if (mw @ v.co - S).length < PIT and any(W[v.index].get(g, 0) > 0 for g in groups)]
+        for _ in range(12):
+            new = {}
+            for i in sel:
+                ns = nbr[i]
+                if not ns:
+                    continue
+                fall = 1 - min(1, (mw @ me.vertices[i].co - S).length / PIT)   # 관절 가까울수록 많이
+                k = 0.5 * fall
+                w = dict(W[i])
+                for g in groups:
+                    avg = sum(W[j].get(g, 0) for j in ns) / len(ns)
+                    w[g] = (1 - k) * w.get(g, 0) + k * avg
+                tot = sum(w.values()) or 1
+                new[i] = {g: x / tot for g, x in w.items() if x > 1e-4}
+            for i, w in new.items():
+                W[i] = w
+        for i in sel:
+            for g in groups:
+                if W[i].get(g, 0) > 1e-4:
+                    mesh0.vertex_groups[g].add([i], W[i][g], "REPLACE")
+                else:
+                    mesh0.vertex_groups[g].remove([i])
+        print("겨드랑이 가중치 스무딩:", side, len(sel), "꼭짓점")
 
 if SUB:
     # 몸 재질 면만 따로 떼서 세분화 (셰이프키는 얼굴에만 의미 있음 → 몸 쪽은 지움)

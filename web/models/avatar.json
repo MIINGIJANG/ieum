@@ -1,5 +1,5 @@
 {
-  "about": "avatar.glb 설정 (web/rig.js·avatar.js). bones: 뼈 이름이 자동 인식되지 않을 때 {\"leftUpperArm\": \"뼈 이름\"} 처럼 지정. clothes: 옷 재질 이름 정규식, clothTint: 옷 색에 곱할 색(false 면 그대로), hat: false 면 안전모 안 씌움(모델에 안전모가 있을 때), roughness: 숫자면 모든 재질을 그 거칠기로(광택 맵 무시, 비닐처럼 번들거릴 때), torsoScale: 상체 길이 비율(척추 마디 간격), frameBottom: 화면 아래 끝 = 골반 + 이 값(m), physique: 체격 배율 [가로,세로,앞뒤] (waist·chest·upperChest·neck·upperArm·forearm, shoulders 는 어깨 너비 배율), normalScale: 재질 이름(정규식)별 법선 맵 세기 (텍스처 옷 주름이 자글자글할 때 낮춤), undershirt: true(겉옷 평균색) 또는 \"#색\" 이면 목 아래 회색 속옷을 그 색으로, armpitBlend: 어깨 관절 몇 m 안의 꼭짓점을 쇄골·위팔에 매끄럽게 나눠 묶기(겨드랑이 겹침)",
+  "about": "avatar.glb 설정 (web/rig.js·avatar.js). bones: 뼈 이름이 자동 인식되지 않을 때 {\"leftUpperArm\": \"뼈 이름\"} 처럼 지정. clothes: 옷 재질 이름 정규식, clothTint: 옷 색에 곱할 색(false 면 그대로), hat: false 면 안전모 안 씌움(모델에 안전모가 있을 때), roughness: 숫자면 모든 재질을 그 거칠기로(광택 맵 무시, 비닐처럼 번들거릴 때), torsoScale: 상체 길이 비율(척추 마디 간격), frameBottom: 화면 아래 끝 = 골반 + 이 값(m), physique: 체격 배율 [가로,세로,앞뒤] (waist·chest·upperChest·neck·upperArm·forearm, shoulders 는 어깨 너비 배율), normalScale: 재질 이름(정규식)별 법선 맵 세기 (텍스처 옷 주름이 자글자글할 때 낮춤), undershirt: true(겉옷 평균색) 또는 \"#색\" 이면 목 아래 회색 속옷을 그 색으로, neckLength: 목 길이 배율, shoulderLift: 쇄골 기본 들림(도, 어깨선 수평), frameMargin: 머리 위·아래 여백(화면 높이 비율, 아래는 흐리게), vestMarks: 몸 앞 가운데 이 폭(m) 안 조끼 위 어두운 자국을 조끼 색으로",
   "bones": {},
   "clothTint": false,
   "hat": false,
@@ -18,9 +18,9 @@
       1.06
     ],
     "neck": [
-      1.12,
+      1.05,
       1,
-      1.1
+      1.05
     ],
     "shoulders": 1.1,
     "upperArm": [
@@ -45,5 +45,7 @@
     "helmet": 0.6
   },
   "undershirt": true,
-  "armpitBlend": 0.13
+  "neckLength": 1.15,
+  "shoulderLift": 8,
+  "frameMargin": 0.07
 }

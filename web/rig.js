@@ -139,6 +139,8 @@ export function buildRig(gltf, config = {}, beforeShape = null) {
   const need = ["hips", "spine", "head", "leftUpperArm", "leftLowerArm", "leftHand", "rightUpperArm", "rightLowerArm", "rightHand"];
   const missing = need.filter((n) => !bones[n]);
   if (missing.length) throw new Error("아바타 뼈를 찾지 못함: " + missing.join(", ") + " (web/models/avatar.json 의 bones 로 지정)");
+  // 목 길이: config.neckLength (예: 1.15) 이면 목 → 머리 간격을 그만큼 늘림
+  if (config.neckLength && config.neckLength !== 1 && bones.head) { bones.head.position.multiplyScalar(config.neckLength); scene.updateMatrixWorld(true); }
   // 정면: 왼팔이 +x 쪽이어야 +z(카메라)를 보는 것 (VRM 규칙). 반대면 180° 돌림
   const lx = bones.leftUpperArm.getWorldPosition(new THREE.Vector3()).x;
   const rx = bones.rightUpperArm.getWorldPosition(new THREE.Vector3()).x;
@@ -147,7 +149,7 @@ export function buildRig(gltf, config = {}, beforeShape = null) {
   if (config.physique) applyPhysique(bones, config.physique, scene);
   // 상체 비율: config.torsoScale (예: 0.9) 이면 척추 마디 사이 간격을 그만큼 줄임 (뼈를 따라 몸통 메시도 줄어듦)
   if (config.torsoScale && config.torsoScale !== 1) {
-    for (const n of ["chest", "upperChest", "neck"]) if (bones[n]) bones[n].position.multiplyScalar(config.torsoScale);
+    for (const n of ["chest", "upperChest"]) if (bones[n]) bones[n].position.multiplyScalar(config.torsoScale);   // 목은 빼고 (목이 짧아 보이지 않게)
     scene.updateMatrixWorld(true);
   }
   const humanBones = Object.fromEntries(Object.entries(bones).map(([k, node]) => [k, { node }]));
