@@ -169,7 +169,7 @@ export class SignAvatar {
       const rig = buildRig(gltf, config, (bones) => {
         this._rawB = bones;
         const t = performance.now();
-        if (config.undershirt || config.armpitBlend) this._editBodyGLB(config, gltf.scene);
+        if (config.undershirt || config.armpitBlend || config.vestMarks) this._editBodyGLB(config, gltf.scene);
         this.timings.editBody = Math.round(performance.now() - t);
       });
       this.vrm = rig;
@@ -259,7 +259,7 @@ export class SignAvatar {
           const px = x + 0.5, py = y + 0.5;
           const w0 = ((b[0] - px) * (d[1] - py) - (d[0] - px) * (b[1] - py)) / area, w1 = ((d[0] - px) * (a[1] - py) - (a[0] - px) * (d[1] - py)) / area, w2 = 1 - w0 - w1;
           if (w0 < -0.02 || w1 < -0.02 || w2 < -0.02) continue;
-          const k = (y * W + x) * 4, out = fn([D8[k], D8[k + 1], D8[k + 2]], [w0, w1, w2]);
+          const k = (y * W + x) * 4, out = fn([D8[k], D8[k + 1], D8[k + 2]], [w0, w1, w2], x, y);
           if (out) { D8[k] = out[0]; D8[k + 1] = out[1]; D8[k + 2] = out[2]; }
         }
       };
@@ -286,6 +286,35 @@ export class SignAvatar {
             n++;
           }
         }
+        edited += n;
+      }
+
+      // ---- 2-1) 조끼 위 자국 지우기 (config.vestMarks: 지운 버클 자리처럼 조끼 텍스처에 그려진 어두운 자국 → 조끼 색)
+      if (cfg.vestMarks) {
+        const R = cfg.vestMarks, hips = bindPos(rawB("hips")), neck = bindPos(rawB("neck"));
+        const orangeV = [];
+        for (let i = 0; i < P.count; i += 2) { const c = col(i); if (isOrange(c)) orangeV.push(c); }
+        const orange = avg(orangeV);
+        let n = 0;
+        const local = [];
+        if (hips && neck) for (let t = 0; t < tris; t++) {
+          const ids = triIds(t), ps = ids.map(bp);
+          if (!ps.every((p) => Math.abs(p.x - neck.x) < R && p.y > hips.y && p.y < neck.y - 0.15 && p.z > hips.z)) continue;   // 몸 앞 가운데
+          if (!ids.some((i) => isOrange(col(i)))) continue;
+          // 갈색 자국만 (r<185): 조끼 가운데의 진한 주황 테두리(r 큼)는 그대로. 밝기는 주변 조끼보다 살짝 어둡게 맞춤
+          // 그 자리 주변(같은 삼각형들) 조끼 색 평균 + 아주 약한 잡티 (단색이면 네모로 티 나고, 다른 곳을 복사하면 텍스처 배치가 달라 얼룩짐)
+          local.push(ids);
+          n++;
+        }
+        const mark = (tc) => !isOrange(tc) && tc[0] < 205 && lum(tc) < 160;   // 자국 가장자리(흐린 부분)까지
+        const near = [];
+        for (const ids of local) paintTri(ids, (tc) => { if (isOrange(tc)) near.push(tc); return null; });
+        const base = (near.length ? avg(near) : orange).map((v) => v * 0.96);
+        for (const ids of local) paintTri(ids, (tc, w, x, y) => {
+          if (!mark(tc)) return null;
+          const r = (((x * 73856093) ^ (y * 19349663)) % 9) - 4;              // 위치로 정해지는 작은 잡티
+          return base.map((v) => Math.min(255, Math.max(0, v + r)));
+        });
         edited += n;
       }
 
@@ -369,6 +398,7 @@ export class SignAvatar {
         return { bone: tb, rest: tb.quaternion.clone(), axis };
       });
     }
+    this._shoulderLift = D((this.config && this.config.shoulderLift) || 0);   // 쇄골 기본 들림(도) → 어깨선 수평
     this.headY = pos("head").y;
     this._modelTop = new THREE.Box3().setFromObject(this.root).max.y;
     this.neckY = pos("neck").y;
@@ -493,11 +523,17 @@ export class SignAvatar {
     // 위: 씌운 안전모 끝, 없으면 모델 맨 위(모델에 있는 안전모·머리) / 아래: 골반 위 (config.frameBottom 로 조절)
     const top = this._hat ? new THREE.Box3().setFromObject(this._hat).max.y : (this._modelTop ?? this.headY + 0.2);
     const bottom = this._hipsY + ((this.config && this.config.frameBottom) ?? 0.04);
-    const pad = 0.05, span = top - bottom + pad;
+    // config.frameMargin (화면 높이 비율): 머리 위 여백 = 아래 여백. 아래는 몸이 이어지므로 그만큼 흐리게 사라지게 함
+    const fm = this.config && this.config.frameMargin;
+    const pad = fm ? (top - bottom) * fm / (1 - fm) : 0.05, span = top - bottom + pad;
+    if (fm) {
+      const g = `linear-gradient(to bottom, #000 ${((1 - fm * 1.6) * 100).toFixed(1)}%, transparent 100%)`;
+      this.canvas.style.maskImage = g; this.canvas.style.webkitMaskImage = g;
+    } else { this.canvas.style.maskImage = ""; this.canvas.style.webkitMaskImage = ""; }
     const half = D(this.camera.fov / 2);
     const dist = span / 2 / Math.tan(half);
     const cy = bottom + span / 2;
-    this.camera.position.set(0, cy + 0.02, dist);
+    this.camera.position.set(0, fm ? cy : cy + 0.02, dist);   // 여백을 맞출 때는 정면에서 (위아래 같게)
     this.camera.lookAt(0, cy, 0);
   }
 
@@ -692,7 +728,7 @@ export class SignAvatar {
         }
         // ---- 쇄골: 손을 어깨보다 높이 들면 들어 올리고, 앞으로 뻗거나 몸 반대쪽으로 넘기면 앞으로 내밈
         const shoW = rotAbout(R.sho, this.spinePos, chestWorldRot);
-        const raise = clamp((W.y - (shoW.y - 0.05)) / 0.3, 0, 1) * D(10);
+        const raise = this._shoulderLift + clamp((W.y - (shoW.y - 0.05)) / 0.3, 0, 1) * D(10);   // 기본 들림 + 손을 들면 더
         const reach = clamp((W.z - shoW.z - 0.22) / 0.25, 0, 1) * D(6) + clamp((-sign * W.x) / (this.shoulderW * 0.6), 0, 1) * D(6);
         const clavQ = this._W2M(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, -sign * reach, sign * raise, "YXZ")));
         let sho2 = shoW;
@@ -723,9 +759,11 @@ export class SignAvatar {
         upperW = this._aim(P + "UpperArm", R.upper, E.clone().sub(sho2), clavW);
         lowerW = this._aim(P + "LowerArm", R.lower, W2.clone().sub(E), upperW);
       } else {
-        this._set(P + "Shoulder", new THREE.Quaternion());
+        // 쉬는 자세도 쇄골을 기본만큼 들어 어깨선을 수평에 가깝게 (옷걸이처럼 처져 보이지 않게)
+        const clavQ = this._W2M(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, sign * this._shoulderLift, "YXZ")));
+        this._set(P + "Shoulder", clavQ);
         const down = new THREE.Vector3(sign * 0.16, -1, 0.06);
-        upperW = this._aim(P + "UpperArm", R.upper, down, chestW);
+        upperW = this._aim(P + "UpperArm", R.upper, down, this.bone(P + "Shoulder") ? chestW.clone().multiply(clavQ) : chestW);
         lowerW = this._aim(P + "LowerArm", R.lower, new THREE.Vector3(sign * 0.05, -1, 0.3), upperW);
       }
       this._hand(fr, s, R, lowerW, upperW, neutral);
