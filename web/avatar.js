@@ -58,8 +58,8 @@ const scale = (o, s) => Object.fromEntries(Object.entries(o || {}).map(([k, v]) 
 // 뼈마다 따라가는 빠르기(초): 손가락은 빠르게, 몸통은 천천히. 프레임 간 시간으로 계산 → 화면 주사율과 상관없이 같은 속도
 function tauFor(name) {
   if (/Thumb|Index|Middle|Ring|Little/.test(name)) return 0.03;
-  if (/Hand$/.test(name)) return 0.035;
-  if (/Arm$/.test(name)) return 0.04;
+  if (/Hand$/.test(name)) return 0.045;
+  if (/Arm$/.test(name)) return 0.05;                       // 팔 미세 떨림 줄이기 (0.04 → 0.05)
   if (/Shoulder$/.test(name)) return 0.08;
   if (/spine|chest|Chest/.test(name)) return 0.12;
   return 0.05;
@@ -204,6 +204,13 @@ export class SignAvatar {
         }
         if (/hair|lash|brow/i.test(name) && m.map) { m.alphaTest = Math.max(m.alphaTest || 0, 0.4); m.transparent = false; }
         if (config.roughness != null && "roughness" in m) { m.roughnessMap = null; m.roughness = config.roughness; m.needsUpdate = true; }   // 번들거림 없애기 (모델 설정)
+        // 텍스처로 그린 옷 주름(법선 맵)은 팔을 움직여도 실제로 접히지 않고 늘어나며 자글자글하게 떨려 보임 → 재질별로 약하게
+        if (config.normalScale && m.normalMap) {
+          const k = Object.entries(config.normalScale).find(([re]) => new RegExp(re, "i").test(m.name));
+          if (k) m.normalScale.setScalar(k[1]);
+        }
+        // 비스듬히 보이는 텍스처가 반짝이며 떨리지 않게 (이방성 필터링)
+        for (const t of [m.map, m.normalMap, m.roughnessMap]) if (t) { t.anisotropy = this.renderer.capabilities.getMaxAnisotropy(); t.needsUpdate = true; }
       }
     });
   }
