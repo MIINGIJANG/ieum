@@ -227,22 +227,30 @@
 </script>
 <script type="module">
 import { SignAvatar } from "./avatar.js";
-// 아바타 불러오기: 실패하면(느린 망 등) 조용히 다시 시도. 안내 문구는 띄우지 않음
-const av = new SignAvatar(document.getElementById("av"));
-for (let i = 0; i < 4; i++) {
-  try {
-    // 기본: 반실사 GLB (web/models/avatar.glb). ?avatar=vrm 이면 예전 VRM 아바타 (비교용)
-    const pick = new URLSearchParams(location.search).get("avatar");
-    window.avatar = await av.load(pick === "vrm" ? "./models/avatar.vrm" : pick ? `./models/${pick}.glb` : "./models/avatar.glb");
-    document.getElementById("stage").classList.add("three");
-    window.dispatchEvent(new Event("avatar-ready"));
-    break;
-  } catch (e) {
-    console.warn("3D 아바타 불러오기 재시도", i + 1, e);
-    if (i === 3) window.dispatchEvent(new Event("avatar-failed"));
-    else await new Promise(r => setTimeout(r, 1500 * (i + 1)));
+// 아바타 불러오기: 기본은 반실사 GLB (web/models/avatar.glb). 두 번 실패하면 예전 VRM 아바타로 (화면이 비지 않게)
+// ?avatar=vrm 이면 VRM 만, ?avatar=이름 이면 web/models/이름.glb. 실패 이유는 콘솔과 window.avatarErrors 에 남김
+const canvas = document.getElementById("av");
+const pick = new URLSearchParams(location.search).get("avatar");
+const order = pick === "vrm" ? ["./models/avatar.vrm"] : [pick ? `./models/${pick}.glb` : "./models/avatar.glb", "./models/avatar.vrm"];
+window.avatarErrors = [];
+outer: for (const url of order) {
+  for (let i = 0; i < 2; i++) {
+    const av = new SignAvatar(canvas);
+    try {
+      window.avatar = await av.load(url);
+      console.info("3D 아바타:", url, (window.avatar._loadMs / 1000).toFixed(1) + "초");
+      document.getElementById("stage").classList.add("three");
+      window.dispatchEvent(new Event("avatar-ready"));
+      break outer;
+    } catch (e) {
+      console.error("3D 아바타 불러오기 실패", url, i + 1, e);
+      window.avatarErrors.push(url + ": " + (e && e.message || e));
+      try { av.renderer.dispose(); } catch { /* 이미 정리됨 */ }
+      await new Promise(r => setTimeout(r, 1500 * (i + 1)));
+    }
   }
 }
+if (!window.avatar) window.dispatchEvent(new Event("avatar-failed"));
 </script>
 <script>
 const API = location.protocol.startsWith("http") ? "" : "http://localhost:8000";
