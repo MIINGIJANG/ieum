@@ -3,7 +3,7 @@ import json
 import math
 import random
 
-from ksl.motion import MotionDict, _one_euro, compose
+from ksl.motion import MotionDict, _hand_basis, _one_euro, _smooth_hand_rot, compose
 
 from conftest import ROOT
 
@@ -47,6 +47,20 @@ def test_one_euro_reduces_jitter_keeps_motion():
     jit = lambda fs: math.sqrt(sum((f["body"][0][0] - t) ** 2 for f, t in zip(fs[5:28], true[5:28])) / 23)
     assert jit(out) < jit(frames) * 0.7                             # 가만히 있을 때 떨림 줄어듦
     assert abs(out[45]["body"][0][0] - 1.0) < 0.05                  # 움직인 뒤엔 금방 따라감
+
+
+def test_hand_flip_removed():
+    """손바닥 앞뒤가 한 프레임만 뒤집힌 추정 → 손 방향이 튀지 않게 (손가락 모양·손목 위치는 그대로)."""
+    hand = [[0, 0, 0]] + [[0.02 * (i % 4), -0.02 * (i // 4 + 1), 0.01 * (i % 3)] for i in range(20)]
+    hand[5], hand[9], hand[17] = [-0.03, -0.08, 0], [0, -0.09, 0], [0.04, -0.07, 0]
+    flip = [[p[0], p[1], -p[2]] if i else p for i, p in enumerate(hand)]
+    flip[17] = [-0.04, -0.07, 0.0]; flip[5] = [0.03, -0.08, 0.0]       # 손바닥이 반대로
+    frames = [{"rh": hand} for _ in range(5)] + [{"rh": flip}] + [{"rh": hand} for _ in range(5)]
+    out = _smooth_hand_rot(frames)
+    ang = lambda A, B: math.degrees(math.acos(max(-1, min(1, ((A.T @ B).trace() - 1) / 2))))
+    B = [_hand_basis(f["rh"]) for f in out]
+    assert max(ang(B[i], B[i + 1]) for i in range(len(B) - 1)) < 20
+    assert out[5]["rh"][0] == hand[0]
 
 
 def test_handshapes_file():

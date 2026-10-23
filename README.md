@@ -255,7 +255,7 @@ BLEU 는 낮은데 글로스 F1 이 높으면 → "어휘는 맞고 어순이 �
 
 기본 아바타는 **반실사 GLB** (`web/models/avatar.glb`). 예전 애니메이션풍 VRM 은 주소 뒤에 `?avatar=vrm` 을 붙이면 비교용으로 볼 수 있음.
 지금 GLB 는 [Microsoft Rocketbox](https://github.com/microsoft/Microsoft-Rocketbox) 의 건설 작업자 `Construction_Male_07` (**MIT**, 주황 안전모·형광 조끼).
-표정 ARKit 52 + 입 모양 15개, 손가락 뼈 포함. `scripts/avatar/rocketbox_to_glb.py --subdivide=1 --drop-islands=40 --smooth-armpits=0.14`(Blender: 몸 세분화로 윤곽 매끈하게, 버클 조각 제거, 겨드랑이 가중치 스무딩) 로 GLB 로 바꾸고 `slim_glb.mjs` 로 31MB → 5MB.
+표정 ARKit 52 + 입 모양 15개, 손가락 뼈 포함. `scripts/avatar/rocketbox_to_glb.py --subdivide=1 --drop-islands=40 --smooth-armpits=0.14 --twist-bones=1`(Blender: 몸 세분화로 윤곽 매끈하게, 버클 조각 제거, 겨드랑이 가중치 스무딩, 아래팔 비틀림 뼈) 로 GLB 로 바꾸고 `slim_glb.mjs` 로 31MB → 5MB.
 설정은 `web/models/avatar.json` (모델에 안전모가 있어 `hat: false`, 번들거림 없애려고 `roughness: 0.78`). 다른 GLB 는 `?avatar=파일이름`, 못 불러오면 자동으로 VRM.
 
 | 부분 | 하는 일 |

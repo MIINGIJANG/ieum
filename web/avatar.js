@@ -5,7 +5,11 @@
 // 정규화 뼈대는 기본 자세에서 모든 뼈 회전이 0 → 뼈의 '기본 방향'은 기본 자세의 뼈 위치로 구함.
 //   몸통·쇄골: 데이터 어깨선의 기울기·회전, 손 높이·뻗음으로 (상체가 같이 움직여야 뻣뻣하지 않음)
 //   팔: 손목 위치 → 2관절 IK (팔꿈치 방향은 데이터 + 기본 방향을 섞고 시간에 따라 부드럽게)
-//   손목: 손바닥 두 축으로 회전, 그중 비틀림 일부는 아래팔(또는 CC4 비틀림 뼈)에 나눠 손목이 꼬이지 않게
+//       팔꿈치는 경첩: 위팔을 '팔꿈치가 굽는 면'에 맞춰 돌려서 아래팔이 옆으로 꺾이지 않게
+//   손목: 손바닥 두 축으로 회전, 그중 비틀림 일부는 아래팔(또는 비틀림 뼈)에 나눠 손목이 꼬이지 않게
+//       굽힘·젖힘과 좌우 꺾임을 따로 제한 (좌우는 사람 손목처럼 좁게), 한계 근처에서 부드럽게 멈춤
+//   뼈 움직임: 2차 스프링(속도까지 이어짐) + 뼈마다 최대 각속도 → 튀지 않게
+//   재생: 30fps 동작 프레임 사이를 보간해서 화면 주사율로 (계단처럼 끊기지 않게)
 //   손가락: 관절 범위 제한(엄지 포함) + 마디 연동 + 자주 나오는 손 모양으로 살짝 끌어당김
 //   단어 사이: 서버가 표시한 연결 구간(tr)은 앞·뒤 자세의 '회전'을 최소 저크 곡선으로 섞음
 //   고개: 스프링(살짝 넘쳤다 돌아옴)으로, 목 40% · 머리 60%
@@ -65,6 +69,22 @@ function tauFor(name) {
   return 0.05;
 }
 
+// 뼈마다 최대 각속도(도/초): 사람 수어에서 나오는 정도. 추정 좌표가 튀어도 이보다 빨리 돌지 않음
+function vmaxFor(name) {
+  if (/Thumb|Index|Middle|Ring|Little/.test(name)) return 1100;
+  if (/Hand$/.test(name)) return 800;
+  if (/LowerArm$/.test(name)) return 650;
+  if (/UpperArm$/.test(name)) return 450;
+  return 300;
+}
+const smooth01 = (x, a, b) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+// 부드러운 한계: knee 까지는 그대로, 그 뒤로는 천천히 lim 에 다가감 (딱 걸리며 멈추지 않게)
+const softLimit = (x, lim, knee = 0.75) => {
+  const k = lim * knee, a = Math.abs(x);
+  return a <= k ? x : Math.sign(x) * (k + (lim - k) * Math.tanh((a - k) / (lim - k)));
+};
+const softRange = (x, lo, hi) => (x >= 0 ? softLimit(x, hi) : -softLimit(-x, -lo));
+
 // 2차 스프링: 목표를 따라가되 살짝 넘쳤다 돌아옴 (zeta < 1). 고개·시선에 사용
 class Spring {
   constructor(omega, zeta, n = 3) { this.w = omega; this.z = zeta; this.x = new Float64Array(n); this.v = new Float64Array(n); }
@@ -118,7 +138,8 @@ export class SignAvatar {
     this.vrm = null;
     this.driven = new Set();
     this.margin = 0.035;          // 손목이 몸 표면보다 최소 이만큼(m) 앞에 오도록
-    this.st = { pole: {}, hand: {}, twist: { left: 0, right: 0 } };   // 시간에 따라 이어지는 상태
+    this.st = { pole: {}, hand: {}, twist: { left: 0, right: 0 }, theta: {} };   // 시간에 따라 이어지는 상태
+    this.twistNow = { left: 0, right: 0 };   // 화면에 보이는 비틀림 (st.twist 를 부드럽게 따라감)
     this.headSpring = new Spring(13, 0.72);
     this.gazeSpring = new Spring(18, 0.85, 2);
     this.last = performance.now();
@@ -504,6 +525,11 @@ export class SignAvatar {
     this.torsoHalf = this.shoulderW * 1.0;
   }
 
+  // 점 p 가 몸통 앞면 범위(옆으로 몸통 너비, 위로 골반부터) 안인 정도 0~1. 경계에서 서서히 0 으로 (밀어내기가 툭 끊기지 않게)
+  _insideTorso(p) {
+    return smooth01(this.torsoHalf * 1.08 - Math.abs(p.x), 0, 0.06) * smooth01(p.y - this._hipsY, -0.02, 0.03);
+  }
+
   // 2관절 IK: 어깨 S, 목표 손목 W, 팔 길이 a·b, 팔꿈치가 향할 방향 pole
   _ik(S, W, a, b, pole) {
     const d0 = W.clone().sub(S);
@@ -514,8 +540,9 @@ export class SignAvatar {
     const perp = pole.clone().sub(dir.clone().multiplyScalar(pole.dot(dir)));
     if (perp.lengthSq() < 1e-8) perp.set(0, -1, 0);
     perp.normalize();
+    const n = new THREE.Vector3().crossVectors(perp, dir).normalize();   // 팔꿈치 경첩 축 (위팔 × 아래팔 방향)
     const E = S.clone().add(dir.clone().multiplyScalar(along)).add(perp.multiplyScalar(h));
-    return [E, S.clone().add(dir.multiplyScalar(d))];
+    return [E, S.clone().add(dir.multiplyScalar(d)), n];
   }
 
   // 화면: 안전모 위 ~ 배까지
@@ -554,12 +581,26 @@ export class SignAvatar {
     return world;
   }
 
-  _set(bone, q) {
+  _set(bone, q, tau = null) {
     const b = typeof bone === "string" ? this.bone(bone) : bone;
     if (!b) return;
+    const name = typeof bone === "string" ? bone : b.name;
     b.userData.target = q;
-    b.userData.tau = tauFor(typeof bone === "string" ? bone : b.name);
+    b.userData.tau = tau ?? tauFor(name);
+    b.userData.vmax = b.userData.vmax || D(vmaxFor(name));
     this.driven.add(b);
+  }
+
+  // 위팔: 방향(dirU)과 팔꿈치 경첩 축(n)을 함께 맞춤 → 아래팔은 경첩 축으로만 굽음
+  //  기본 자세의 경첩 축 = 위팔 × 앞(+z): 팔꿈치를 굽히면 아래팔이 앞으로 옴
+  _aimUpper(bone, R, dirU, n, parentWorld) {
+    const u0 = R.upper, n0 = new THREE.Vector3().crossVectors(u0, new THREE.Vector3(0, 0, 1)).normalize();
+    const u = dirU.clone().normalize(), m = n.clone().sub(u.clone().multiplyScalar(n.dot(u))).normalize();
+    const M0 = new THREE.Matrix4().makeBasis(u0, n0, new THREE.Vector3().crossVectors(u0, n0));
+    const M1 = new THREE.Matrix4().makeBasis(u, m, new THREE.Vector3().crossVectors(u, m));
+    const world = new THREE.Quaternion().setFromRotationMatrix(M1.multiply(M0.transpose()));
+    this._set(bone, parentWorld.clone().invert().multiply(world));
+    return world;
   }
 
   // 월드 기준 회전 → 모델(정규화 뼈대) 기준. 모델이 -z 를 보고 180° 돌려 놓은 경우(VRM0 등)에도 같은 방향으로 움직이게
@@ -607,12 +648,39 @@ export class SignAvatar {
     return dir;
   }
 
+  // 비틀림 각 th 를 직전 값 prev 에 가장 가까운 쪽으로 (±360°). 너무 감기면(±225° 넘으면) 한 바퀴 되돌림
+  _unwrapTheta(th, prev) {
+    if (prev != null) th += 2 * Math.PI * Math.round((prev - th) / (2 * Math.PI));
+    if (th > 1.25 * Math.PI) th -= 2 * Math.PI;
+    if (th < -1.25 * Math.PI) th += 2 * Math.PI;
+    return th;
+  }
+
   // 손바닥 두 축으로 손목 전체 회전
   _basis(f, s) {
     const x = f.clone().normalize();
     const z = new THREE.Vector3().crossVectors(x, s).normalize();
     const y = new THREE.Vector3().crossVectors(z, x).normalize();
     return new THREE.Matrix4().makeBasis(x, y, z);
+  }
+
+  // 동작 전체 m 의 F 번째(소수) 프레임: 앞뒤 프레임을 섞어서 (30fps 동작을 60Hz 화면에서 계단 없이)
+  setFrameAt(m, F, word = null) {
+    const n = m.frames.length, i = clamp(Math.floor(F), 0, n - 1), j = Math.min(i + 1, n - 1), u = clamp(F - i, 0, 1);
+    const a = m.frames[i], b = m.frames[j];
+    if (!a || !b || i === j || u < 1e-3) return this.setFrame(a, word, m);
+    const tr = a.tr || b.tr;
+    if (tr) {                                            // 연결 구간: 회전 섞는 비율(t)만 보간 (앞 끝 = 0, 뒤 끝 = 1)
+      const tv = (f, k) => (f.tr && f.tr.a === tr.a ? f.tr.t : k <= tr.a ? 0 : 1);
+      return this.setFrame({ ...(u < 0.5 ? a : b), tr: { a: tr.a, b: tr.b, t: tv(a, i) + (tv(b, j) - tv(a, i)) * u } }, word, m);
+    }
+    const lp = (p, q) => (!p || !q ? (u < 0.5 ? p : q) : p.map((x, k) => (x && q[k] ? x.map((v, c) => v + ((q[k][c] ?? v) - v) * u) : (u < 0.5 ? x : q[k]))));
+    const fr = { ...(u < 0.5 ? a : b) };
+    for (const k of ["body", "lh", "rh"]) fr[k] = lp(a[k], b[k]);
+    if (a.head && b.head) fr.head = a.head.map((v, c) => v + (b.head[c] - v) * u);
+    if ((a.rest || b.rest)) fr.rest = (a.rest || 0) + ((b.rest || 0) - (a.rest || 0)) * u;
+    if (a.expr && b.expr) fr.expr = Object.fromEntries(Object.keys({ ...a.expr, ...b.expr }).map((k) => [k, (a.expr[k] || 0) + ((b.expr[k] || 0) - (a.expr[k] || 0)) * u]));
+    return this.setFrame(fr, word, m);
   }
 
   // fr: 동작 한 프레임, word: { gloss, t, nms, text }, m: 동작 전체 (단어 사이 연결 구간을 회전으로 섞을 때)
@@ -627,7 +695,16 @@ export class SignAvatar {
         o.userData.target = qb ? q.clone().slerp(qb, t) : q.clone();
         this.driven.add(o);
       }
-      for (const P of ["left", "right"]) this.st.twist[P] = A.tw[P] + (B.tw[P] - A.tw[P]) * t;
+      for (const P of ["left", "right"]) {
+        let ta = A.th[P], tb = B.th[P];
+        if (ta == null || tb == null || !this.rest[P].twist.length) { this.st.twist[P] = A.tw[P] + (B.tw[P] - A.tw[P]) * t; continue; }
+        // 비틀림은 각도라 360° 차이가 같은 자세 → 지금 값에 이어지는 쪽으로 맞춘 뒤 섞음 (반대쪽으로 한 바퀴 돌지 않게)
+        ta = this._unwrapTheta(ta, this.st.theta[P]);
+        tb = this._unwrapTheta(tb, ta);
+        const th = ta + (tb - ta) * t;
+        this.st.theta[P] = th;
+        this.st.twist[P] = softLimit(th, D(160)) * ((this.config && this.config.twistShare) ?? 0.6);
+      }
       return;
     }
     const w = fr && fr.rest > 0 ? Math.min(1, fr.rest) : 0;
@@ -647,9 +724,9 @@ export class SignAvatar {
     let s = this._snaps.map.get(i);
     if (!s) {
       const keep = this.st;
-      this.st = { pole: {}, hand: {}, twist: { left: 0, right: 0 }, pure: true };
+      this.st = { pole: {}, hand: {}, twist: { left: 0, right: 0 }, theta: {}, pure: true };
       this._pose(m.frames[i]);
-      s = { q: new Map([...this.driven].map((o) => [o, o.userData.target.clone()])), tw: { ...this.st.twist } };
+      s = { q: new Map([...this.driven].map((o) => [o, o.userData.target.clone()])), tw: { ...this.st.twist }, th: { ...this.st.theta } };
       this.st = keep;
       this._snaps.map.set(i, s);
     }
@@ -713,18 +790,21 @@ export class SignAvatar {
             const ft = tip.clone().sub(this.headCenter), d = ft.length(), need = this.headR * 1.02 - d;
             if (need > 0) { ft.z = Math.max(ft.z, 0.02); W.add(ft.normalize().multiplyScalar(need)); }
           }
-          for (const [tipIdx, frac] of [[12, 1], [9, 0.55], [8, 1], [4, 0.8]]) {   // 손끝이 몸통 안으로 들어가지 않게
+          // 손끝이 몸통 안으로 들어가지 않게. 몸통 옆·아래 경계에서 밀어내는 정도를 서서히 줄임 (경계를 넘는 순간 손이 튀지 않게)
+          let push = 0;
+          for (const [tipIdx, frac] of [[12, 1], [9, 0.55], [8, 1], [4, 0.8]]) {
             if (!hd[tipIdx]) continue;
             const dir = V(hd[tipIdx]).sub(V(hd[0])).normalize();
             const tip = W.clone().add(dir.multiplyScalar(R.handLen * frac));
-            if (Math.abs(tip.x) > this.torsoHalf * 1.05 || tip.y < this._hipsY) continue;
+            const k = this._insideTorso(tip);
             const fz = this.frontZ(tip.y);
-            if (isFinite(fz) && tip.z < fz + 0.015) W.z += fz + 0.015 - tip.z;
+            if (k > 0 && isFinite(fz)) push = Math.max(push, (fz + 0.015 - tip.z) * k);
           }
+          if (push > 0) W.z += push;
         }
-        if (Math.abs(W.x) < this.torsoHalf && W.y > this._hipsY) {
-          const fz = this.frontZ(W.y);
-          if (isFinite(fz) && W.z < fz + this.margin) W.z = fz + this.margin;
+        {
+          const k = this._insideTorso(W), fz = this.frontZ(W.y);
+          if (k > 0 && isFinite(fz) && W.z < fz + this.margin) W.z += (fz + this.margin - W.z) * k;
         }
         // ---- 쇄골: 손을 어깨보다 높이 들면 들어 올리고, 앞으로 뻗거나 몸 반대쪽으로 넘기면 앞으로 내밈
         const shoW = rotAbout(R.sho, this.spinePos, chestWorldRot);
@@ -747,16 +827,19 @@ export class SignAvatar {
         pole.normalize();
         const prevPole = this.st.pole[P];
         if (prevPole && !this.st.pure) pole = prevPole.clone().lerp(pole, 1 - Math.exp(-this._dt / 0.12)).normalize();
-        this.st.pole[P] = pole;
-        let [E, W2] = this._ik(sho2, W, R.a, R.b, pole);
+        let [E, W2, hinge] = this._ik(sho2, W, R.a, R.b, pole);
         // 팔꿈치가 몸통 안으로 들어가면(손을 몸 반대쪽으로 넘길 때 흔함) 팔꿈치 방향을 바깥쪽으로 돌려 다시 계산
+        //  들어간 깊이만큼만 돌리고, 돌린 방향을 기억해서 다음 화면에서 이어지게 (팔꿈치가 툭 튀지 않게)
         for (let k = 0; k < 3; k++) {
           const fz = this.frontZ(E.y);
-          if (!(Math.abs(E.x) < this.shoulderW * 0.42 && E.y > this._hipsY && isFinite(fz) && E.z < fz + 0.02)) break;
-          pole = pole.clone().add(new THREE.Vector3(sign * 0.6, 0, 0.25)).normalize();
-          [E, W2] = this._ik(sho2, W, R.a, R.b, pole);
+          const inside = smooth01(this.shoulderW * 0.46 - Math.abs(E.x), 0, 0.04) * smooth01(E.y - this._hipsY, 0, 0.04);
+          const depth = isFinite(fz) ? fz + 0.02 - E.z : -1;
+          if (!(inside > 0 && depth > 0)) break;
+          pole = pole.clone().add(new THREE.Vector3(sign * 0.6, 0, 0.25).multiplyScalar(inside * Math.min(1, depth / 0.03))).normalize();
+          [E, W2, hinge] = this._ik(sho2, W, R.a, R.b, pole);
         }
-        upperW = this._aim(P + "UpperArm", R.upper, E.clone().sub(sho2), clavW);
+        this.st.pole[P] = pole;
+        upperW = this._aimUpper(P + "UpperArm", R, E.clone().sub(sho2), hinge, clavW);
         lowerW = this._aim(P + "LowerArm", R.lower, W2.clone().sub(E), upperW);
       } else {
         // 쉬는 자세도 쇄골을 기본만큼 들어 어깨선을 수평에 가깝게 (옷걸이처럼 처져 보이지 않게)
@@ -780,12 +863,14 @@ export class SignAvatar {
     else if (!neutral && mem && mem.age < 0.5) { h = mem.h; if (!this.st.pure) mem.age += this._dt || 0.033; }
     else h = null;
     if (!okHand(h)) {
-      this._set(P + "Hand", new THREE.Quaternion());
+      // 힘 뺀 손: 살짝 굽힘. 손 모양이 사라질 때 확 바뀌지 않게 천천히 (tau 0.15초)
+      this._set(P + "Hand", new THREE.Quaternion(), 0.15);
       this.st.twist[P] = 0;
-      FINGERS.forEach(([names], fi) => names.forEach((n, j) => {     // 힘 뺀 손: 살짝 굽힘
+      this.st.theta[P] = 0;
+      FINGERS.forEach(([names], fi) => names.forEach((n, j) => {
         const curl = fi === 0 ? [0, 10, 10][j] : [12 + fi * 3, 18 + fi * 3, 10][j];
         const d = R.fingers[fi][j];
-        if (d) this._set(P + n, new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3().crossVectors(d, R.palm).normalize(), D(curl) * (fi === 0 ? 0.3 : 1)));
+        if (d) this._set(P + n, new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3().crossVectors(d, R.palm).normalize(), D(curl) * (fi === 0 ? 0.3 : 1)), 0.15);
       }));
       return;
     }
@@ -798,26 +883,34 @@ export class SignAvatar {
     const tw = new THREE.Vector3(local.x, local.y, local.z).dot(axis);
     let theta = 2 * Math.atan2(tw, local.w);
     if (theta > Math.PI) theta -= 2 * Math.PI; if (theta < -Math.PI) theta += 2 * Math.PI;
+    // ±180° 근처에서 반대쪽으로 뒤집히지 않게: 직전 값에 가장 가까운 쪽 (360° 차이는 같은 자세)
+    theta = this._unwrapTheta(theta, this.st.theta[P]);
+    this.st.theta[P] = theta;
+    theta = softLimit(theta, D(160));                     // 아래팔이 돌 수 있는 범위 안
     let lowerW2 = lowerW;
-    if (R.twist.length) this.st.twist[P] = theta * 0.6;
+    if (R.twist.length) this.st.twist[P] = theta * ((this.config && this.config.twistShare) ?? 0.6);
     else {
       lowerW2 = lowerW.clone().multiply(new THREE.Quaternion().setFromAxisAngle(axis, theta * 0.45));
       this._set(P + "LowerArm", upperW.clone().invert().multiply(lowerW2));
       this.st.twist[P] = 0;
     }
     local = lowerW2.clone().invert().multiply(handW);
-    // ---- 손목 꺾임 한계: 60° (손 데이터의 손목과 팔 데이터의 손목이 많이 어긋나면 손 추정이 불확실 → 40°)
-    //  넘으면 '꺾임'만 줄이고 비틀림은 그대로. 손이 축 처지거나 뒤로 젖혀져 보이던 문제
+    // ---- 손목 꺾임 한계: 손바닥 쪽 굽힘 65° · 손등 쪽 젖힘 55° · 좌우 22° (사람 손목은 좌우로 많이 못 꺾음)
+    //  손 데이터의 손목과 팔 데이터의 손목이 많이 어긋나면 손 추정이 불확실 → 한계를 70% 로.
+    //  '꺾임'만 줄이고 비틀림은 그대로, 한계 근처에서 부드럽게 멈춤 (딱 걸려 꺾여 보이지 않게)
     const bw = fr.body && fr.body[s.wri];
     const gap = bw && h[0] ? Math.hypot(bw[0] - h[0][0], bw[1] - h[0][1]) : 0;
-    const maxBend = D(gap > 0.08 ? 40 : 60);
+    const shrink = 1 - 0.3 * smooth01(gap, 0.06, 0.1);
     const cur = R.handF.clone().applyQuaternion(local).normalize();
-    const bend = R.handF.angleTo(cur);
-    if (bend > maxBend) {
+    const side = new THREE.Vector3().crossVectors(R.handF, R.palm).normalize();
+    const along = Math.max(cur.dot(R.handF), 1e-3);
+    const flexA = Math.atan2(cur.dot(R.palm), along), devA = Math.atan2(cur.dot(side), along);
+    const flex2 = softRange(flexA, -D(55) * shrink, D(65) * shrink), dev2 = softLimit(devA, D(22) * shrink);
+    if (Math.abs(flex2 - flexA) > 1e-4 || Math.abs(dev2 - devA) > 1e-4 || cur.dot(R.handF) < 1e-3) {
       const swing = new THREE.Quaternion().setFromUnitVectors(R.handF, cur);
       const twistQ = swing.clone().invert().multiply(local);
-      const ax = new THREE.Vector3().crossVectors(R.handF, cur).normalize();
-      local = new THREE.Quaternion().setFromAxisAngle(ax, maxBend).multiply(twistQ);
+      const cur2 = R.handF.clone().add(R.palm.clone().multiplyScalar(Math.tan(flex2))).add(side.clone().multiplyScalar(Math.tan(dev2))).normalize();
+      local = new THREE.Quaternion().setFromUnitVectors(R.handF, cur2).multiply(twistQ);
     }
     const handW2 = lowerW2.clone().multiply(local);
     this._set(P + "Hand", local);
@@ -860,15 +953,16 @@ export class SignAvatar {
   _handPrior(x) {
     const S = this.handshapes;
     if (!S || !S.centers || !x) return null;
-    let best = null, bd = Infinity;
-    for (const c of S.centers) {
-      let d = 0;
-      for (let i = 0; i < 15; i++) d += (x[i] - c[i]) ** 2;
-      if (d < bd) { bd = d; best = c; }
-    }
-    const rms = Math.sqrt(bd / 15);
-    const w = 0.35 * Math.exp(-((rms / (S.scale || 15)) ** 2));
-    return w > 0.02 ? { c: best, w } : null;
+    const sc = S.scale || 15;
+    const ds = S.centers.map((c) => { let d = 0; for (let i = 0; i < 15; i++) d += (x[i] - c[i]) ** 2; return d / 15; });
+    const bd = Math.min(...ds);
+    // 가장 가까운 모양 하나만 쓰면 두 모양 사이에서 끌려가는 쪽이 갑자기 바뀜 → 거리에 따라 섞음
+    const ws = ds.map((d) => Math.exp(-(d - bd) / (2 * (sc * 0.5) ** 2)));
+    const tot = ws.reduce((a, b) => a + b, 0);
+    const c = new Array(15).fill(0);
+    S.centers.forEach((cc, k) => { for (let i = 0; i < 15; i++) c[i] += cc[i] * ws[k] / tot; });
+    const w = 0.35 * Math.exp(-(bd / sc ** 2));
+    return w > 0.02 ? { c, w } : null;
   }
 
   // 얼굴·고개·시선 (매 화면마다)
@@ -946,7 +1040,7 @@ export class SignAvatar {
     for (const P of ["left", "right"]) {
       const list = this.rest[P].twist;
       if (!list.length) continue;
-      const th = this.st.twist[P] || 0;
+      const th = this.twistNow[P] || 0;
       list.forEach((tb, i) => {
         const k = (i + 1) / list.length;
         tb.bone.quaternion.copy(tb.rest).multiply(new THREE.Quaternion().setFromAxisAngle(tb.axis, th * k));
@@ -959,18 +1053,47 @@ export class SignAvatar {
       requestAnimationFrame(tick);
       const now = performance.now(), dt = Math.min(0.1, (now - this.last) / 1000);
       this.last = now;
-      this._dt = dt;
-      if (!this._face) this._pose(null);                 // 쉬는 동안에도 숨쉬기
-      for (const o of this.driven) {
-        const tau = o.userData.tau ?? 0.05;
-        if (tau > 0) o.quaternion.slerp(o.userData.target, 1 - Math.exp(-dt / tau));
-      }
-      this._applyFace(this._face, dt);
-      this.vrm.update(dt);
-      this._applyTwist();
+      if (this.paused) return;                             // 시험용: 밖에서 step(dt) 로 한 칸씩
+      this.step(dt);
       this.renderer.render(this.scene, this.camera);
     };
     tick();
+  }
+
+  // 화면 한 칸: 뼈마다 목표 회전으로 따라감 → 표정 → 뼈대 갱신
+  step(dt) {
+    this._dt = dt;
+    if (!this._face) this._pose(null);                   // 쉬는 동안에도 숨쉬기
+    // 뼈: 임계 감쇠 2차 스프링으로 목표 회전을 따라감 (1차 지수 따라가기는 속도가 끊겨 출발·정지 때 툭 튐)
+    //  ω = 2.15/τ (예전 τ 와 비슷한 빠르기), 각속도는 뼈마다 vmax 까지
+    const steps = Math.max(1, Math.ceil(dt / 0.004)), h = dt / steps;
+    const e = this._tmpQ || (this._tmpQ = new THREE.Quaternion()), dq = this._tmpQ2 || (this._tmpQ2 = new THREE.Quaternion());
+    for (const o of this.driven) {
+      const ud = o.userData, tau = ud.tau ?? 0.05;
+      if (!(tau > 0)) continue;
+      const w = 2.15 / tau, vmax = ud.vmax || D(600);
+      const v = ud.vel || (ud.vel = new THREE.Vector3());
+      for (let k = 0; k < steps; k++) {
+        e.copy(ud.target).multiply(dq.copy(o.quaternion).invert());          // 남은 회전 (부모 기준)
+        if (e.w < 0) { e.x = -e.x; e.y = -e.y; e.z = -e.z; e.w = -e.w; }
+        const sn = Math.hypot(e.x, e.y, e.z), ang = 2 * Math.atan2(sn, e.w), f = sn > 1e-9 ? ang / sn : 2;
+        v.x += (w * w * e.x * f - 2 * w * v.x) * h;
+        v.y += (w * w * e.y * f - 2 * w * v.y) * h;
+        v.z += (w * w * e.z * f - 2 * w * v.z) * h;
+        const sp = v.length();
+        if (sp > vmax) v.multiplyScalar(vmax / sp);
+        const a = Math.min(sp, vmax) * h;
+        if (a > 1e-9) { dq.setFromAxisAngle(this._tmpV ? this._tmpV.copy(v).normalize() : (this._tmpV = v.clone().normalize()), a); o.quaternion.premultiply(dq); }
+      }
+    }
+    // 아래팔 비틀림 뼈: 부드럽게, 최대 700°/s
+    for (const P of ["left", "right"]) {
+      const d = (this.st.twist[P] || 0) - this.twistNow[P], mx = D(700) * dt;
+      this.twistNow[P] += clamp(d * (1 - Math.exp(-dt / 0.06)), -mx, mx);
+    }
+    this._applyFace(this._face, dt);
+    this.vrm.update(dt);
+    this._applyTwist();
   }
 }
 

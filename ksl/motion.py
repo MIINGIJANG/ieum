@@ -444,6 +444,87 @@ def _fix_hands(frames, ratio=0.7):
     return out
 
 
+def _hand_basis(h):
+    """손 방향(3×3 회전): x = 손목→가운데 손가락 뿌리, z = x × (검지 뿌리→새끼 뿌리). 점이 모자라면 None."""
+    import numpy as np
+    if not h or any(i >= len(h) or h[i] is None or len(h[i]) < 3 for i in (0, 5, 9, 17)):
+        return None
+    f = np.subtract(h[9], h[0]); sd = np.subtract(h[17], h[5])
+    z = np.cross(f, sd)
+    if np.linalg.norm(f) < 1e-6 or np.linalg.norm(z) < 1e-6:
+        return None
+    x = f / np.linalg.norm(f); z = z / np.linalg.norm(z)
+    return np.stack([x, np.cross(z, x), z], 1)
+
+
+def _smooth_hand_rot(frames, fps=FPS, half=2, vmax=540.0):
+    """손 방향 튐 잡기. 3D 추정 손은 손바닥이 옆을 볼 때 앞뒤가 뒤집혀 한 프레임에 100°~170° 도는 일이 잦음
+    (실제 손목은 그렇게 못 돎) → 아바타 손목이 팍 튐.
+    1) 앞뒤 half 프레임 안에서 회전의 '중앙값'(Weiszfeld, 튀는 값에 끌려가지 않음)
+    2) 프레임당 회전을 vmax(도/초)로 제한, 앞→뒤·뒤→앞 두 번 해서 평균 (한쪽으로 늦어지지 않게)
+    손가락 모양은 그대로 두고 손 전체를 손목 둘레로 돌려서 바꿈."""
+    import numpy as np
+
+    def proj(M):                                   # 가장 가까운 회전 행렬
+        u, _, vt = np.linalg.svd(M)
+        R = u @ vt
+        if np.linalg.det(R) < 0:
+            u[:, -1] *= -1
+            R = u @ vt
+        return R
+
+    def toward(A, B, lim):                         # A 에서 B 쪽으로 최대 lim 라디안
+        D = A.T @ B
+        ang = math.acos(max(-1.0, min(1.0, (np.trace(D) - 1) / 2)))
+        if ang <= lim or ang < 1e-9:
+            return B
+        w = np.array([D[2, 1] - D[1, 2], D[0, 2] - D[2, 0], D[1, 0] - D[0, 1]])
+        n = np.linalg.norm(w)
+        if n < 1e-9:                               # 180° 근처: 축을 정할 수 없음 → 그대로
+            return A
+        k = w / n
+        K = np.array([[0, -k[2], k[1]], [k[2], 0, -k[0]], [-k[1], k[0], 0]])
+        return A @ (np.eye(3) + math.sin(lim) * K + (1 - math.cos(lim)) * K @ K)
+
+    out = [dict(f) for f in frames]
+    lim = math.radians(vmax) / fps
+    for k in ("rh", "lh"):
+        B = [_hand_basis(f.get(k)) for f in frames]
+        i = 0
+        while i < len(B):                          # 손이 계속 보이는 구간마다
+            if B[i] is None:
+                i += 1
+                continue
+            j = i
+            while j < len(B) and B[j] is not None:
+                j += 1
+            run = B[i:j]
+            med = []
+            for t in range(len(run)):
+                W = run[max(0, t - half): t + half + 1]
+                M = proj(sum(W))
+                for _ in range(6):
+                    wts = [1.0 / max(1e-3, np.linalg.norm(X - M)) for X in W]
+                    M = proj(sum(w * X for w, X in zip(wts, W)))
+                med.append(M)
+            fw, bw = [med[0]], [med[-1]]
+            for t in range(1, len(med)):
+                fw.append(toward(fw[-1], med[t], lim))
+            for t in range(len(med) - 2, -1, -1):
+                bw.append(toward(bw[-1], med[t], lim))
+            bw.reverse()
+            for t in range(len(run)):
+                Rn = proj(fw[t] + bw[t])
+                Q = Rn @ run[t].T
+                if (np.trace(Q) - 1) / 2 > math.cos(math.radians(0.5)):
+                    continue
+                h = frames[i + t][k]
+                o = np.array(h[0])
+                out[i + t][k] = [None if p is None else [round(v, 4) for v in (o + Q @ (np.array(p) - o))] for p in h]
+            i = j
+    return out
+
+
 def _filter_face(frames, win=5):
     """고개 각도·표정: 손이 얼굴을 가리면 얼굴 추정이 튐(예: 고개 -30° → +29°) → 중앙값으로 튀는 값 제거 후 부드럽게."""
     import statistics
@@ -484,6 +565,17 @@ def _wrist_gap(fa, fb):
     return max(d) if d else 0.5
 
 
+def _hand_turn(fa, fb):
+    """두 프레임 손 방향 차이 중 큰 것 (0~1, 1 = 180°) → 손을 많이 돌려야 하면 연결을 길게."""
+    import numpy as np
+    out = 0.0
+    for k in ("rh", "lh"):
+        A, B = _hand_basis(fa.get(k)), _hand_basis(fb.get(k))
+        if A is not None and B is not None:
+            out = max(out, math.acos(max(-1.0, min(1.0, (np.trace(A.T @ B) - 1) / 2))) / math.pi)
+    return out
+
+
 def _lerp_pts(a, b, t):
     if a is None or b is None:
         return b if t >= 0.5 else a
@@ -516,7 +608,7 @@ def compose(glosses, mdict: MotionDict, fps=FPS, transition=0.25, missing_sec=0.
     """글로스 순서대로 동작 클립을 이어붙임.
 
     - speed: 재생 속도 (조원 자료는 문장 수어에서 단어만 잘라 0.4~0.8초로 짧음 → 0.8배로 조금 천천히)
-    - 클립 사이: 손이 멀리 움직일수록 길게 (transition × 0.6~1.8), 최소 저크 곡선으로 보간.
+    - 클립 사이: 손이 멀리 움직이거나 손을 많이 돌릴수록 길게 (transition × 0.6~1.8), 최소 저크 곡선으로 보간.
       연결 프레임에는 tr={"a": 앞 단어 마지막 프레임, "b": 뒤 단어 첫 프레임, "t": 0~1} → 아바타는 두 자세의 '회전'을 섞음
       (관절 좌표를 직선으로 섞으면 팔이 짧아졌다 길어지고 손목이 꺾임)
     - 단어 끝에서 hold 초 동안 멈춤 (수어의 '멈춤-움직임-멈춤' 리듬: 단어 경계가 보임)
@@ -543,8 +635,9 @@ def compose(glosses, mdict: MotionDict, fps=FPS, transition=0.25, missing_sec=0.
         if clip and str(clip.get("source", "")).endswith("(2D)"):
             clip = None        # 깊이 추정을 하지 않은 2D 자료는 손가락·팔 방향이 뒤틀려 보여서 쓰지 않음 ('2D→3D' 로 저장된 것은 사용)
         if clip and clip["frames"]:
-            src = _relax_low_hands(_one_euro(_filter_face(_fix_hands(clip["frames"])), clip.get("fps", fps)))
-            n = max(2, round(len(src) * fps / clip.get("fps", fps) / speed))
+            cf = clip.get("fps", fps)
+            src = _relax_low_hands(_one_euro(_smooth_hand_rot(_filter_face(_fix_hands(clip["frames"])), cf), cf))
+            n = max(2, round(len(src) * fps / cf / speed))
             seg = _resample(src, n)
             has = True
         elif skip_missing:
@@ -556,7 +649,7 @@ def compose(glosses, mdict: MotionDict, fps=FPS, transition=0.25, missing_sec=0.
             has = False
         if frames:
             a, b = frames[-1], seg[0]
-            dur = transition * min(1.8, max(0.6, 0.5 + 0.6 * _wrist_gap(a, b)))
+            dur = transition * min(1.8, max(0.6, 0.5 + 0.6 * _wrist_gap(a, b) + 0.5 * _hand_turn(a, b)))
             n_tr = max(2, round(dur * fps))
             ia, ib = len(frames) - 1, len(frames) + n_tr
             for i in range(n_tr):
