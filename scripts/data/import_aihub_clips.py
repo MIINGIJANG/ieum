@@ -24,6 +24,8 @@ ap.add_argument("--out", default="data/sign/motions")
 ap.add_argument("--dry", action="store_true")
 ap.add_argument("--skip_existing", action="store_true", help="이미 있는 글로스(조원 자료)는 그대로 두기")
 a = ap.parse_args()
+# 검수에서 빼기로 한 글로스 (잘라 온 동작이 너무 부자연스러움) — 다시 가져오지 않음
+EXCLUDE = {"물건1"}
 
 
 def load(p):
@@ -78,7 +80,7 @@ for g, cs in sorted(cands.items()):
     s, name, d, frames, fps, dim = cs[0]
     print(f"  {g:<8} {dim}D 점수 {s:.2f}  {len(frames):>3}프레임  ← {d['source']} {d['start']:.2f}-{d['end']:.2f}s  "
           f"({d.get('korean_text', '')[:30]})")
-    if a.dry or s < 0.5 or (a.skip_existing and g in md.index):
+    if a.dry or s < 0.5 or g in EXCLUDE or (a.skip_existing and g in md.index):
         continue
     fr = normalize(frames)
     if dim == 2:
