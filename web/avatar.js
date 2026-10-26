@@ -934,6 +934,12 @@ export class SignAvatar {
     this._handWQ = handW2;
     // ---- 손가락: 데이터의 마디 사이 각도 - 편 상태 기준(handshapes.base)
     const x = this._handAngles(h);
+    // 손가락끼리 연동: 약지·새끼는 힘줄이 이어져 혼자 많이 굽거나 펴지지 못함 (가운데·새끼 쪽으로 조금씩 끌림) → 따로 노는 떨림도 줄어듦
+    if (x) for (let j = 0; j < 3; j++) {
+      const m = x[6 + j], r = x[9 + j], l = x[12 + j];
+      x[9 + j] = 0.7 * r + 0.15 * m + 0.15 * l;
+      x[12 + j] = 0.7 * l + 0.3 * r;
+    }
     const base = (this.handshapes && this.handshapes.base) || new Array(15).fill(10);
     const prior = x ? this._handPrior(x) : null;
     FINGERS.forEach(([names, idx], fi) => {

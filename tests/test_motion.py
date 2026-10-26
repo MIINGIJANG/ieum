@@ -3,7 +3,7 @@ import json
 import math
 import random
 
-from ksl.motion import MotionDict, _despike, _hand_basis, _one_euro, _smooth_hand_rot, compose
+from ksl.motion import MotionDict, _despike, _hand_basis, _one_euro, _smooth_hand_rot, _stabilize_fingers, compose
 
 from conftest import ROOT
 
@@ -70,6 +70,36 @@ def test_despike_depth_jump():
     out = _despike([{"body": body(z)} for z in zs])
     assert abs(out[3]["body"][4][2] - (-0.44)) < 0.03
     assert [f["body"][4][2] for i, f in enumerate(out) if i != 3] == [z for i, z in enumerate(zs) if i != 3]
+
+
+def test_stabilize_fingers():
+    """같은 손 모양 + 떨림 → 손가락 굽힘 떨림이 줄고 마디 길이는 일정, 손 모양이 바뀌면 바뀐 모양을 따라감."""
+    random.seed(1)
+    import numpy as np
+
+    def hand(curl):
+        pts = [[0.0, 0.0, 0.0]]
+        for f, x in enumerate([-0.04, -0.02, 0.0, 0.02, 0.04]):
+            p, d = np.array([x, -0.05 if f else -0.02, 0.0]), np.array([0.0, -1.0, 0.0])
+            for j in range(4):
+                a = curl * (j > 0)
+                d = np.array([0.0, -math.cos(a * j), -math.sin(a * j)])
+                p = p + 0.025 * d if j else p
+                pts.append([float(v) + random.gauss(0, 0.004) for v in p])
+        return pts
+
+    frames = [{"rh": hand(0.1 if i < 15 else 0.9)} for i in range(30)]
+    out = _stabilize_fingers(frames)
+
+    def bend(h, a, b, c):
+        u, v = np.subtract(h[b], h[a]), np.subtract(h[c], h[b])
+        return math.degrees(math.acos(max(-1, min(1, u @ v / np.linalg.norm(u) / np.linalg.norm(v)))))
+    jit = lambda fs: np.mean([abs(bend(fs[i + 1]["rh"], 5, 6, 7) - 2 * bend(fs[i]["rh"], 5, 6, 7) + bend(fs[i - 1]["rh"], 5, 6, 7))
+                              for i in range(1, 29) if i not in (14, 15)])
+    assert jit(out) < jit(frames) * 0.5
+    L = [math.dist(f["rh"][7], f["rh"][8]) for f in out]
+    assert max(L) - min(L) < 1e-3
+    assert bend(out[25]["rh"], 5, 6, 7) > bend(out[5]["rh"], 5, 6, 7) + 20     # 굽힌 모양으로 바뀜
 
 
 def test_handshapes_file():

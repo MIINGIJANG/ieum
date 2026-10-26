@@ -565,6 +565,114 @@ def _smooth_hand_rot(frames, fps=FPS, half=2, vmax=540.0):
     return out
 
 
+FINGER_CHAINS = [[0, 1, 2, 3, 4], [0, 5, 6, 7, 8], [0, 9, 10, 11, 12], [0, 13, 14, 15, 16], [0, 17, 18, 19, 20]]
+
+
+def _finger_angles(D):
+    """손 안쪽 좌표의 마디 방향 D[(a,b)] → 손가락 15마디 굽힘 각도(도), 아바타·build_handshapes 와 같은 계산."""
+    import numpy as np
+    out = []
+    for ch in FINGER_CHAINS:
+        for j in range(3):
+            u, v = D[(ch[j], ch[j + 1])], D[(ch[j + 1], ch[j + 2])]
+            out.append(math.degrees(math.acos(max(-1.0, min(1.0, float(np.dot(u, v)))))))
+    return out
+
+
+def _stabilize_fingers(frames, keep=0.2, min_len=3):
+    """손가락 떨림 줄이기. 손 방향(손등 기준)은 그대로 두고 손 모양만 손 안쪽 좌표에서 다룸
+    (손 전체가 움직일 때 생기는 위치 떨림이 손 모양에 섞이지 않게).
+      1) 마디 방향을 손 안쪽 좌표로 바꿔 시간 방향으로 부드럽게 (앞뒤 대칭 가우시안: 늦어지지 않음)
+      2) 수어 손 모양은 몇 가지로 정해져 있고 한 단어 안에서 대개 그대로이거나 한두 번 바뀜
+         → 굽힘 각도가 바뀌는 지점을 찾아(최적 구간 나누기) 구간마다 중앙값 모양으로 고정,
+            바뀌는 곳은 앞뒤 모양을 최소 저크 곡선으로 이어 줌. 원래 움직임은 keep 만큼만 남김
+      3) 마디 길이는 단어(클립)마다 중앙값으로 고정 (2D→3D 추정은 길이가 늘었다 줄었다 함),
+         손바닥(손목→손가락 뿌리)은 굳은 부분이라 클립 전체 중앙값 모양
+    손가락 점이 빠진 프레임은 그대로 둠."""
+    import numpy as np
+    n = len(frames)
+    if n < 3:
+        return frames
+    out = [dict(f) for f in frames]
+    segs = [(ch[j], ch[j + 1]) for ch in FINGER_CHAINS for j in range(4)]
+    palm = {s for s in segs if s[0] == 0 and s[1] != 1}                    # 엄지 뿌리(0→1)는 움직이는 마디
+    for k in ("rh", "lh"):
+        idx, B, Dl, L = [], [], [], []
+        for i, f in enumerate(frames):
+            h = f.get(k)
+            R = _hand_basis(h)
+            if R is None or any(h[j] is None or len(h[j]) < 3 for j in range(21)):
+                continue
+            P = np.array(h, dtype=float)
+            dl, ln = {}, {}
+            for a, b in segs:
+                v = P[b] - P[a]
+                ln[(a, b)] = float(np.linalg.norm(v))
+                dl[(a, b)] = R.T @ v / max(ln[(a, b)], 1e-6)
+            idx.append(i); B.append(R); Dl.append(dl); L.append(ln)
+        m = len(idx)
+        if m < 3:
+            continue
+        length = {s: float(np.median([x[s] for x in L])) for s in segs}
+        nrm = lambda v: v / max(np.linalg.norm(v), 1e-9)
+        # 1) 가우시안 (σ = 1 프레임)
+        g = np.exp(-0.5 * np.arange(-3, 4) ** 2)
+        sm = []
+        for t in range(m):
+            d = {}
+            for s in segs:
+                acc, wsum = np.zeros(3), 0.0
+                for o, w in zip(range(-3, 4), g):
+                    if 0 <= t + o < m:
+                        acc += w * Dl[t + o][s]; wsum += w
+                d[s] = nrm(acc / wsum)
+            sm.append(d)
+        # 2) 굽힘 각도로 구간 나누기: 비용 = 구간 안 제곱 편차 합 + 구간마다 벌점 (떨림 크기에 맞춤)
+        A = np.array([_finger_angles(d) for d in sm])
+        raw = np.array([_finger_angles(d) for d in Dl])
+        noise = max(4.0, float(np.median(np.abs(raw - A))) * 1.4826)          # 떨림 크기(도)
+        pen = 15 * 40.0 * noise ** 2
+        cs, cs2 = np.vstack([np.zeros(15), np.cumsum(A, 0)]), np.vstack([np.zeros(15), np.cumsum(A ** 2, 0)])
+        cost = lambda a, b: float(np.sum(cs2[b] - cs2[a] - (cs[b] - cs[a]) ** 2 / (b - a)))
+        best, prev = [0.0] + [math.inf] * m, [0] * (m + 1)
+        for b in range(1, m + 1):
+            for a in range(0, b):
+                if b - a < min_len and not (a == 0 and b == m):
+                    continue
+                c = best[a] + cost(a, b) + pen
+                if c < best[b]:
+                    best[b], prev[b] = c, a
+        cuts, b = [], m
+        while b > 0:
+            cuts.append((prev[b], b)); b = prev[b]
+        cuts.reverse()
+        med = [{s: nrm(np.median([sm[t][s] for t in range(a, b)], 0)) for s in segs} for a, b in cuts]
+        # 구간 경계: 앞뒤 모양을 최소 저크 곡선으로 (짧은 구간이면 그 절반까지만)
+        tgt = [None] * m
+        for c, (a, b) in enumerate(cuts):
+            for t in range(a, b):
+                tgt[t] = med[c]
+        for c in range(1, len(cuts)):
+            bnd = cuts[c][0]
+            w = max(1, min(3, (cuts[c - 1][1] - cuts[c - 1][0]) // 2, (cuts[c][1] - cuts[c][0]) // 2))
+            for t in range(bnd - w, bnd + w):
+                u = _min_jerk((t - (bnd - w) + 0.5) / (2 * w))
+                tgt[t] = {s: nrm(med[c - 1][s] * (1 - u) + med[c][s] * u) for s in segs}
+        palm_d = {s: nrm(np.median([d[s] for d in Dl], 0)) for s in palm}
+        # 3) 고정 길이로 다시 세우기 (손목 위치·손 방향은 원래 것)
+        for t, i in enumerate(idx):
+            h = frames[i][k]
+            P = [None] * 21
+            P[0] = np.array(h[0], dtype=float)
+            for ch in FINGER_CHAINS:
+                for a, b in zip(ch[:-1], ch[1:]):
+                    s = (a, b)
+                    d = palm_d[s] if s in palm else nrm(tgt[t][s] + keep * (sm[t][s] - tgt[t][s]))
+                    P[b] = P[a] + length[s] * (B[t] @ d)
+            out[i][k] = [[round(float(v), 4) for v in p] for p in P]
+    return out
+
+
 def _filter_face(frames, win=5):
     """고개 각도·표정: 손이 얼굴을 가리면 얼굴 추정이 튐(예: 고개 -30° → +29°) → 중앙값으로 튀는 값 제거 후 부드럽게."""
     import statistics
@@ -676,7 +784,7 @@ def compose(glosses, mdict: MotionDict, fps=FPS, transition=0.25, missing_sec=0.
             clip = None        # 깊이 추정을 하지 않은 2D 자료는 손가락·팔 방향이 뒤틀려 보여서 쓰지 않음 ('2D→3D' 로 저장된 것은 사용)
         if clip and clip["frames"]:
             cf = clip.get("fps", fps)
-            src = _relax_low_hands(_one_euro(_smooth_hand_rot(_despike(_filter_face(_fix_hands(clip["frames"]))), cf), cf))
+            src = _relax_low_hands(_one_euro(_stabilize_fingers(_smooth_hand_rot(_despike(_filter_face(_fix_hands(clip["frames"]))), cf)), cf))
             n = max(2, round(len(src) * fps / cf / speed))
             seg = _resample(src, n)
             has = True
