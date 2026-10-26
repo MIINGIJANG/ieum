@@ -138,7 +138,7 @@ export class SignAvatar {
     this.vrm = null;
     this.driven = new Set();
     this.margin = 0.035;          // 손목이 몸 표면보다 최소 이만큼(m) 앞에 오도록
-    this.st = { pole: {}, hand: {}, twist: { left: 0, right: 0 }, theta: {} };   // 시간에 따라 이어지는 상태
+    this.st = { pole: {}, hand: {}, twist: { left: 0, right: 0 }, theta: {}, act: {} };   // 시간에 따라 이어지는 상태
     this.twistNow = { left: 0, right: 0 };   // 화면에 보이는 비틀림 (st.twist 를 부드럽게 따라감)
     this.headSpring = new Spring(13, 0.72);
     this.gazeSpring = new Spring(18, 0.85, 2);
@@ -411,6 +411,9 @@ export class SignAvatar {
       // 손가락 '바깥쪽'(가운데 손가락에서 멀어지는 방향) — 손가락끼리 겹치지 않게 벌림 제한할 때
       const mid = pos(P + "MiddleProximal");
       R.out = FINGERS.map(([names]) => { const b = pos(P + names[0]); return b && mid ? dir(mid, b.clone()) : new THREE.Vector3(); });
+      // 기본 자세에서 네 손가락이 가운데 손가락에서 벌어진 각도 (손바닥 면에서) → 손가락 간격을 고르게 맞출 때 기준
+      const inPalm = (v) => v.clone().sub(R.palm.clone().multiplyScalar(v.dot(R.palm))).normalize();
+      R.splay = R.fingers.map((f, fi) => (fi > 0 && f[0] && R.fingers[2][0] ? inPalm(f[0]).angleTo(inPalm(R.fingers[2][0])) : 0));
       // CC4 팔뚝 비틀림 뼈: 기본 회전과 뼈 축(로컬)
       R.twist = ((this.vrm.twist || {})[P] || []).map((tb) => {
         const child = tb.children.find((c) => c.isBone) || this.raw(P + "Hand");
@@ -530,6 +533,22 @@ export class SignAvatar {
     return smooth01(this.torsoHalf * 1.08 - Math.abs(p.x), 0, 0.06) * smooth01(p.y - this._hipsY, -0.02, 0.03);
   }
 
+  // 수어 공간 상자: 손목 목표 W 를 화면에 손이 온전히 보이는 범위 안으로 (경계 가까이서 서서히 멈춤)
+  //  아래: 또렷하게 보이는 아래 끝 + 손 길이만큼 (손끝이 아래로 향해도 보이게), 옆: 화면 가장자리 안쪽, 앞: 카메라 쪽 0.45m 까지
+  //  config.signBox = { bottom: 손 길이 여유(m), side: 옆 여유(m) }
+  _signBox(W, R) {
+    const v = this._view;
+    if (!v || (this.config && this.config.signBox === false)) return;
+    const cfg = (this.config && this.config.signBox) || {};
+    const soft = (x, lo, k) => (x >= lo + k ? x : lo + k - k * Math.tanh((lo + k - x) / k));   // lo 아래로는 안 내려감
+    W.z = -soft(-W.z, -0.45, 0.05);
+    const D = Math.max(0.3, v.dist - W.z), halfH = D * v.tan, halfW = halfH * (this.camera.aspect || 1);
+    const yMin = v.cy + (1 - 2 * v.solid) * halfH + (cfg.bottom ?? R.handLen * 0.75);
+    W.y = soft(W.y, yMin, 0.05);
+    const xMax = halfW - (cfg.side ?? 0.1);
+    W.x = -soft(-soft(W.x, -xMax, 0.04), -xMax, 0.04);
+  }
+
   // 2관절 IK: 어깨 S, 목표 손목 W, 팔 길이 a·b, 팔꿈치가 향할 방향 pole
   _ik(S, W, a, b, pole) {
     const d0 = W.clone().sub(S);
@@ -562,6 +581,8 @@ export class SignAvatar {
     const cy = bottom + span / 2;
     this.camera.position.set(0, fm ? cy : cy + 0.02, dist);   // 여백을 맞출 때는 정면에서 (위아래 같게)
     this.camera.lookAt(0, cy, 0);
+    // 수어 공간 상자용: 화면에서 또렷하게 보이는 아래 끝 (아래쪽 흐려지는 부분 위)
+    this._view = { cy: this.camera.position.y, dist, tan: Math.tan(half), solid: fm ? 1 - fm * 1.6 : 1 };
   }
 
   _resize() {
@@ -614,15 +635,21 @@ export class SignAvatar {
   //  굽힘 범위 (뿌리 0°~90°, 가운데 0°~100°, 끝 0°~75°), 벌림은 뿌리만 (바깥 12° / 안쪽 6°: 옆 손가락과 겹치지 않게)
   //  엄지: 뿌리(손바닥 안 마디)는 원뿔 안 60°, 가운데·끝은 손바닥 쪽으로만 굽힘
   //  끝마디는 가운데 마디의 2/3 정도로 연동 (사람 손가락 힘줄 구조)
-  _fingerTarget(R, fi, j, target, parentW, prior, prev, flexData = null) {
+  _fingerTarget(R, fi, j, target, parentW, prior, prev, flexData = null, spreadOut = null) {
     const restDir = R.fingers[fi][j];
     const p = restDir.clone().applyQuaternion(parentW).normalize();
-    const t = target.clone().normalize();
-    if (fi === 0 && j === 0) {                                   // 엄지 뿌리: 원뿔 제한
+    let t = target.clone().normalize();
+    if (fi === 0 && j === 0) {                                   // 엄지 뿌리: 원뿔 제한 + 손등 쪽으로는 거의 안 올라감
       const ang = p.angleTo(t), lim = D(60);
-      if (ang <= lim) return t;
-      const axis = new THREE.Vector3().crossVectors(p, t).normalize();
-      return p.applyAxisAngle(axis, lim);
+      if (ang > lim) t = p.clone().applyAxisAngle(new THREE.Vector3().crossVectors(p, t).normalize(), lim);
+      // 손등 쪽 = 손바닥 반대. 기본 자세보다 손등 쪽으로 5° 넘게 들리지 않게 (엄지가 손등 위로 젖혀져 어색하던 것)
+      const back = R.palm.clone().applyQuaternion(parentW).negate().normalize();
+      const eMax = Math.asin(clamp(p.dot(back), -1, 1)) + D(5);
+      if (Math.asin(clamp(t.dot(back), -1, 1)) > eMax) {
+        const flat = t.clone().sub(back.clone().multiplyScalar(t.dot(back))).normalize();
+        t = flat.multiplyScalar(Math.cos(eMax)).add(back.multiplyScalar(Math.sin(eMax)));
+      }
+      return t;
     }
     const palm = R.palm.clone().applyQuaternion(parentW);                     // 손바닥 쪽
     let n = palm.clone();
@@ -638,9 +665,11 @@ export class SignAvatar {
     if (j === 2 && prev != null && fi > 0) flex = flex * 0.5 + prev * 0.67 * 0.5;   // 끝마디 연동
     if (j === 0 && fi > 0) {
       const outSign = Math.sign(R.out[fi].clone().applyQuaternion(this._handWQ).dot(l)) || 1;
-      const lo = fi === 2 ? -D(6) : -D(6), hi = fi === 2 ? D(6) : D(12);
-      const s = side * outSign;
-      side = clamp(s, lo, hi) * outSign;
+      if (spreadOut != null) side = spreadOut * outSign;           // 네 손가락 간격을 고르게 (손 전체 벌림에서 나눠 줌)
+      else {
+        const lo = -D(6), hi = fi === 2 ? D(6) : D(12);
+        side = clamp(side * outSign, lo, hi) * outSign;
+      }
     } else side = 0;
     const dir = p.clone().multiplyScalar(Math.cos(flex)).add(n.clone().multiplyScalar(Math.sin(flex))).multiplyScalar(Math.cos(side))
       .add(l.multiplyScalar(Math.sin(side)));
@@ -689,13 +718,30 @@ export class SignAvatar {
     this._face = fr;
     this._word = fr ? word : null;
     if (fr && fr.tr && m && m.frames[fr.tr.a] && m.frames[fr.tr.b]) {
-      const A = this._poseSnap(m, fr.tr.a), B = this._poseSnap(m, fr.tr.b), t = minJerk(clamp(fr.tr.t, 0, 1));
+      // 앞 자세(A): 바로 전까지 실제로 보이던 자세에서 출발 (따로 계산한 자세에서 출발하면 연결 시작 순간 팔꿈치가 툭 튐)
+      //  (뒤 자세 계산이 뼈 목표를 덮어쓰므로 그 전에 담아 둠)
+      const key = fr.tr.a;
+      let A = this._trA && this._trA.key === key && this._trA.frames === m.frames ? this._trA : null;
+      if (!A && this._wasLive) {
+        A = { q: new Map([...this.driven].map((o) => [o, (o.userData.target || o.quaternion).clone()])), tw: { ...this.st.twist }, th: { ...this.st.theta }, act: { ...this.st.act },
+              pole: Object.fromEntries(Object.entries(this.st.pole).map(([P, v]) => [P, v.clone()])) };
+      }
+      const B = this._poseSnap(m, fr.tr.b), t = minJerk(clamp(fr.tr.t, 0, 1));
+      if (!A) A = this._poseSnap(m, key);
+      if (A !== this._trA) {
+        A = { ...A, q: new Map([...A.q].filter(([o]) => B.q.has(o))), key, frames: m.frames };
+        this._trA = A;
+      }
+      this._wasLive = false;
       for (const [o, q] of A.q) {
         const qb = B.q.get(o);
         o.userData.target = qb ? q.clone().slerp(qb, t) : q.clone();
         this.driven.add(o);
       }
       for (const P of ["left", "right"]) {
+        // 팔꿈치 방향 상태도 이어지게 (연결이 끝나고 다시 동작을 따라갈 때 옛 방향에서 출발하지 않게)
+        if (A.pole && A.pole[P] && B.pole && B.pole[P]) this.st.pole[P] = A.pole[P].clone().lerp(B.pole[P], t).normalize();
+        if (A.act && A.act[P] != null && B.act && B.act[P] != null) this.st.act[P] = A.act[P] + (B.act[P] - A.act[P]) * t;
         let ta = A.th[P], tb = B.th[P];
         if (ta == null || tb == null || !this.rest[P].twist.length) { this.st.twist[P] = A.tw[P] + (B.tw[P] - A.tw[P]) * t; continue; }
         // 비틀림은 각도라 360° 차이가 같은 자세 → 지금 값에 이어지는 쪽으로 맞춘 뒤 섞음 (반대쪽으로 한 바퀴 돌지 않게)
@@ -708,6 +754,8 @@ export class SignAvatar {
       return;
     }
     const w = fr && fr.rest > 0 ? Math.min(1, fr.rest) : 0;
+    this._wasLive = !!fr;
+    this._trA = null;
     this._pose(fr);
     if (!w) return;
     // 시작·끝: 동작 자세와 기본 자세(팔 내림)를 관절마다 섞음 → 손이 자연스럽게 올라오고 내려감
@@ -724,9 +772,10 @@ export class SignAvatar {
     let s = this._snaps.map.get(i);
     if (!s) {
       const keep = this.st;
-      this.st = { pole: {}, hand: {}, twist: { left: 0, right: 0 }, theta: {}, pure: true };
+      this.st = { pole: {}, hand: {}, twist: { left: 0, right: 0 }, theta: {}, act: {}, pure: true };
       this._pose(m.frames[i]);
-      s = { q: new Map([...this.driven].map((o) => [o, o.userData.target.clone()])), tw: { ...this.st.twist }, th: { ...this.st.theta } };
+      s = { q: new Map([...this.driven].map((o) => [o, o.userData.target.clone()])), tw: { ...this.st.twist }, th: { ...this.st.theta }, act: { ...this.st.act },
+            pole: Object.fromEntries(Object.entries(this.st.pole).map(([P, v]) => [P, v.clone()])) };
       this.st = keep;
       this._snaps.map.set(i, s);
     }
@@ -791,6 +840,15 @@ export class SignAvatar {
         {
           const L = R.a + R.b, dv = W.clone().sub(shoW), d = dv.length(), d2 = softLimit(d, 0.88 * L, 0.8);
           if (d2 < d) W.copy(shoW).add(dv.multiplyScalar(d2 / d));
+        }
+        // 수어 공간 상자 안으로 (손을 쉬려고 허리 아래로 내린 손은 빼고: 데이터 손목이 낮을수록, 손 모양이 안 잡힌 손일수록 덜)
+        //  얼마나 끌어올릴지는 0.25초에 걸쳐 바뀜 (쉬던 손이 살짝 올라올 때 확 들려 팔꿈치가 튀지 않게)
+        {
+          let act = (fr[s.hand] ? 1 : 0.4) * (1 - smooth01(b[s.wri][1], 0.95, 1.2));
+          const pa = this.st.act[P];
+          if (pa != null && !this.st.pure) act = pa + (act - pa) * (1 - Math.exp(-(this._dt || 0.016) / 0.25));
+          this.st.act[P] = act;
+          if (act > 0.001) { const B = W.clone(); this._signBox(B, R); W.lerp(B, act); }
         }
         // 얼굴 안으로 들어가면 얼굴 앞쪽으로
         const fromHead = W.clone().sub(this.headCenter);
@@ -942,6 +1000,10 @@ export class SignAvatar {
     }
     const base = (this.handshapes && this.handshapes.base) || new Array(15).fill(10);
     const prior = x ? this._handPrior(x) : null;
+    // ---- 네 손가락 간격: 데이터의 검지~새끼 벌어진 각도(손바닥 면에서) S 를 세 칸으로 똑같이 나눔
+    //  가운데 손가락 기준 검지 +S/3, 약지 +S/3, 새끼 +2S/3 (바깥쪽으로). 손가락마다 따로 벌어져 들쭉날쭉하던 것
+    const spread = this._spread(h, R, P);
+    const outTarget = [0, spread / 3, 0, spread / 3, spread * 2 / 3];
     FINGERS.forEach(([names, idx], fi) => {
       let parentW = handW2, prevFlex = null;
       names.forEach((n, j) => {
@@ -950,11 +1012,27 @@ export class SignAvatar {
         const k = fi * 3 + j;
         const pr = prior && fi > 0 ? { val: D(Math.max(0, prior.c[k] - base[k])), w: prior.w } : null;
         const fd = x && fi > 0 ? D(Math.max(0, x[k] - base[k])) : null;
-        const t = this._fingerTarget(R, fi, j, V(c).sub(V(a)), parentW, pr, prevFlex, fd);
+        const so = fi > 0 && fi !== 2 && spread != null ? outTarget[fi] - R.splay[fi] : fi === 2 && spread != null ? 0 : null;
+        const t = this._fingerTarget(R, fi, j, V(c).sub(V(a)), parentW, pr, prevFlex, fd, so);
         prevFlex = t.flex ?? null;
         parentW = this._aim(P + n, R.fingers[fi][j], t, parentW);
       });
     });
+  }
+
+  // 손가락 벌림(라디안): 검지·새끼 뿌리 마디 방향이 손바닥 면에서 벌어진 각도. 기본 자세 벌림의 70% ~ 40° 사이, 시간에 따라 부드럽게
+  _spread(h, R, P) {
+    if (!h[5] || !h[6] || !h[17] || !h[18] || !h[0] || !h[9]) return null;
+    const n = new THREE.Vector3().crossVectors(V(h[9]).sub(V(h[0])), V(h[17]).sub(V(h[5]))).normalize();
+    const inP = (v) => v.sub(n.clone().multiplyScalar(v.dot(n))).normalize();
+    let S = inP(V(h[6]).sub(V(h[5]))).angleTo(inP(V(h[18]).sub(V(h[17]))));
+    const rest = (R.splay[1] || 0) + (R.splay[4] || 0);
+    S = clamp(S, rest * 0.7, D(40));
+    this.st.spread = this.st.spread || {};
+    const prev = this.st.spread[P];
+    if (prev != null && !this.st.pure) S = prev + (S - prev) * (1 - Math.exp(-(this._dt || 0.016) / 0.08));
+    this.st.spread[P] = S;
+    return S;
   }
 
   // 자주 나오는 손 모양(web/handshapes.json, 동작 데이터 군집): 가장 가까운 모양 쪽으로 최대 35% 끌어당김

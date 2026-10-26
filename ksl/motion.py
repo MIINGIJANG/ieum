@@ -579,6 +579,64 @@ def _finger_angles(D):
     return out
 
 
+# 손가락 관절 범위(도): [손바닥 쪽으로 굽힘 최대, 손등 쪽 젖힘 허용, 옆으로 꺾임 허용]. 엄지는 굽힘만 봄
+_FINGER_LIMITS = {0: (95, 20, 22), 1: (110, 8, 12), 2: (85, 10, 12)}
+_THUMB_MAX = (70, 75, 85)
+
+
+def _fix_finger_pose(dl, R, palm):
+    """손가락 한 프레임 손 모양을 사람이 할 수 있는 모양으로.
+    3D 추정은 손가락 끝 점의 앞뒤 깊이가 잘못 잡혀 손가락이 뒤로 접히거나(가운데 마디 150~170°) 옆으로 꺾이는 일이 잦음
+    → 마디마다 '그대로'와 '카메라 앞뒤만 뒤집은 것' 중 관절 범위를 덜 벗어나는 쪽을 고르고, 그래도 남는 건 범위 안으로.
+    dl: 손 안쪽 좌표 마디 방향, R: 손 방향, palm: 손바닥 쪽 방향(손 안쪽 좌표 z 의 부호)."""
+    import numpy as np
+    n = np.array([0.0, 0.0, palm])
+    nrm = lambda v: v / max(np.linalg.norm(v), 1e-9)
+
+    def cost(p, c, j, thumb):
+        bend = math.degrees(math.acos(max(-1.0, min(1.0, float(p @ c)))))
+        if thumb:
+            return max(0.0, bend - _THUMB_MAX[j])
+        mx, back, side = _FINGER_LIMITS[j]
+        perp = c - p * float(p @ c)
+        lat = nrm(np.cross(p, n))
+        b_ = math.degrees(math.asin(max(-1.0, min(1.0, float(-perp @ n))))) if np.linalg.norm(perp) > 1e-6 else 0.0   # 손등 쪽
+        s_ = math.degrees(math.asin(max(-1.0, min(1.0, abs(float(perp @ lat))))))
+        return max(0.0, bend - mx) + max(0.0, b_ - back) * 2 + max(0.0, s_ - side)
+
+    def clampc(p, c, j, thumb):
+        if thumb:
+            mx = math.radians(_THUMB_MAX[j])
+        else:
+            mx_d, back, side = _FINGER_LIMITS[j]
+            lat = nrm(np.cross(p, n)); up = nrm(np.cross(lat, p))          # up: 손바닥 쪽 (p 에 수직)
+            x, y, z = float(c @ p), float(c @ up), float(c @ lat)
+            y = max(y, -math.sin(math.radians(back)) * math.hypot(x, y))
+            zl = math.sin(math.radians(side)) * math.sqrt(x * x + y * y + z * z)
+            z = max(-zl, min(zl, z))
+            c = nrm(p * x + up * y + lat * z)
+            mx = math.radians(mx_d)
+        ang = math.acos(max(-1.0, min(1.0, float(p @ c))))
+        if ang > mx:
+            axis = c - p * float(p @ c)
+            c = nrm(p * math.cos(mx) + nrm(axis) * math.sin(mx))
+        return c
+
+    out = dict(dl)
+    for fi, ch in enumerate(FINGER_CHAINS):
+        thumb = fi == 0
+        for j in range(3):
+            ps, cs = (ch[j], ch[j + 1]), (ch[j + 1], ch[j + 2])
+            p, c = out[ps], out[cs]
+            v = R @ c; v[2] = -v[2]
+            cf = R.T @ v                                               # 카메라 앞뒤만 뒤집은 것
+            if cost(p, cf, j, thumb) + 1.0 < cost(p, c, j, thumb):
+                c = cf
+                # 뒤집힌 점 뒤의 마디들도 같이 뒤집힘 (그 점 기준 상대 방향은 유지)
+            out[cs] = clampc(p, c, j, thumb)
+    return out
+
+
 def _stabilize_fingers(frames, keep=0.2, min_len=3):
     """손가락 떨림 줄이기. 손 방향(손등 기준)은 그대로 두고 손 모양만 손 안쪽 좌표에서 다룸
     (손 전체가 움직일 때 생기는 위치 떨림이 손 모양에 섞이지 않게).
@@ -613,6 +671,15 @@ def _stabilize_fingers(frames, keep=0.2, min_len=3):
         m = len(idx)
         if m < 3:
             continue
+        # 0) 사람이 할 수 있는 손 모양으로: 손바닥 쪽(손 안쪽 z 부호)은 많이 굽힌 마디들이 향하는 쪽 (손가락은 대개 손바닥 쪽으로 굽음)
+        votes = []
+        for dl in Dl:
+            for ch in FINGER_CHAINS[1:]:
+                p, c = dl[(ch[1], ch[2])], dl[(ch[2], ch[3])]
+                if float(p @ c) < math.cos(math.radians(30)):
+                    votes.append(float(c[2] - p[2] * float(p @ c)))
+        side = 1.0 if (np.median(votes) if votes else 1.0) >= 0 else -1.0
+        Dl = [_fix_finger_pose(dl, R, side) for dl, R in zip(Dl, B)]
         length = {s: float(np.median([x[s] for x in L])) for s in segs}
         nrm = lambda v: v / max(np.linalg.norm(v), 1e-9)
         # 1) 가우시안 (σ = 1 프레임)

@@ -102,6 +102,24 @@ def test_stabilize_fingers():
     assert bend(out[25]["rh"], 5, 6, 7) > bend(out[5]["rh"], 5, 6, 7) + 20     # 굽힌 모양으로 바뀜
 
 
+def test_finger_pose_human_range():
+    """손가락이 뒤로 접힌(가운데 마디 160°) 추정 → 사람 손가락 범위(가운데 마디 110°) 안으로."""
+    import numpy as np
+    def hand(fold):
+        pts = [[0.0, 0.0, 0.0]]
+        for x in (-0.04, -0.02, 0.0, 0.02, 0.04):
+            base = np.array([x, -0.08, 0.0])
+            pts += [list(base), list(base + [0, -0.03, 0]), list(base + [0, -0.03 + 0.025 * fold[0], 0.025 * fold[1]]),
+                    list(base + [0, -0.03 + 0.04 * fold[0], 0.04 * fold[1]])]
+        return pts
+    ok = [{"rh": hand((-1, 0))} for _ in range(4)]                   # 편 손
+    bad = {"rh": hand((math.cos(math.radians(20)), -math.sin(math.radians(20))))}   # 160° 로 접힘
+    out = _stabilize_fingers(ok + [bad] + ok)
+    P = np.array(out[4]["rh"])
+    u, v = P[6] - P[5], P[7] - P[6]
+    assert math.degrees(math.acos(u @ v / np.linalg.norm(u) / np.linalg.norm(v))) < 115
+
+
 def test_handshapes_file():
     d = json.loads((ROOT / "web/handshapes.json").read_text(encoding="utf-8"))
     assert len(d["centers"]) >= 8 and all(len(c) == 15 for c in d["centers"])
