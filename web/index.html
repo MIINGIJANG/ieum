@@ -344,12 +344,20 @@ let data = null, motion = null, items = [], frameF = 0, raf = 0, lastT = 0;
 const touch = matchMedia("(pointer: coarse)").matches;   // 휴대폰·태블릿: 입력창을 직접 누를 때만 키보드
 function renderExamples() {
   $("examples").innerHTML = "";
-  visibleExamples().forEach(e => {
+  const list = visibleExamples();
+  list.forEach(e => {
     const b = document.createElement("button");
     b.type = "button"; b.textContent = e.question;
     b.onclick = () => { $("q").value = e.question; if (!touch) $("q").focus(); };   // 입력창에만 넣고, 화살표를 눌러야 넘어감 (휴대폰은 키보드 안 올림)
     $("examples").append(b);
   });
+  // 보여줄 예시가 모자라도(모두 물어봄) 그 자리는 그대로 비워 둠 → 아래 아바타·결과가 위로 툭 올라가지 않게
+  for (let i = list.length; i < SHOW; i++) {
+    const b = document.createElement("button");
+    b.type = "button"; b.textContent = "\u00a0"; b.tabIndex = -1;
+    b.setAttribute("aria-hidden", "true"); b.style.visibility = "hidden";
+    $("examples").append(b);
+  }
 }
 $("form").onsubmit = (e) => { e.preventDefault(); run(); };
 

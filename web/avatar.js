@@ -606,24 +606,31 @@ export class SignAvatar {
   // 두 손이 서로 뚫고 지나가지 않게: 바로 전 화면의 실제 손 모양(손목 기준 손가락 마디·마디 가운데·손끝·손바닥 점)을
   //  새 손목 목표에 붙여 보고, 두 손 점 사이가 손가락 굵기 + 여유(handGap, 기본 4cm)보다 가까우면 겹친 만큼 두 손목을 반씩 떼어 놓음
   //  (겹친 점들의 방향을 모아서 밀기 → 손가락이 엇갈려도 한 방향으로 안정적으로, 맞닿는 수어는 맞닿은 채로)
+  //  손만이 아니라 손과 다른 팔 아래팔(팔꿈치~손목, 더 굵어서 6cm)도: 한 손이 다른 팔 손목·팔뚝을 뚫고 지나가지 않게
   _separateHands(fr, WL, WR) {
-    const rmin = (this.config && this.config.handGap) ?? 0.04;
+    const rmin = (this.config && this.config.handGap) ?? 0.04, rarm = rmin * 1.5;
     const SL = this._handShape && this._handShape.left, SR = this._handShape && this._handShape.right;
     if (!rmin || !SL || !SR || !fr.lh || !fr.rh) return;
+    const AL = (this._armShape && this._armShape.left) || [], AR = (this._armShape && this._armShape.right) || [];
     for (let it = 0; it < 4; it++) {
       const dir = new THREE.Vector3(), a = new THREE.Vector3(), c = new THREE.Vector3();
       let worst = 0;
-      for (const a0 of SL) {
-        a.copy(a0).add(WL);
-        for (const c0 of SR) {
-          c.copy(c0).add(WR);
-          const d = a.distanceTo(c);
-          if (d >= rmin) continue;
-          const depth = rmin - d;
-          if (d > 1e-5) dir.addScaledVector(a.clone().sub(c), depth / d); else dir.x += depth;
-          worst = Math.max(worst, depth);
+      const test = (A, wa, B, wb, r) => {                     // A 점들(왼쪽 기준) 과 B 점들(오른쪽 기준)
+        for (const a0 of A) {
+          a.copy(a0).add(wa);
+          for (const c0 of B) {
+            c.copy(c0).add(wb);
+            const d = a.distanceTo(c);
+            if (d >= r) continue;
+            const depth = r - d;
+            if (d > 1e-5) dir.addScaledVector(a.clone().sub(c), depth / d); else dir.x += depth;
+            worst = Math.max(worst, depth);
+          }
         }
-      }
+      };
+      test(SL, WL, SR, WR, rmin);
+      test(SL, WL, AR, WR, rarm);                            // 왼손 ↔ 오른 아래팔
+      test(AL, WL, SR, WR, rarm);                            // 왼 아래팔 ↔ 오른손
       if (!worst) break;
       if (this._sepStats && it === 0) { this._sepStats.n++; this._sepStats.max = Math.max(this._sepStats.max, worst); }
       if (dir.lengthSq() < 1e-10) dir.set(1, 0, 0);
@@ -655,6 +662,13 @@ export class SignAvatar {
       const m = ["IndexProximal", "MiddleProximal", "RingProximal", "LittleProximal"].map((n) => this.bone(P + n)).filter(Boolean);
       for (const b of m) pts.push(b.getWorldPosition(new V3()).add(H).multiplyScalar(0.5));          // 손바닥
       this._handShape[P] = pts.map((p) => p.sub(H));
+      // 아래팔: 손목 쪽 2/3 (팔꿈치 쪽은 몸 옆이라 다른 손과 잘 안 닿음), 손목 기준
+      const low = this.bone(P + "LowerArm");
+      if (low) {
+        const E = low.getWorldPosition(new V3());
+        this._armShape = this._armShape || {};
+        this._armShape[P] = [0.15, 0.3, 0.45, 0.6].map((t) => E.clone().lerp(H, 1 - t).sub(H));
+      }
     }
   }
 
