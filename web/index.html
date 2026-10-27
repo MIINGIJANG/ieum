@@ -490,15 +490,8 @@ function render() {
       li.textContent = (s.words && s.words[i]) || label(g);   // 답변에 쓰인 모양 그대로 (예: '이상이', '깨끗하게')
       const seg = motion ? motion.segments[k] : null;
       const it = { gloss: g, li, seg, nms: (s.nms && s.nms[i]) || null };   // 문법 표정·고개 (부정·조건·필요 등)
-      if (!(seg && seg.has_motion)) {
-        li.className = "nomo";
-        if (seg) {                                   // 수어 동작이 없는 단어: 누르면 그 단어만 지문자로 (손 모양 검수 전)
-          li.title = "수어 동작이 없는 단어 — 누르면 지문자로 (손 모양 검수 전)";
-          li.style.cursor = "pointer"; li.tabIndex = 0; li.setAttribute("role", "button");
-          li.onclick = () => playWord(it);
-          li.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); playWord(it); } };
-        }
-      } else {
+      if (!(seg && seg.has_motion)) li.className = "nomo";
+      else {
         li.className = seg.fingerspell ? "play fs" : "play";
         if (seg.fingerspell) li.title = `수어 동작이 없어 지문자로 표현: ${seg.fs_text}` + (seg.fs_verified ? "" : " (손 모양 검수 전)");
         li.tabIndex = 0; li.setAttribute("role", "button");

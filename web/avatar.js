@@ -1023,22 +1023,6 @@ export class SignAvatar {
         let pole = raw.multiplyScalar(wr_).add(def.multiplyScalar(1 - wr_));
         pole.y = Math.min(pole.y, -0.2);
         pole.normalize();
-        // 손목을 많이 꺾어야 하는 자세면 손목 대신 팔(어깨·팔꿈치)로: 아래팔이 손가락 방향을 따라가도록 팔꿈치 자리를 옮김
-        //  (손이 손목에서 축 처지거나 꺾여 보이던 것 → 팔꿈치를 들어 아래팔 각도를 맞추는 게 사람 동작에 가까움)
-        //  손목 꺾임 20° 부터 60° 까지 점점 더 (최대 95%), 이때는 팔꿈치가 옆·위로 조금 들려도 됨
-        const hdat = fr[s.hand];
-        if (hdat && hdat[0] && hdat[9]) {
-          const hdir = V(hdat[9]).sub(V(hdat[0])).normalize();
-          const [E0, W0] = this._ik(sho2, W, R.a, R.b, pole);
-          const bend = W0.clone().sub(E0).normalize().angleTo(hdir);
-          const kk = smooth01(bend, D(20), D(60)) * 0.95 * ((this.config && this.config.wristToArm) ?? 1);
-          if (kk > 0) {
-            const pd = W.clone().sub(hdir.multiplyScalar(R.b)).sub(sho2).normalize();   // 아래팔이 손 방향과 나란할 팔꿈치 쪽
-            pole = pole.clone().lerp(pd, kk);
-            pole.y = Math.min(pole.y, 0.3);
-            pole.normalize();
-          }
-        }
         const prevPole = this.st.pole[P];
         if (prevPole && !this.st.pure) pole = prevPole.clone().lerp(pole, 1 - Math.exp(-this._dt / 0.12)).normalize();
         let [E, W2, hinge] = this._ik(sho2, W, R.a, R.b, pole);
@@ -1109,7 +1093,7 @@ export class SignAvatar {
       this.st.twist[P] = 0;
     }
     local = lowerW2.clone().invert().multiply(handW);
-    // ---- 손목 꺾임 한계: 손바닥 쪽 굽힘 55° · 손등 쪽 젖힘 45° · 좌우 18° (사람 손목은 좌우로 많이 못 꺾음, 나머지는 팔꿈치가 맡음)
+    // ---- 손목 꺾임 한계: 손바닥 쪽 굽힘 65° · 손등 쪽 젖힘 55° · 좌우 22° (사람 손목은 좌우로 많이 못 꺾음)
     //  손 데이터의 손목과 팔 데이터의 손목이 많이 어긋나면 손 추정이 불확실 → 한계를 70% 로.
     //  '꺾임'만 줄이고 비틀림은 그대로, 한계 근처에서 부드럽게 멈춤 (딱 걸려 꺾여 보이지 않게)
     const bw = fr.body && fr.body[s.wri];
@@ -1119,7 +1103,7 @@ export class SignAvatar {
     const side = new THREE.Vector3().crossVectors(R.handF, R.palm).normalize();
     const along = Math.max(cur.dot(R.handF), 1e-3);
     const flexA = Math.atan2(cur.dot(R.palm), along), devA = Math.atan2(cur.dot(side), along);
-    const flex2 = softRange(flexA, -D(45) * shrink, D(55) * shrink), dev2 = softLimit(devA, D(18) * shrink);
+    const flex2 = softRange(flexA, -D(55) * shrink, D(65) * shrink), dev2 = softLimit(devA, D(22) * shrink);
     if (Math.abs(flex2 - flexA) > 1e-4 || Math.abs(dev2 - devA) > 1e-4 || cur.dot(R.handF) < 1e-3) {
       const swing = new THREE.Quaternion().setFromUnitVectors(R.handF, cur);
       const twistQ = swing.clone().invert().multiply(local);

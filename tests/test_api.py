@@ -41,9 +41,7 @@ def test_demo_sentence_uses_memory(client):
 
 def test_motion(client):
     r = client.post("/motion", json={"glosses": ["위험1", "없는단어"]}).json()
-    seg = r["segments"]
-    assert r["frames"] and seg[0]["has_motion"] and not seg[0].get("fingerspell")
-    assert seg[1]["has_motion"] and seg[1]["fingerspell"] and seg[1]["fs_text"] == "없는단어"   # 동작 없는 단어 → 지문자
+    assert r["frames"] and [s["has_motion"] for s in r["segments"]] == [True, False]   # 지문자는 기본 꺼짐 → 회색
 
 
 def test_missing(client):
