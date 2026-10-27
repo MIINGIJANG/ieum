@@ -549,6 +549,53 @@ export class SignAvatar {
     W.x = -soft(-soft(W.x, -xMax, 0.04), -xMax, 0.04);
   }
 
+  // 단어마다 손 높이 맞추기: 동작 전체 m 의 프레임마다 손목을 위아래로 옮길 양(m)
+  //  단어(구간)마다 수어하는 손의 평균 높이를 구해 수어 공간 상자 가운데(상자 아래 끝 ~ 목)로 옮김
+  //  → 어떤 단어는 아래에, 어떤 단어는 위에 머물던 것이 고르게. 얼굴에서 하는 수어는 얼굴에 닿아야 하므로 덜 옮김
+  //  단어 사이 연결은 앞뒤 값을 최소 저크로 섞고, 처음·끝(손 올리기·내리기)은 가까운 단어 값
+  //  config.signCenter: 옮기는 정도 0~1 (기본 1, 0 이면 끔)
+  _heightOffsets(m) {
+    if (this._hOff && this._hOff.frames === m.frames) return this._hOff.dy;
+    const strength = (this.config && this.config.signCenter) ?? 1;
+    const v = this._view, n = m.frames.length;
+    const dy = new Float32Array(n);
+    if (!v) return dy;                                     // 화면 맞춤 전: 다음에 다시 계산
+    this._hOff = { frames: m.frames, dy };
+    if (!strength || !m.segments) return dy;
+    const D0 = Math.max(0.3, v.dist - 0.25), yMin = v.cy + (1 - 2 * v.solid) * D0 * v.tan + this.rest.left.handLen * 0.75;
+    const center = (yMin + this.neckY) / 2;
+    const segs = m.segments.filter((g) => g.has_motion && g.start != null);
+    const segDy = segs.map((g) => {
+      let sum = 0, fsum = 0, cnt = 0;
+      for (let i = g.start; i <= g.end; i++) {
+        const fr = m.frames[i], b = fr && fr.body;
+        if (!b) continue;
+        for (const s of SIDES) {
+          const R = this.rest[s.pre];
+          if (!fr[s.hand] || !b[s.wri] || !b[s.sho] || b[s.wri][1] > 1.0) continue;      // 수어하는 손만 (쉬는 손 빼고)
+          const wr = V(b[s.wri]), sh = V(b[s.sho]);
+          const k = (R.a + R.b) / ((this.config && this.config.dataArm) || 1.5);
+          const ya = R.sho.y + (wr.y - sh.y) * k, yn = this.neckPos.y + wr.y * this.shoulderW;
+          const f = smooth01(wr.y, -0.1, 0.25);
+          sum += ya + (yn - ya) * f; fsum += f; cnt++;
+        }
+      }
+      if (!cnt) return 0;
+      const mean = sum / cnt, faceness = fsum / cnt;
+      return clamp(center - mean, -0.15, 0.15) * strength * (1 - faceness);
+    });
+    if (!segs.length) return dy;
+    const segAt = (i) => { let k = 0; for (let q = 0; q < segs.length; q++) if (segs[q].start <= i) k = q; return k; };
+    for (let i = 0; i < n; i++) {
+      const fr = m.frames[i];
+      if (fr && fr.tr) {
+        const a = segDy[segAt(fr.tr.a)], b = segDy[segAt(fr.tr.b)];
+        dy[i] = a + (b - a) * minJerk(clamp(fr.tr.t, 0, 1));
+      } else dy[i] = segDy[segAt(i)];
+    }
+    return dy;
+  }
+
   // 2관절 IK: 어깨 S, 목표 손목 W, 팔 길이 a·b, 팔꿈치가 향할 방향 pole
   _ik(S, W, a, b, pole) {
     const d0 = W.clone().sub(S);
@@ -696,6 +743,8 @@ export class SignAvatar {
   // 동작 전체 m 의 F 번째(소수) 프레임: 앞뒤 프레임을 섞어서 (30fps 동작을 60Hz 화면에서 계단 없이)
   setFrameAt(m, F, word = null) {
     const n = m.frames.length, i = clamp(Math.floor(F), 0, n - 1), j = Math.min(i + 1, n - 1), u = clamp(F - i, 0, 1);
+    const dy = this._heightOffsets(m);
+    this._dyNow = dy ? dy[i] + (dy[j] - dy[i]) * u : 0;
     const a = m.frames[i], b = m.frames[j];
     if (!a || !b || i === j || u < 1e-3) return this.setFrame(a, word, m);
     const tr = a.tr || b.tr;
@@ -771,9 +820,11 @@ export class SignAvatar {
     if (!this._snaps || this._snaps.frames !== m.frames) this._snaps = { frames: m.frames, map: new Map() };
     let s = this._snaps.map.get(i);
     if (!s) {
-      const keep = this.st;
+      const keep = this.st, keepDy = this._dyNow, dy = this._heightOffsets(m);
       this.st = { pole: {}, hand: {}, twist: { left: 0, right: 0 }, theta: {}, act: {}, pure: true };
+      this._dyNow = dy ? dy[i] : 0;
       this._pose(m.frames[i]);
+      this._dyNow = keepDy;
       s = { q: new Map([...this.driven].map((o) => [o, o.userData.target.clone()])), tw: { ...this.st.twist }, th: { ...this.st.theta }, act: { ...this.st.act },
             pole: Object.fromEntries(Object.entries(this.st.pole).map(([P, v]) => [P, v.clone()])) };
       this.st = keep;
@@ -835,6 +886,7 @@ export class SignAvatar {
         const Wa = shoW.clone().add(wr.clone().sub(sh).multiply(new THREE.Vector3(k, k, k * dz)));
         const face = smooth01(wr.y, -0.1, 0.25);                              // 0: 목 아래, 1: 얼굴 높이
         const W = new THREE.Vector3(Wn.x, Wa.y + (Wn.y - Wa.y) * face, Wa.z + (Wn.z - Wa.z) * face);
+        W.y += this._dyNow || 0;                                                // 단어마다 손 평균 높이를 수어 공간 가운데로
         // 팔이 다 펴지지 않게: 어깨에서 팔 길이의 70% 를 넘으면 서서히 88% 까지만
         //  (수어하는 손은 몸 앞 가까이 — 팔을 쭉 뻗으면 앞으로 나란히처럼 어색함. 팔꿈치가 굽고 아래로 내려옴)
         {
