@@ -828,7 +828,7 @@ def neutral_frame():
 
 
 def compose(glosses, mdict: MotionDict, fps=FPS, transition=0.25, missing_sec=0.6, speed=0.8, skip_missing=True,
-            lead=0.45, lead_out=0.8, hold=0.07):
+            lead=0.45, lead_out=0.8, hold=0.07, fingerspell=None, fs_words=None):
     """글로스 순서대로 동작 클립을 이어붙임.
 
     - speed: 재생 속도 (조원 자료는 문장 수어에서 단어만 잘라 0.4~0.8초로 짧음 → 0.8배로 조금 천천히)
@@ -839,6 +839,9 @@ def compose(glosses, mdict: MotionDict, fps=FPS, transition=0.25, missing_sec=0.
     - 처음·끝: 손을 내린 기본 자세에서 lead 초 동안 올라오고, 끝나면 lead_out 초 동안 천천히 내려감 (갑자기 튀지 않게)
     - 관절 좌표 떨림은 One Euro 필터로 줄임
     skip_missing=True: 동작이 없는 글로스는 건너뜀 (프레임 없음, segment 의 start/end = None)
+    fingerspell: 지문자 손 모양 표(ksl/fingerspell.py, data/sign/fingerspell.json) — 주면 동작이 없는 글로스를 지문자로
+                 (segment 에 "fingerspell": true, "fs_text": 쓴 말, "fs_verified": 손 모양 검수 여부)
+    fs_words: 주면 이 글로스들만 지문자로 (나머지 동작 없는 글로스는 예전처럼 회색)
     반환: {"fps", "frames", "segments": [{"gloss","start","end","has_motion"}]}  (start/end 는 프레임 번호)
     """
     frames, segments = [], []
@@ -858,7 +861,18 @@ def compose(glosses, mdict: MotionDict, fps=FPS, transition=0.25, missing_sec=0.
         clip = mdict.get(g) if mdict else None
         if clip and str(clip.get("source", "")).endswith("(2D)"):
             clip = None        # 깊이 추정을 하지 않은 2D 자료는 손가락·팔 방향이 뒤틀려 보여서 쓰지 않음 ('2D→3D' 로 저장된 것은 사용)
-        if clip and clip["frames"]:
+        fs = None
+        if not (clip and clip["frames"]) and fingerspell and (fs_words is None or g in fs_words):
+            from .fingerspell import frames_for, jamo, spell_text
+            word = spell_text(g)
+            fsf = frames_for(word, fingerspell, fps)
+            if fsf:
+                used = {j.rstrip("+") for j in jamo(word, fingerspell)}
+                fs = {"fingerspell": True, "fs_text": word,
+                      "fs_verified": all(fingerspell["shapes"].get(j, {}).get("verified") for j in used)}
+        if fs:
+            seg, has = fsf, True                                         # 지문자 (이미 깨끗한 손 점이라 떨림 거르기 안 함)
+        elif clip and clip["frames"]:
             cf = clip.get("fps", fps)
             src = _relax_low_hands(_one_euro(_stabilize_fingers(_smooth_hand_rot(_despike(_filter_face(_fix_hands(clip["frames"]))), cf)), cf))
             n = max(2, round(len(src) * fps / cf / speed))
@@ -885,7 +899,7 @@ def compose(glosses, mdict: MotionDict, fps=FPS, transition=0.25, missing_sec=0.
             frames += [toward_rest(seg[0], 1 - _ease(i / n_lead)) for i in range(n_lead)]   # 기본 자세 → 첫 동작
         start = len(frames)
         frames += seg
-        segments.append({"gloss": g, "start": start, "end": len(frames) - 1, "has_motion": has})
+        segments.append({"gloss": g, "start": start, "end": len(frames) - 1, "has_motion": has, **(fs or {})})
         if has and hold > 0:
             frames += [dict(seg[-1])] * max(1, round(hold * fps))                       # 단어 끝 멈춤
     if frames:

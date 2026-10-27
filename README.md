@@ -290,7 +290,8 @@ pip install pytest httpx && python -m pytest -q tests     # 약 15초, 번역 �
 
 ## 동작 데이터 형식 (요약, 자세한 건 docs/API.md)
 - 프레임 = `body` 8점 + 오른손/왼손 21점, 목=(0,0) · 어깨너비=1 로 정규화 → 다른 영상 클립끼리 크기·위치가 맞음
-- 글로스 클립 사이 0.2초 보간, 동작 없는 글로스(`FS:` 지문자 등)는 기본 자세 + 화면에 글자 표시
+- 글로스 클립 사이 0.2초 보간, 동작 없는 글로스는 지문자(`ksl/fingerspell.py`, 손 모양 표 `data/sign/fingerspell.json` — 수어 전문가 검수 전)로, 답변에서는 핵심어 위주 최대 3개, 나머지는 회색 글자 (누르면 지문자)
+- 동작 없는 단어 기록: `GET /missing` · `/missing.html` (많이 나온 단어부터 수어 동작을 추가하면 됨, `KSL_MISSING_LOG`)
 - AI Hub 키포인트(OpenPose JSON, 2D/3D, people 이 list/dict 어느 쪽이든)와 MediaPipe 결과를 같은 형식으로 변환
 - 동작사전 만들 때 같은 글로스 클립이 여러 개면 길이가 중앙값에 가장 가까운 1개 사용
 

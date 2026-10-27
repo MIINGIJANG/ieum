@@ -6,6 +6,7 @@
   질문 모드에서는 질문과 가장 비슷한 안내 문장을 골라 답한다(유사도가 기준 이상일 때).
 """
 import json
+import os
 import re
 from pathlib import Path
 
@@ -207,6 +208,11 @@ class SafetySignPipeline:
         self._tr, self._tr_args = None, (ckpt, lexicon)       # 번역 모델은 처음 필요할 때 불러옴 (서버 시작 빠르게)
         self.rag = SafetyRAG.load(index)
         self.motion = MotionDict(motion_dir) if motion_dir and Path(motion_dir).exists() else None
+        from .missing import MissingLog
+        self.missing = MissingLog()                 # 동작이 없는 단어 기록 (GET /missing)
+        from .fingerspell import load_table
+        self.fingerspell = load_table(Path(motion_dir).parent / "fingerspell.json" if motion_dir else "data/sign/fingerspell.json") \
+            if os.environ.get("KSL_FINGERSPELL", "1") != "0" else None   # 동작이 없는 단어 → 지문자 (KSL_FINGERSPELL=0 이면 끔)
         self.k = k
         self.sign_words = SignWords(Path(sentences).parent / "sign_words.csv" if sentences else "data/sign/sign_words.csv")
         # 답변 거절 기준: 문서 검색 1위 점수가 이보다 낮으면 '관련 내용 없음' (환각 방지, docs/환각방지.md)
@@ -233,15 +239,29 @@ class SafetySignPipeline:
             self._dv = TfidfVectorizer(analyzer="char_wb", ngram_range=(2, 3)).fit([d["korean"] for d in self.demo])
             self._dm = self._dv.transform([d["korean"] for d in self.demo])
 
-    def motion_for(self, glosses, nms=None):
+    def motion_for(self, glosses, nms=None, texts=None, log=True):
         """글로스 리스트 → 이어붙인 동작. 동작사전이 없으면 None.
-        nms: 글로스마다 문법 표정·고개 (ksl/order.py) → segment 의 'nms' 로 (아바타가 그 단어 동안 표정·고개)."""
+        nms: 글로스마다 문법 표정·고개 (ksl/order.py) → segment 의 'nms' 로 (아바타가 그 단어 동안 표정·고개).
+        texts: 글로스마다 나온 문장 → 동작이 없는 단어 기록(ksl/missing.py)의 예시로. log=False 면 기록 안 함 (단어 다시 보기 등)."""
         if not self.motion:
             return None
-        m = compose(glosses, self.motion)
+        m = compose(glosses, self.motion, fingerspell=self.fingerspell, fs_words=self._fs_pick(glosses) if log else None)
         for seg, n in zip(m["segments"], nms or []):
             seg["nms"] = n
+        miss = [(i, s["gloss"]) for i, s in enumerate(m["segments"]) if not s["has_motion"] or s.get("fingerspell")]
+        if log and miss and self.missing is not None:
+            self.missing.record([g for _, g in miss], [texts[i] if texts and i < len(texts) else None for i, _ in miss])
         return m
+
+    def _fs_pick(self, glosses, limit=None):
+        """답변에서 지문자로 쓸 단어 고르기: 전부 지문자로 하면 재생이 너무 길어짐 (단어 하나에 2~4초)
+        → 검토 중 용어(FS:) 먼저, 그다음 산업안전 핵심어(data/kosha/domain_terms.txt)가 든 단어, 최대 limit 개 (KSL_FS_LIMIT, 기본 3).
+        나머지는 회색 (단어를 누르면 그 단어만 지문자로 볼 수 있음)."""
+        from .fingerspell import spell_text
+        limit = int(os.environ.get("KSL_FS_LIMIT", 3)) if limit is None else limit
+        cand = [g for g in dict.fromkeys(glosses) if not (self.motion and self.motion.get(g))]
+        rank = lambda g: 0 if g.startswith("FS:") else 1 if any(t in spell_text(g) for t in self.domain_terms) else 2
+        return set(sorted(cand, key=lambda g: (rank(g), cand.index(g)))[:limit])
 
     def translate_one(self, text, beam=4):
         hit = self._memory.get(_norm(text))
@@ -277,7 +297,8 @@ class SafetySignPipeline:
 
     def translate_text(self, text, beam=4):
         sents = [self.translate_one(s, beam) for s in split_sentences(text) or [text]]
-        return {"sentences": sents, "motion": self.motion_for([g for s in sents for g in s["gloss"]])}
+        return {"sentences": sents, "motion": self.motion_for([g for s in sents for g in s["gloss"]],
+                                                              texts=[s["korean"] for s in sents for _ in s["gloss"]])}
 
     def best_demo(self, question):
         if not self.demo:
@@ -409,6 +430,7 @@ class SafetySignPipeline:
             "sign_text": answer_text,                  # 수어 단어를 뽑은 문장 (= 답변)
             "sentences": sents,                        # 문장별 글로스 + 타임라인
             "motion": self.motion_for([g for s in sents for g in s["gloss"]],     # 전체 문장 이어붙인 동작
-                                      [n for s in sents for n in s["nms"]]),
+                                      [n for s in sents for n in s["nms"]],
+                                      [s["korean"] for s in sents for _ in s["gloss"]]),
             "sources": merge_sources(hits, self.titles, self._order, self.tables, self.images),   # 출처: 문서 제목·쪽·전체 문장
         }
