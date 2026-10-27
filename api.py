@@ -222,9 +222,16 @@ def examples():
     return _EXAMPLES
 
 
+@app.get("/missing")
+def missing(n: int = 100):
+    """수어 동작이 없어 회색(또는 지문자)으로 나온 단어: 많이 나온 순서 (ksl/missing.py). 다음에 추가할 수어 고르기용."""
+    items = pipe.missing.top(n)
+    return {"total_words": len(pipe.missing.data), "total_count": sum(v["count"] for v in pipe.missing.data.values()), "items": items}
+
+
 @app.post("/motion")
 def motion(req: Glosses):
-    return pipe.motion_for(req.glosses) or {"fps": 30, "frames": [], "segments": []}
+    return pipe.motion_for(req.glosses, log=False) or {"fps": 30, "frames": [], "segments": []}
 
 
 # 웹 화면 (web/index.html, 3D 모델·라이브러리 포함). API 경로보다 뒤에 둬야 함

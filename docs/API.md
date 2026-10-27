@@ -17,6 +17,7 @@ KSL_LEXICON=data/sign/lexicon.csv KSL_MOTION=data/sign/motions uvicorn api:app -
 | POST | `/translate` | `{"text": "작업 전에 안전모 상태를 확인하세요."}` | 문장 직접 번역 |
 | POST | `/motion` | `{"glosses": ["작업", "전", "확인"]}` | 글로스 → 동작만 |
 | GET | `/demo_sentences` | – | 조원이 확정한 안내 문장 목록 |
+| GET | `/missing?n=100` | – | 수어 동작이 없어 회색·지문자로 나온 단어 (횟수·마지막·예시 문장), 화면: `/missing.html` |
 | GET | `/health` | – | 서버 상태 |
 | GET | `/` | – | 시연용 웹 화면 (`web/index.html`) |
 
@@ -71,3 +72,10 @@ KSL_LEXICON=data/sign/lexicon.csv KSL_MOTION=data/sign/motions uvicorn api:app -
 - 팔: 어깨→팔꿈치, 팔꿈치→손목 방향으로 상완·전완 회전 / 손목: 손목→중지 뿌리 + 검지 뿌리→소지 뿌리 두 축으로 손바닥 방향까지 / 손가락: 마디 방향
 - 결과 확인: 데이터의 뼈 방향과 렌더링된 아바타 뼈 방향이 소수 둘째 자리까지 일치함을 확인
 - React 로 옮길 때 `SignAvatar` 클래스를 그대로 가져가 `setFrame(motion.frames[i])` 만 호출하면 됨
+
+## 지문자 (`ksl/fingerspell.py`, `data/sign/fingerspell.json`)
+- 동작이 없는 글로스는 지문자(오른손 손가락 글자)로: segment 에 `"fingerspell": true`, `"fs_text"`(쓴 말), `"fs_verified"`(손 모양 검수 여부), 그 프레임에 `"fs": true`
+- 답변(`/ask`·`/query`·`/translate`)에서는 검토 중 용어(`FS:`)·산업안전 핵심어가 든 단어 먼저, 최대 3개만 지문자 (`KSL_FS_LIMIT`), 나머지는 회색 — `/motion`(단어 하나 다시 보기)은 항상 지문자
+- 손 모양 표는 **수어 전문가 검수 전**. 국립국어원 한국수어사전 '지문자' 표와 맞춰 고치고 `verified: true` 로 (코드는 그대로)
+- 끄기: `KSL_FINGERSPELL=0`
+

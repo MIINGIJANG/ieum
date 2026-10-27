@@ -10,6 +10,9 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 warnings.filterwarnings("ignore")
+# 동작 없는 단어 기록은 시험 중에 저장소 data/logs 를 건드리지 않게 임시 폴더로
+import tempfile  # noqa: E402
+os.environ.setdefault("KSL_MISSING_LOG", str(Path(tempfile.mkdtemp()) / "missing_glosses.json"))
 
 
 @pytest.fixture(scope="session")

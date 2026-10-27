@@ -28,3 +28,6 @@ data/sample/motions/
 
 # 테스트 부산물
 .pytest_cache/
+
+# 동작 없는 단어 기록 (서버가 만듦, GET /missing)
+data/logs/

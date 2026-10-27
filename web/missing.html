@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>수어 없는 단어</title>
+<style>
+  :root { --bg: #f6f7f9; --card: #fff; --ink: #1d2330; --sub: #5d6676; --line: #e3e6eb; --accent: #e8711c; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #14171c; --card: #1d2128; --ink: #e8ebf0; --sub: #9aa3b2; --line: #2c323c; } }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Apple SD Gothic Neo", sans-serif; }
+  main { max-width: 900px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  p.sub { color: var(--sub); margin: 0 0 16px; }
+  .bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .bar span { color: var(--sub); }
+  button { border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 8px; padding: 6px 12px; font: inherit; cursor: pointer; }
+  table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 13px; color: var(--sub); font-weight: 600; }
+  td.n { font-variant-numeric: tabular-nums; text-align: right; width: 4em; }
+  td.g { font-weight: 600; white-space: nowrap; }
+  td.ex { color: var(--sub); font-size: 13px; }
+  td.ex div + div { margin-top: 2px; }
+  td.t { color: var(--sub); font-size: 13px; white-space: nowrap; }
+  .empty { padding: 32px; text-align: center; color: var(--sub); }
+  @media (max-width: 600px) { td.t, th.t { display: none; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>수어 없는 단어</h1>
+  <p class="sub">답변에서 수어 동작이 없어 회색(또는 지문자)으로 나온 단어예요. 많이 나온 단어부터 수어 동작을 추가하면 좋아요.</p>
+  <div class="bar">
+    <button id="reload">새로고침</button>
+    <button id="dl">JSON 내려받기</button>
+    <span id="sum"></span>
+  </div>
+  <div id="out"></div>
+</main>
+<script>
+const out = document.getElementById("out"), sum = document.getElementById("sum");
+let last = null;
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const label = (g) => (g.startsWith("FS:") ? g.slice(3) : g).replace(/[_\-]?\d+#?$/, "");
+async function load() {
+  try {
+    const r = await fetch("missing?n=300");
+    last = await r.json();
+  } catch (e) { out.innerHTML = '<div class="empty">불러오지 못했어요.</div>'; return; }
+  sum.textContent = `단어 ${last.total_words}개 · 모두 ${last.total_count}번`;
+  if (!last.items.length) { out.innerHTML = '<div class="empty">아직 기록이 없어요. 질문을 몇 개 해 보세요.</div>'; return; }
+  out.innerHTML = `<table><thead><tr><th>단어</th><th style="text-align:right">횟수</th><th>나온 문장</th><th class="t">마지막</th></tr></thead><tbody>${
+    last.items.map((x) => `<tr><td class="g" title="${esc(x.gloss)}">${esc(label(x.gloss))}</td><td class="n">${x.count}</td><td class="ex">${
+      (x.examples || []).map((e) => `<div>${esc(e)}</div>`).join("") || "—"}</td><td class="t">${esc((x.last || "").replace("T", " "))}</td></tr>`).join("")
+  }</tbody></table>`;
+}
+document.getElementById("reload").onclick = load;
+document.getElementById("dl").onclick = () => {
+  if (!last) return;
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(last, null, 1)], { type: "application/json" }));
+  a.download = "missing_glosses.json"; a.click();
+};
+load();
+</script>
+</body>
+</html>

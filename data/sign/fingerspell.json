@@ -1,0 +1,124 @@
+{
+  "_about": "한글 지문자 손 모양 (ksl/fingerspell.py). 아직 수어 전문가 검수 전 — 국립국어원 한국수어사전 '지문자' 표와 맞춰 고쳐야 함 (verified: true 로 바꾸기). fingers: 검지·가운데·약지·새끼 순서 e=폄 f=주먹 c=둥글게 b=뿌리만 굽힘 h=갈고리. thumb: out=옆으로 폄 in=손바닥 쪽으로 접음 up=검지 옆에 붙여 폄 touch=검지 끝에 닿게(원) / up_w·down_w=화면 위·아래로 폄. dir: 손가락 방향 up·down·in(수어자 왼쪽=보는 사람 오른쪽, 수평)·front(보는 사람 쪽)·out(반대, 오른손으로는 무리라 안 씀). palm: 손바닥 front(보는 사람 쪽)·back(수어자 쪽)·side(옆). spread: 손가락 벌림(도).",
+  "hold": 0.3,
+  "move": 0.1,
+  "shapes": {
+    "ㄱ": {"fingers": "efff", "thumb": "out", "dir": "in", "palm": "back", "verified": false},
+    "ㄴ": {"fingers": "efff", "thumb": "out", "dir": "up", "palm": "front", "verified": false},
+    "ㄷ": {"fingers": "eeff", "thumb": "in", "dir": "in", "palm": "back", "verified": false},
+    "ㄹ": {"fingers": "eeef", "thumb": "in", "dir": "in", "palm": "back", "verified": false},
+    "ㅁ": {"fingers": "cccc", "thumb": "touch", "dir": "up", "palm": "side", "verified": false},
+    "ㅂ": {"fingers": "eeee", "thumb": "in", "dir": "up", "palm": "front", "verified": false},
+    "ㅅ": {"fingers": "eeff", "thumb": "in", "dir": "down", "palm": "back", "spread": 25, "verified": false},
+    "ㅇ": {"fingers": "cccc", "thumb": "touch", "dir": "up", "palm": "front", "verified": false},
+    "ㅈ": {"fingers": "eeff", "thumb": "out", "dir": "down", "palm": "back", "spread": 25, "verified": false},
+    "ㅊ": {"fingers": "eeef", "thumb": "out", "dir": "down", "palm": "back", "spread": 20, "verified": false},
+    "ㅋ": {"fingers": "eeff", "thumb": "out", "dir": "in", "palm": "back", "verified": false},
+    "ㅌ": {"fingers": "eeef", "thumb": "out", "dir": "in", "palm": "back", "verified": false},
+    "ㅍ": {"fingers": "eeee", "thumb": "out", "dir": "down", "palm": "back", "verified": false},
+    "ㅎ": {"fingers": "efff", "thumb": "up", "dir": "up", "palm": "side", "verified": false},
+    "ㅏ": {"fingers": "ffff", "thumb": "out", "dir": "up", "palm": "side", "verified": false},
+    "ㅑ": {"fingers": "eeff", "thumb": "out", "dir": "up", "palm": "side", "verified": false},
+    "ㅓ": {"fingers": "ffff", "thumb": "out", "dir": "up", "palm": "back", "verified": false},
+    "ㅕ": {"fingers": "eeff", "thumb": "out", "dir": "up", "palm": "back", "verified": false},
+    "ㅗ": {"fingers": "ffff", "thumb": "up_w", "dir": "in", "palm": "back", "verified": false},
+    "ㅛ": {"fingers": "eeff", "thumb": "up_w", "dir": "front", "palm": "side", "verified": false},
+    "ㅜ": {"fingers": "ffff", "thumb": "down_w", "dir": "in", "palm": "back", "verified": false},
+    "ㅠ": {"fingers": "eeff", "thumb": "in", "dir": "down", "palm": "front", "verified": false},
+    "ㅡ": {"fingers": "efff", "thumb": "in", "dir": "in", "palm": "back", "verified": false},
+    "ㅣ": {"fingers": "fffe", "thumb": "in", "dir": "up", "palm": "front", "verified": false},
+    "ㅐ": {"fingers": "fffe", "thumb": "out", "dir": "up", "palm": "side", "verified": false},
+    "ㅒ": {"fingers": "eefe", "thumb": "out", "dir": "up", "palm": "side", "verified": false},
+    "ㅔ": {"fingers": "fffe", "thumb": "out", "dir": "up", "palm": "back", "verified": false},
+    "ㅖ": {"fingers": "eefe", "thumb": "out", "dir": "up", "palm": "back", "verified": false}
+  },
+  "compose": {
+    "ㄲ": [
+      "ㄱ+"
+    ],
+    "ㄸ": [
+      "ㄷ+"
+    ],
+    "ㅃ": [
+      "ㅂ+"
+    ],
+    "ㅆ": [
+      "ㅅ+"
+    ],
+    "ㅉ": [
+      "ㅈ+"
+    ],
+    "ㅘ": [
+      "ㅗ",
+      "ㅏ"
+    ],
+    "ㅙ": [
+      "ㅗ",
+      "ㅐ"
+    ],
+    "ㅚ": [
+      "ㅗ",
+      "ㅣ"
+    ],
+    "ㅝ": [
+      "ㅜ",
+      "ㅓ"
+    ],
+    "ㅞ": [
+      "ㅜ",
+      "ㅔ"
+    ],
+    "ㅟ": [
+      "ㅜ",
+      "ㅣ"
+    ],
+    "ㅢ": [
+      "ㅡ",
+      "ㅣ"
+    ],
+    "ㄳ": [
+      "ㄱ",
+      "ㅅ"
+    ],
+    "ㄵ": [
+      "ㄴ",
+      "ㅈ"
+    ],
+    "ㄶ": [
+      "ㄴ",
+      "ㅎ"
+    ],
+    "ㄺ": [
+      "ㄹ",
+      "ㄱ"
+    ],
+    "ㄻ": [
+      "ㄹ",
+      "ㅁ"
+    ],
+    "ㄼ": [
+      "ㄹ",
+      "ㅂ"
+    ],
+    "ㄽ": [
+      "ㄹ",
+      "ㅅ"
+    ],
+    "ㄾ": [
+      "ㄹ",
+      "ㅌ"
+    ],
+    "ㄿ": [
+      "ㄹ",
+      "ㅍ"
+    ],
+    "ㅀ": [
+      "ㄹ",
+      "ㅎ"
+    ],
+    "ㅄ": [
+      "ㅂ",
+      "ㅅ"
+    ]
+  }
+}
