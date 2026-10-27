@@ -130,6 +130,80 @@ def lift_2d(frames, L):
     return out
 
 
+def load_mediapipe_avatar(path, L=None, ref_nose=0.524):
+    """MediaPipe Holistic 후처리 JSON (팀원 postprocess.py 결과: 국립국어원 수어사전 영상 등) → 공통 프레임.
+
+    입력: {"fps", "pose": [[33점 x,y,z]], "left_hand"/"right_hand": [[21점]], "left_hand_rest_weight"/"right_hand_rest_weight": [0~1]}
+          좌표 = 어깨 중점 원점, 어깨너비 단위, +X 화면 오른쪽, +Y 위, +Z 카메라 쪽. left_hand = 수어자 왼손
+    - y 는 아래가 + 로, z 는 카메라에서 멀어지는 쪽이 + 로 뒤집음
+    - MediaPipe 의 깊이(z)는 x·y 보다 몇 배 크게 나와서(손목이 몸 앞 3~6 어깨너비) 그대로 쓰면 팔이 쭉 뻗음
+      → 팔·손가락 뼈 길이가 3D 동작 자료(L, bone_lengths)와 맞도록 깊이 배율을 클립마다 따로 맞춤 (몸·손 각각)
+    - MediaPipe 어깨 점은 AI Hub(OpenPose) 보다 안쪽에 잡혀 어깨너비가 좁게 나옴 → 어깨너비 단위로 재면 얼굴·손·팔이 20~30% 크게 나옴
+      → 목→코 높이가 AI Hub 3D 자료 중앙값(ref_nose, 어깨너비 단위)과 같아지도록 어깨를 뺀 모든 점을 목 기준으로 줄임
+    - rest_weight 0.5 이상인 손은 손 모양 없음(None) → 아바타가 힘 뺀 손으로
+    반환: (frames, fps, 3)"""
+    import numpy as np
+    d = json.loads(Path(path).read_text(encoding="utf-8"))
+    P = np.array(d["pose"], float)
+    H = {"lh": np.array(d["left_hand"], float), "rh": np.array(d["right_hand"], float)}
+    W = {"lh": d.get("left_hand_rest_weight") or [0.0] * len(P), "rh": d.get("right_hand_rest_weight") or [0.0] * len(P)}
+    flip = np.array([1.0, -1.0, -1.0])
+    arm_ref = {(12, 14): 0.87, (14, 16): 0.84, (11, 13): 0.87, (13, 15): 0.84}
+    if L:                                                       # 3D 자료의 실제 뼈 길이 (오른/왼 어깨-팔꿈치, 팔꿈치-손목)
+        arm_ref = {(12, 14): L["arm"][(2, 3)], (14, 16): L["arm"][(3, 4)], (11, 13): L["arm"][(5, 6)], (13, 15): L["arm"][(6, 7)]}
+
+    def fit_z(pairs_xy_dz, ref):                                # 깊이 배율: 뼈 길이가 기준에 가장 가까워지는 값
+        best, bs = None, 1.0
+        for sc in np.linspace(0.0, 1.5, 151):
+            err = sum((math.sqrt(xy2 + (sc * dz) ** 2) - r) ** 2 for xy2, dz, r in pairs_xy_dz)
+            if best is None or err < best:
+                best, bs = err, sc
+        return bs
+    pairs = []
+    for (i, j), r in arm_ref.items():
+        for t in range(len(P)):
+            v = P[t, j] - P[t, i]
+            pairs.append((v[0] ** 2 + v[1] ** 2, v[2], r))
+    sb = fit_z(pairs, None)
+    hand_ref = {b: (L["hand"][b] if L else None) for b in HAND_BONES}
+    sh = {}
+    for k, A in H.items():
+        pp = []
+        palm = np.median(np.linalg.norm(A[:, 9, :2] - A[:, 0, :2], axis=1))
+        ref_palm = L["hand"][(0, 9)] if L else 0.255
+        for (i, j) in HAND_BONES:
+            r = (hand_ref[(i, j)] / ref_palm * palm) if hand_ref[(i, j)] else None
+            if not r:
+                continue
+            for t in range(len(A)):
+                if W[k][t] >= 0.5:
+                    continue
+                v = A[t, j] - A[t, i]
+                pp.append((v[0] ** 2 + v[1] ** 2, v[2], r))
+        sh[k] = fit_z(pp, None) if pp else sb
+    noses = [(P[t, 11, 1] + P[t, 12, 1]) / 2 - P[t, 0, 1] for t in range(len(P))]
+    k_s = float(np.clip(ref_nose / max(1e-6, -float(np.median(noses))), 0.6, 1.0)) if ref_nose else 1.0   # 위가 + 라 코는 음수 쪽
+    frames = []
+    for t in range(len(P)):
+        p = P[t] * flip
+        p[:, 2] *= sb
+        neck = (p[11] + p[12]) / 2
+        keep = p[[11, 12]].copy()
+        p = neck + (p - neck) * k_s                               # 어깨 말고 모두 줄임 (어깨너비 단위 맞추기)
+        p[[11, 12]] = keep
+        body = [p[0], neck, p[12], p[14], p[16], p[11], p[13], p[15]]
+        f = {"body": [[round(float(v), 4) for v in q] for q in body]}
+        for k, wi in (("rh", 16), ("lh", 15)):
+            if W[k][t] >= 0.5:
+                f[k] = None
+                continue
+            rel = (H[k][t] - H[k][t][0]) * flip * k_s
+            rel[:, 2] *= sh[k]
+            f[k] = [[round(float(v), 4) for v in (p[wi] + q)] for q in rel]
+        frames.append(f)
+    return frames, float(d.get("fps", FPS)), 3
+
+
 def load_team_clip(path):
     """조원 형식(글로스 1개 = JSON 1개) 읽기.
 
