@@ -140,3 +140,25 @@ def test_handshapes_file():
     d = json.loads((ROOT / "web/handshapes.json").read_text(encoding="utf-8"))
     assert len(d["centers"]) >= 8 and all(len(c) == 15 for c in d["centers"])
     assert 5 < d["scale"] < 40
+
+
+def test_load_mediapipe_avatar(tmp_path):
+    """MediaPipe 후처리 좌표(y 위 +, z 카메라 쪽 +, 깊이 과장) → 공통 형식: y 아래 +, 팔 길이가 3D 자료 정도로 맞춰짐."""
+    import numpy as np
+    from ksl.motion import load_mediapipe_avatar
+    T = 10
+    pose = np.zeros((T, 33, 3))
+    pose[:, 11] = [0.5, 0, 0]; pose[:, 12] = [-0.5, 0, 0]; pose[:, 0] = [0, 0.66, 0.5]
+    pose[:, 14] = [-0.7, -0.6, 2.0]; pose[:, 16] = [-0.4, -0.2, 6.0]                 # 오른 팔꿈치·손목: 깊이가 과장됨
+    pose[:, 13] = [0.7, -0.6, 2.0]; pose[:, 15] = [0.4, -0.2, 6.0]
+    hand = np.tile(np.linspace([0, 0, 0], [0.05, 0.3, 0.1], 21), (T, 1, 1))
+    d = {"fps": 30, "pose": pose.tolist(), "left_hand": (hand + pose[:, 15:16]).tolist(), "right_hand": (hand + pose[:, 16:17]).tolist(),
+         "left_hand_rest_weight": [1.0] * T, "right_hand_rest_weight": [0.0] * T}
+    p = tmp_path / "w.json"
+    p.write_text(json.dumps(d), encoding="utf-8")
+    frames, fps, dim = load_mediapipe_avatar(p)
+    b = frames[0]["body"]
+    assert dim == 3 and fps == 30 and frames[0]["lh"] is None and frames[0]["rh"]
+    assert b[0][1] < b[1][1] and b[4][1] > b[1][1]                                    # 코는 목 위, 손목은 목 아래 (y 아래 +)
+    arm = math.dist(b[2], b[3]) + math.dist(b[3], b[4])
+    assert 1.2 < arm < 2.0 and b[4][2] < 0                                            # 팔 길이 정상, 손은 몸 앞 (z 음수)
