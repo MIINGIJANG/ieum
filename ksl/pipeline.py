@@ -212,7 +212,7 @@ class SafetySignPipeline:
         self.missing = MissingLog()                 # 동작이 없는 단어 기록 (GET /missing)
         from .fingerspell import load_table
         self.fingerspell = load_table(Path(motion_dir).parent / "fingerspell.json" if motion_dir else "data/sign/fingerspell.json") \
-            if os.environ.get("KSL_FINGERSPELL", "1") != "0" else None   # 동작이 없는 단어 → 지문자 (KSL_FINGERSPELL=0 이면 끔)
+            if os.environ.get("KSL_FINGERSPELL", "0") == "1" else None   # 동작이 없는 단어 → 지문자 (기본 끔, KSL_FINGERSPELL=1 이면 켬 — 손 모양 검수 전)
         self.k = k
         self.sign_words = SignWords(Path(sentences).parent / "sign_words.csv" if sentences else "data/sign/sign_words.csv")
         # 답변 거절 기준: 문서 검색 1위 점수가 이보다 낮으면 '관련 내용 없음' (환각 방지, docs/환각방지.md)

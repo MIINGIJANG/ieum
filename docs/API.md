@@ -77,5 +77,5 @@ KSL_LEXICON=data/sign/lexicon.csv KSL_MOTION=data/sign/motions uvicorn api:app -
 - 동작이 없는 글로스는 지문자(오른손 손가락 글자)로: segment 에 `"fingerspell": true`, `"fs_text"`(쓴 말), `"fs_verified"`(손 모양 검수 여부), 그 프레임에 `"fs": true`
 - 답변(`/ask`·`/query`·`/translate`)에서는 검토 중 용어(`FS:`)·산업안전 핵심어가 든 단어 먼저, 최대 3개만 지문자 (`KSL_FS_LIMIT`), 나머지는 회색 — `/motion`(단어 하나 다시 보기)은 항상 지문자
 - 손 모양 표는 **수어 전문가 검수 전**. 국립국어원 한국수어사전 '지문자' 표와 맞춰 고치고 `verified: true` 로 (코드는 그대로)
-- 끄기: `KSL_FINGERSPELL=0`
+- **기본은 꺼짐** (손 모양 검수 전). 켜기: `KSL_FINGERSPELL=1`
 
