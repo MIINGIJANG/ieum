@@ -120,6 +120,22 @@ def test_finger_pose_human_range():
     assert math.degrees(math.acos(u @ v / np.linalg.norm(u) / np.linalg.norm(v))) < 115
 
 
+def test_removed_glosses(tmp_path):
+    """검수에서 뺀 글로스는 동작사전에 없고, 다시 저장도 안 됨. 새 파일 번호는 지운 번호와 겹치지 않음."""
+    from ksl.motion import REMOVED
+    for g in REMOVED:
+        assert md.resolve(g) is None
+    MotionDict.save_clip(tmp_path, "가1", [{"body": None}])
+    MotionDict.save_clip(tmp_path, "나1", [{"body": None}])
+    idx = json.loads((tmp_path / "index.json").read_text(encoding="utf-8"))
+    del idx["가1"]
+    (tmp_path / "index.json").write_text(json.dumps(idx), encoding="utf-8")
+    MotionDict.save_clip(tmp_path, "다1", [{"body": None}])
+    MotionDict.save_clip(tmp_path, next(iter(REMOVED)), [{"body": None}])
+    idx = json.loads((tmp_path / "index.json").read_text(encoding="utf-8"))
+    assert idx["다1"] != idx["나1"] and not (set(idx) & REMOVED)
+
+
 def test_handshapes_file():
     d = json.loads((ROOT / "web/handshapes.json").read_text(encoding="utf-8"))
     assert len(d["centers"]) >= 8 and all(len(c) == 15 for c in d["centers"])

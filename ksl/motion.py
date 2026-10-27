@@ -316,6 +316,10 @@ def _strip_num(g):
     return re.sub(r"[_\-]?\d+#?$", "", g)
 
 
+# 검수에서 빼기로 한 글로스 (동작이 너무 부자연스러움) — 동작사전에 다시 저장하지 않음, 화면에는 회색 단어로만
+REMOVED = {"물건1", "때2", "발0"}
+
+
 class MotionDict:
     """motions/ 폴더: index.json + 글로스별 <id>.json ({"gloss","fps","frames","source"})."""
 
@@ -344,11 +348,16 @@ class MotionDict:
 
     @staticmethod
     def save_clip(root, gloss, frames, fps=FPS, source=None):
+        if gloss in REMOVED:
+            print(f"  {gloss}: 검수에서 뺀 글로스라 저장 안 함 (ksl/motion.py REMOVED)")
+            return
         root = Path(root)
         root.mkdir(parents=True, exist_ok=True)
         idx_p = root / "index.json"
         index = json.loads(idx_p.read_text(encoding="utf-8")) if idx_p.exists() else {}
-        name = index.get(gloss) or f"{len(index):05d}.json"   # 파일명은 번호 (한글/특수문자 경로 문제 방지)
+        # 파일명은 번호 (한글/특수문자 경로 문제 방지). 지운 글로스가 있어도 겹치지 않게 가장 큰 번호 다음
+        nums = [int(v[:5]) for v in index.values() if v[:5].isdigit()]
+        name = index.get(gloss) or f"{max(nums, default=-1) + 1:05d}.json"
         (root / name).write_text(json.dumps({"gloss": gloss, "fps": fps, "frames": frames, "source": source},
                                             ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
         index[gloss] = name
