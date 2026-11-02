@@ -394,10 +394,10 @@ function listen() {
     $("q").placeholder = msg;
     setTimeout(() => { $("q").placeholder = PH; }, 3000);
   };
-  rec.onend = () => { listening = false; if ($("q").placeholder === "듣고 있어요…") $("q").placeholder = PH; updateGo(); };
+  rec.onend = () => { listening = false; updateGo(); };
   try { rec.start(); } catch { return; }
   listening = true;
-  $("q").value = ""; $("q").placeholder = "듣고 있어요…";
+  $("q").value = "";
   updateGo();
 }
 $("go").onclick = () => { if ($("form").classList.contains("mic")) listen(); else run(); };
