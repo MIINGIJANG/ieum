@@ -80,6 +80,13 @@
   }
   form.query button svg { width: 22px; height: 22px; }
   form.query button:disabled { opacity: .5; cursor: wait; }
+  /* 입력창이 비어 있으면 마이크(음성 입력), 글자가 있으면 화살표(보내기) */
+  form.query .i-mic { display: none; }
+  form.query.mic .i-mic { display: block; }
+  form.query.mic .i-send { display: none; }
+  form.query.listening button { background: #d64545; animation: mic-pulse 1.2s ease-in-out infinite; }
+  @keyframes mic-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(214, 69, 69, .45); } 50% { box-shadow: 0 0 0 9px rgba(214, 69, 69, 0); } }
+  @media (prefers-reduced-motion: reduce) { form.query.listening button { animation: none; } }
   /* 예시 질문 2개: 휴대폰은 한 줄에 1개씩 2줄, PC 는 한 줄에 2개. 버튼 폭은 질문 길이에 맞춤 */
   .examples { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; }
   @media (min-width: 761px) { .examples { flex-direction: row; flex-wrap: wrap; justify-content: center; } }   /* PC: 한 줄에 2개 */
@@ -194,8 +201,9 @@
     <p class="notice">일부 단어의 수어 동작만 준비되어 있습니다.</p>
     <form class="query" id="form">
       <input id="q" name="q" autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" placeholder="어떤 도움을 드릴까요?" aria-label="질문 또는 문장 입력">
-      <button id="go" type="submit" aria-label="수어로 보기">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg>
+      <button id="go" type="button" aria-label="수어로 보기">
+        <svg class="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg>
+        <svg class="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
       </button>
     </form>
     <div class="examples" id="examples"></div>
@@ -348,7 +356,7 @@ function renderExamples() {
   list.forEach(e => {
     const b = document.createElement("button");
     b.type = "button"; b.textContent = e.question;
-    b.onclick = () => { $("q").value = e.question; if (!touch) $("q").focus(); };   // 입력창에만 넣고, 화살표를 눌러야 넘어감 (휴대폰은 키보드 안 올림)
+    b.onclick = () => { $("q").value = e.question; updateGo(); if (!touch) $("q").focus(); };   // 입력창에만 넣고, 화살표를 눌러야 넘어감 (휴대폰은 키보드 안 올림)
     $("examples").append(b);
   });
   // 보여줄 예시가 모자라도(모두 물어봄) 그 자리는 그대로 비워 둠 → 아래 아바타·결과가 위로 툭 올라가지 않게
@@ -359,7 +367,42 @@ function renderExamples() {
     $("examples").append(b);
   }
 }
-$("form").onsubmit = (e) => { e.preventDefault(); run(); };
+$("form").onsubmit = (e) => { e.preventDefault(); run(); };   // 키보드 Enter: 늘 보내기
+
+// ---------- 음성 입력 ----------
+// 입력창이 비어 있으면 버튼이 마이크: 누르면 한국어로 듣고 말한 내용을 입력창에 넣음 (확인 뒤 화살표로 보냄)
+// 글자를 치거나 말한 내용이 들어가면 다시 화살표. 브라우저가 음성 인식을 못 하면 늘 화살표
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null, listening = false;
+const PH = $("q").placeholder;
+function updateGo() {
+  const mic = !!SR && (listening || !$("q").value.trim());
+  $("form").classList.toggle("mic", mic);
+  $("form").classList.toggle("listening", listening);
+  $("go").setAttribute("aria-label", listening ? "듣기 멈추기" : mic ? "음성으로 질문하기" : "수어로 보기");
+}
+function listen() {
+  if (listening) { rec && rec.stop(); return; }
+  rec = new SR();
+  rec.lang = "ko-KR"; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
+  rec.onresult = (e) => {
+    $("q").value = [...e.results].map((r) => r[0].transcript).join("").trim();
+  };
+  rec.onerror = (e) => {
+    const msg = e.error === "not-allowed" || e.error === "service-not-allowed" ? "마이크 사용을 허용해 주세요"
+      : e.error === "no-speech" ? "말씀이 들리지 않았어요. 다시 눌러 주세요" : "음성 인식을 하지 못했어요";
+    $("q").placeholder = msg;
+    setTimeout(() => { $("q").placeholder = PH; }, 3000);
+  };
+  rec.onend = () => { listening = false; if ($("q").placeholder === "듣고 있어요…") $("q").placeholder = PH; updateGo(); };
+  try { rec.start(); } catch { return; }
+  listening = true;
+  $("q").value = ""; $("q").placeholder = "듣고 있어요…";
+  updateGo();
+}
+$("go").onclick = () => { if ($("form").classList.contains("mic")) listen(); else run(); };
+$("q").addEventListener("input", updateGo);
+updateGo();
 
 async function run() {
   const q = $("q").value.trim();
