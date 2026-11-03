@@ -12,12 +12,14 @@ import unicodedata
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from ksl.motion import MotionDict, bone_lengths, load_mediapipe_avatar, normalize  # noqa: E402
+from ksl.motion import MotionDict, bone_lengths, load_mediapipe_avatar, normalize, palm_to_face  # noqa: E402
 
 ap = argparse.ArgumentParser()
 ap.add_argument("files", nargs="+", help="좌표.json[:글로스]")
 ap.add_argument("--out", default="data/sign/motions")
 ap.add_argument("--keep", action="store_true", help="이미 있는 글로스는 그대로 두기")
+ap.add_argument("--palm-to-face", nargs="*", default=[], metavar="GLOSS",
+                help="이 글로스들은 얼굴 앞 손의 손바닥을 얼굴 쪽으로 보정 (MediaPipe 가 손바닥 방향을 잘못 잡은 단어, 예: 보안경1)")
 a = ap.parse_args()
 
 md = MotionDict(a.out)
@@ -30,5 +32,9 @@ for spec in a.files:
         print(f"  {gloss}: 이미 있음 → 그대로")
         continue
     frames, fps, dim = load_mediapipe_avatar(path, L)
-    MotionDict.save_clip(a.out, gloss, normalize(frames), round(fps), source=f"MediaPipe {name} (3D)")
+    frames = normalize(frames)
+    if gloss in a.palm_to_face:
+        frames = palm_to_face(frames)
+    MotionDict.save_clip(a.out, gloss, frames, round(fps),
+                         source=f"MediaPipe {name}" + (" 손바닥 보정" if gloss in a.palm_to_face else "") + " (3D)")
     print(f"  {gloss:<8} {len(frames):>3}프레임 ← {name}")

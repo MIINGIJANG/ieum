@@ -208,6 +208,49 @@ def load_mediapipe_avatar(path, L=None, ref_nose=0.524):
     return frames, float(d.get("fps", FPS)), 3
 
 
+def palm_to_face(frames, near=2.5, far=4.5, back=0.2):
+    """얼굴 앞 손의 손바닥이 얼굴(몸 가운데) 쪽을 보게 손을 손가락 축으로 돌림 (손가락 방향·모양·손목 자리는 그대로).
+    MediaPipe 가 눈앞에서 손을 동그랗게 만드는 장면(보안경 등)의 손바닥 방향을 앞(카메라)으로 잘못 잡는 일이 있어 손으로 보정.
+    얼굴 점(fk)이 있는 프레임만, 손이 두 눈 가운데에서 눈 사이 거리 near 배 안이면 완전히, far 배 밖이면 그대로, 그 사이는 섞음."""
+    import numpy as np
+
+    def rot(axis, ang):
+        a = axis / np.linalg.norm(axis)
+        K = np.array([[0, -a[2], a[1]], [a[2], 0, -a[0]], [-a[1], a[0], 0]])
+        return np.eye(3) + math.sin(ang) * K + (1 - math.cos(ang)) * K @ K
+
+    out = [dict(f) for f in frames]
+    for f in out:
+        fk = f.get("fk")
+        if not fk or not fk[1] or not fk[2]:
+            continue
+        C = (np.array(fk[1]) + np.array(fk[2])) / 2
+        e = math.dist(fk[1][:2], fk[2][:2])
+        for k, inward in (("rh", 1.0), ("lh", -1.0)):          # 오른손은 +x 쪽이 몸 가운데, 왼손은 -x 쪽
+            h = f.get(k)
+            if not h or any(p is None for p in h) or e < 1e-3:
+                continue
+            P = np.array(h, float)
+            hc = (P[0] + P[9]) / 2
+            t = (np.linalg.norm(hc - C) / e - near) / (far - near)
+            w = 1 - min(1.0, max(0.0, t))
+            w = w * w * (3 - 2 * w)
+            if w <= 0:
+                continue
+            fd = P[9] - P[0]; fd /= np.linalg.norm(fd)
+            n = np.cross(fd, P[17] - P[5]) * inward                # 손바닥 쪽 (오른손 기준 부호를 왼손에 맞춤)
+            tgt = np.array([inward, 0.0, back])                    # 몸 가운데 쪽 + 조금 몸 쪽 (z + 는 카메라에서 멀어지는 쪽)
+            proj = lambda v: v - fd * (v @ fd)
+            a, b = proj(n), proj(tgt)
+            if np.linalg.norm(a) < 1e-6 or np.linalg.norm(b) < 1e-6:
+                continue
+            a /= np.linalg.norm(a); b /= np.linalg.norm(b)
+            ang = math.atan2(np.cross(a, b) @ fd, a @ b) * w
+            Rm = rot(fd, ang)
+            f[k] = [[round(float(v), 4) for v in (P[0] + Rm @ (p - P[0]))] for p in P]
+    return out
+
+
 def load_team_clip(path):
     """조원 형식(글로스 1개 = JSON 1개) 읽기.
 
