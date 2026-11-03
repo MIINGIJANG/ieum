@@ -56,3 +56,13 @@ def test_missing_log(tmp_path):
     sub = MissingLog(tmp_path / "m.json").top(subs=True)
     assert sub[0]["gloss"] == "안전모" and sub[0]["used"] == ["머리0", "보호1"]   # 대체 표현은 따로 기록
     assert MissingLog(tmp_path / "m.json").top()[0]["count"] == 2              # 다시 열어도 이어서
+
+
+def test_missing_capture_replay(tmp_path):
+    log = MissingLog(tmp_path / "m.json")
+    with log.capture() as calls:                     # 미리 만든 답: 기록하지 않고 모아 둠
+        log.record(["때2"], ["작업할 때 조심"])
+        log.record_sub("안전모", ["머리0", "보호1"], "안전모를 쓰세요")
+    assert not log.top() and not log.top(subs=True) and len(calls) == 2
+    log.replay(calls)                                # 실제로 물어봤을 때 기록
+    assert log.top()[0]["gloss"] == "때2" and log.top(subs=True)[0]["gloss"] == "안전모"

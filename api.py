@@ -96,12 +96,37 @@ def ask(req: Ask):
 class Query(BaseModel):
     text: str
     beam: int = 4
+    prefetch: bool = False     # 로딩 화면에서 예시 질문 답을 미리 받아 둘 때 (수어 없는 단어 기록은 실제로 물어볼 때)
+    seen: bool = False         # 미리 받아 둔 답을 화면에 보였을 때: 기록만 하고 답은 다시 보내지 않음
+
+
+_QCACHE = {}                   # 답 캐시: (질문, beam) → (응답, 수어 없는 단어 기록). 같은 질문은 바로 답
+_QCACHE_MAX = 300
+
+
+def cached_query(text, beam=4, log=True):
+    import contextlib
+    from ksl.pipeline import clean_spoken
+    key = (clean_spoken(text).strip(), beam)
+    hit = _QCACHE.get(key)
+    if hit is None:
+        cap = pipe.missing.capture() if pipe.missing is not None else contextlib.nullcontext([])
+        with cap as calls:
+            r = pipe.query(text, beam)
+        hit = (r, calls)
+        while len(_QCACHE) >= _QCACHE_MAX:
+            _QCACHE.pop(next(iter(_QCACHE)), None)
+        _QCACHE[key] = hit
+    if log and hit[1] and pipe.missing is not None:
+        pipe.missing.replay(hit[1])
+    return hit[0]
 
 
 @app.post("/query")
 def query(req: Query):
     """검색창 하나: 질문이면 /ask, 문장이면 /translate 처럼 동작. 응답의 mode 로 구분."""
-    return pipe.query(req.text, req.beam)
+    r = cached_query(req.text, req.beam, log=not req.prefetch)
+    return {"ok": True} if req.seen else r
 
 
 @app.post("/translate")
@@ -175,7 +200,7 @@ def warmup():
             print("[이음] 번역 모델 미리 불러오기 실패:", e)
         try:
             examples()
-            pipe.ask("낙하물은 어떻게 조심해요?")                      # 검색·출처·동작 합치기
+            cached_query("낙하물은 어떻게 조심해요?", log=False)       # 검색·출처·동작 합치기
         except Exception as e:
             print("[이음] 미리 실행 실패:", e)
         _WARM["done"] = True
@@ -188,18 +213,17 @@ def _warm_on_start():
     if os.environ.get("KSL_NO_WARMUP"):
         return
     warmup()
-    # Claude 답변 모드면 예시 질문의 답을 뒤에서 미리 만들어 둠 → 예시 질문을 누르면 바로 답 (서버가 켜질 때 1번, 약 40원)
-    # (번역 모델은 위에서 메인 스레드로 이미 불러왔으므로, 여기서는 Claude 호출만 함)
-    if os.environ.get("ANTHROPIC_API_KEY"):
-        import threading
+    # 예시 질문의 답을 뒤에서 미리 만들어 둠 → 예시 질문을 누르면 바로 답
+    # (Claude 답변 모드면 서버가 켜질 때 1번, 약 40원. 번역 모델은 위에서 메인 스레드로 이미 불러옴)
+    import threading
 
-        def prefetch():
-            for e in examples():
-                try:
-                    pipe.query(e["question"])
-                except Exception as err:
-                    print("[이음] 예시 답 미리 만들기 실패:", err)
-        threading.Thread(target=prefetch, daemon=True).start()
+    def prefetch():
+        for e in examples():
+            try:
+                cached_query(e["question"], log=False)
+            except Exception as err:
+                print("[이음] 예시 답 미리 만들기 실패:", err)
+    threading.Thread(target=prefetch, daemon=True).start()
 
 
 @app.get("/pages")

@@ -6,6 +6,7 @@
   (Hugging Face Space 는 재시작하면 파일이 지워짐 → 오래 모으려면 /missing 결과를 내려받아 두기)
 - 같은 문장은 예시에 한 번만, 예시는 단어마다 최근 3개
 """
+import contextlib
 import json
 import os
 import threading
@@ -19,6 +20,7 @@ class MissingLog:
     def __init__(self, path=None):
         self.path = Path(path or os.environ.get("KSL_MISSING_LOG", "data/logs/missing_glosses.json"))
         self._lock = threading.Lock()
+        self._cap = threading.local()             # capture(): 미리 만든 답(예시 질문)은 기록하지 않고 모아 둠
         try:
             obj = json.loads(self.path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
@@ -38,9 +40,31 @@ class MissingLog:
         if text and text not in e["examples"]:
             e["examples"] = (e["examples"] + [text])[-MAX_EXAMPLES:]
 
+    @contextlib.contextmanager
+    def capture(self):
+        """이 안에서 생긴 기록은 파일에 쓰지 않고 목록으로 돌려줌 → 나중에 실제로 물어보면 replay(목록)."""
+        calls = []
+        prev = getattr(self._cap, "calls", None)
+        self._cap.calls = calls
+        try:
+            yield calls
+        finally:
+            self._cap.calls = prev
+
+    def replay(self, calls):
+        for name, args in calls:
+            getattr(self, name)(*args)
+
+    def _captured(self, name, args):
+        calls = getattr(self._cap, "calls", None)
+        if calls is None:
+            return False
+        calls.append((name, args))
+        return True
+
     def record(self, glosses, texts=None):
         """glosses: 동작이 없는 글로스들, texts: 같은 순서로 그 글로스가 나온 문장 (없으면 None)."""
-        if not glosses:
+        if not glosses or self._captured("record", (list(glosses), list(texts) if texts else None)):
             return
         now = time.strftime("%Y-%m-%dT%H:%M:%S")
         with self._lock:
@@ -50,6 +74,8 @@ class MissingLog:
 
     def record_sub(self, gloss, used, text=None):
         """대체 표현으로 보여준 단어: gloss 대신 used(글로스 목록)를 보여줌."""
+        if self._captured("record_sub", (gloss, list(used), text)):
+            return
         now = time.strftime("%Y-%m-%dT%H:%M:%S")
         with self._lock:
             self._bump(self.subs, gloss, now, text, {"used": list(used)})
