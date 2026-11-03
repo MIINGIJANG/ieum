@@ -20,6 +20,7 @@ class MissingLog:
     def __init__(self, path=None):
         self.path = Path(path or os.environ.get("KSL_MISSING_LOG", "data/logs/missing_glosses.json"))
         self._lock = threading.Lock()
+        self.version = 0                          # 저장할 때마다 +1 (ksl/logsync.py 가 바뀐 것만 올림)
         self._cap = threading.local()             # capture(): 미리 만든 답(예시 질문)은 기록하지 않고 모아 둠
         try:
             obj = json.loads(self.path.read_text(encoding="utf-8"))
@@ -81,7 +82,30 @@ class MissingLog:
             self._bump(self.subs, gloss, now, text, {"used": list(used)})
             self._save()
 
+    def snapshot(self):
+        """지금 기록 전체 (JSON 글자)."""
+        with self._lock:
+            return json.dumps({"missing": self.data, "substitutes": self.subs}, ensure_ascii=False, indent=1)
+
+    def merge(self, obj):
+        """다른 곳(예전 서버)에 저장해 둔 기록을 합침: 단어마다 횟수는 큰 쪽, 예시는 합쳐서 최근 3개."""
+        if not isinstance(obj, dict) or not isinstance(obj.get("missing"), dict):
+            return
+        with self._lock:
+            for mine, theirs in ((self.data, obj["missing"]), (self.subs, obj.get("substitutes") or {})):
+                for g, e in theirs.items():
+                    m = mine.get(g)
+                    if m is None:
+                        mine[g] = e
+                        continue
+                    m["count"] = max(m["count"], e.get("count", 0))
+                    m["last"] = max(m.get("last", ""), e.get("last", ""))
+                    ex = [x for x in e.get("examples", []) if x not in m["examples"]] + m["examples"]
+                    m["examples"] = ex[-MAX_EXAMPLES:]
+            self._save()
+
     def _save(self):
+        self.version += 1
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             tmp = self.path.with_suffix(".tmp")

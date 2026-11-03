@@ -7,7 +7,21 @@ on:
     branches: [main]
   workflow_dispatch:
 jobs:
+  # 올리기 전에 확인: 테스트 + 환각 방지 평가(기준 점수 data/eval/baseline.json). 하나라도 실패하면 올리지 않음
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: grep -v '^torch' requirements.txt > /tmp/req.txt && pip install -r /tmp/req.txt pytest httpx
+      - run: python -m pytest -q tests
+      - name: 환각 방지 평가 (결과 표는 Actions 실행 화면의 Summary)
+        run: python scripts/eval/ci_eval.py
   deploy:
+    needs: check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -16,6 +30,19 @@ jobs:
           python-version: "3.11"
       - run: pip install -U huggingface_hub
       - run: python scripts/deploy/make_space.py --no-ckpt
+      - name: Space 에 기록 보관용 토큰 넣기 (수어 없는 단어 기록을 HF 데이터셋 MIINGI/ieum-logs 에 보관, ksl/logsync.py)
+        continue-on-error: true          # 실패해도 배포는 진행 (기록만 서버가 다시 켜지면 처음부터)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python - <<'PY'
+          import os
+          from huggingface_hub import HfApi
+          HfApi(token=os.environ["HF_TOKEN"]).add_space_secret(
+              "MIINGI/ieum", "KSL_HF_TOKEN", os.environ["HF_TOKEN"],
+              description="수어 없는 단어 기록을 데이터셋 MIINGI/ieum-logs 에 보관 (ksl/logsync.py)")
+          print("Space 비밀값 KSL_HF_TOKEN 설정")
+          PY
       - name: Space 에 올리기
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}

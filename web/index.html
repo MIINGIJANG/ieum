@@ -643,6 +643,7 @@ function render() {
   });
 
   balanceRows(ol); setTimeout(() => balanceRows(ol), 400);   // 결과가 다 그려진 뒤 한 번 더
+  setTimeout(() => fetchWords(items.filter(it => it.seg && it.seg.has_motion).map(it => it.seg.gloss || it.gloss)), 300);   // 단어 다시 보기용 동작 미리 받기
 
   // 답변
   const a = $("answer");
@@ -724,19 +725,24 @@ function play(m = motion, only = null) {
   raf = requestAnimationFrame(loop);
 }
 // 단어 블록을 누르면 그 단어만 다시 보기 (손 올리기 → 그 단어 → 손 내리기)
-const wordMotion = new Map();
+// 답이 나오면 단어마다의 동작을 뒤에서 한 번에 미리 받아 둠 → 단어를 누르면 기다림 없이 바로
+const wordMotion = new Map();                  // 글로스 → Promise(동작 또는 null)
+function fetchWords(gs) {
+  const need = [...new Set(gs)].filter(g => !wordMotion.has(g));
+  if (!need.length) return;
+  const req = fetch(`${API}/motions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ glosses: need }) })
+    .then(r => r.ok ? r.json() : {}).catch(() => ({}));
+  need.forEach(g => wordMotion.set(g, req.then(all => {
+    const m = all[g];
+    if (!m || !m.frames || !m.frames.length) { wordMotion.delete(g); return null; }   // 실패하면 다음에 누를 때 다시
+    return m;
+  })));
+}
 async function playWord(it) {
   const g = it.seg.gloss || it.gloss;
-  let m = wordMotion.get(g);
-  if (!m) {
-    try {
-      const r = await fetch(`${API}/motion`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ glosses: [g] }) });
-      m = r.ok ? await r.json() : null;
-    } catch { m = null; }
-    if (!m || !m.frames.length) return;
-    wordMotion.set(g, m);
-  }
-  play(m, it);
+  if (!wordMotion.has(g)) fetchWords([g]);
+  const m = await wordMotion.get(g);
+  if (m) play(m, it);
 }
 $("replay").onclick = () => data && play();
 

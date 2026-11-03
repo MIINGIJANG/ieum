@@ -1,0 +1,18 @@
+# 배포된 사이트(Claude 답변 모드)로 환각 방지 평가: 매주 월요일 + Actions 탭에서 'Run workflow'
+# 사이트의 /eval 을 열어 평가를 시작하고(질문 약 80개, Claude 비용 약 250원) 끝나면 결과를 Summary 에 표로 남김
+# 문서 밖 입력에 하나라도 답하면(환각) 실패로 표시 → GitHub 가 메일로 알려 줌
+name: 사이트 환각 방지 평가
+on:
+  schedule:
+    - cron: "41 0 * * 1"
+  workflow_dispatch:
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: 평가 실행·결과 확인
+        run: python scripts/eval/live_eval.py https://miingi-ieum.hf.space
