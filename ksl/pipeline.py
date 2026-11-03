@@ -42,6 +42,10 @@ def ending_variants(text):
         v = re.sub(pat, rep, t)
         if v != t and v not in out:
             out.append(v)
+    for v in list(out):                                   # '금지해요' → '금지하세요' → '금지합니다' (확정 문장이 '~합니다' 일 때)
+        w = re.sub(r"하세요$", "합니다", v)
+        if w != v and w not in out:
+            out.append(w)
     return out
 # 문단 앞 번호 표시: 1.  (1)  ①  가.  (가)  -  ·  O
 _MARK = re.compile(r"^\s*(?:\(?\d{1,2}[.)]|\(\d{1,2}\)|[\u2460-\u2473]|\(?[가-하][.)]|\([가-하]\)|[-·•O○]\s)\s*")
