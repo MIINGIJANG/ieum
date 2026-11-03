@@ -432,6 +432,16 @@ def trim_idle(frames, pad=3):
     return frames[max(0, vis[0] - pad): vis[-1] + pad + 1]
 
 
+def trim_rest(frames, y_rest=1.0, pad=3):
+    """사전 영상처럼 앞뒤에 손을 내리고 쉬는 구간이 붙은 클립에서, 손을 든 구간(손목이 허리선 y_rest 보다 위)만 남김.
+    손이 계속 보여서 trim_idle 로는 안 잘리는 자료용. 이어붙일 때 손 올리기·내리기는 compose 가 따로 만듦."""
+    up = [i for i, f in enumerate(frames)
+          if f.get("body") and any(f["body"][w] and f["body"][w][1] < y_rest for w in (4, 7) if w < len(f["body"]))]
+    if not up:
+        return frames
+    return frames[max(0, up[0] - pad): up[-1] + pad + 1]
+
+
 # ---------------------------------------------------------------- 동작사전
 def _strip_num(g):
     return re.sub(r"[_\-]?\d+#?$", "", g)

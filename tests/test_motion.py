@@ -162,3 +162,12 @@ def test_load_mediapipe_avatar(tmp_path):
     assert b[0][1] < b[1][1] and b[4][1] > b[1][1]                                    # 코는 목 위, 손목은 목 아래 (y 아래 +)
     arm = math.dist(b[2], b[3]) + math.dist(b[3], b[4])
     assert 1.2 < arm < 2.0 and b[4][2] < 0                                            # 팔 길이 정상, 손은 몸 앞 (z 음수)
+
+
+def test_trim_rest():
+    """사전 영상처럼 앞뒤에 손을 내린 구간이 붙은 클립: 손을 든 구간만 (앞뒤 pad 프레임)."""
+    from ksl.motion import trim_rest
+    down, up = [0, 1.5, 0], [0, 0.3, 0]
+    frames = [{"body": [[0, 0, 0]] * 4 + [w] + [[0, 0, 0]] * 2 + [down]} for w in [down] * 10 + [up] * 5 + [down] * 10]
+    out = trim_rest(frames, pad=2)
+    assert len(out) == 9 and out[2]["body"][4] == up and out[-3]["body"][4] == up

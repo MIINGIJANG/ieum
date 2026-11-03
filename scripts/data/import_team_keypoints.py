@@ -2,6 +2,8 @@
 
 python scripts/data/import_team_keypoints.py ~/Downloads/문장별_수어키포인트 --out data/sign/motions
 python scripts/data/import_team_keypoints.py ~/Downloads/문장별_통합정리 --merge     # 새 문장·새 단어만 더하기
+python scripts/data/import_team_keypoints.py /없음 --extra ~/Downloads/단어수정/*.json --merge --suffix 1 --trim --no_sentences
+                                                     # 단어 파일만: 이미 있는 단어는 그대로, 번호 붙이고, 앞뒤 쉬는 구간 자르기
 
 폴더 구조 (조원 형식)
   01_위험장소_작업중지/sentence.json   {"sentence", "fps", "sequence": [{"order","gloss","file"}]}
@@ -18,13 +20,16 @@ import unicodedata
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from ksl.motion import MotionDict, bone_lengths, calibrate_expressions, lift_2d, load_team_clip, normalize  # noqa: E402
+from ksl.motion import MotionDict, bone_lengths, calibrate_expressions, lift_2d, load_team_clip, normalize, trim_rest  # noqa: E402
 
 ap = argparse.ArgumentParser()
 ap.add_argument("root")
 ap.add_argument("--extra", nargs="*", default=[], help="문장 폴더 밖의 단어 키포인트 JSON (조원 형식 2: gloss_raw 사용)")
 ap.add_argument("--out", default="data/sign/motions")
 ap.add_argument("--sentences_out", default="data/sign/demo_sentences.json")
+ap.add_argument("--suffix", default="", help="번호 없는 글로스에 붙일 번호 (예: 1 → 교육 → 교육1)")
+ap.add_argument("--trim", action="store_true", help="앞뒤 손 내리고 쉬는 구간 잘라내기 (사전 영상에서 잘라 온 단어)")
+ap.add_argument("--no_sentences", action="store_true", help="문장 목록(demo_sentences.json)은 건드리지 않음")
 ap.add_argument("--merge", action="store_true",
                 help="이미 있는 것은 그대로: 동작사전에 없는 글로스만 저장, 문장은 기존 목록에 없는 것만 뒤에 붙임 "
                      "(기존 동작은 떨림·손 모양 보정이 맞춰져 있어 바꾸지 않음)")
@@ -38,7 +43,8 @@ def _num(p):                                           # '문장 12' 처럼 번�
     return (int(m.group(1)) if m else 0, p.parent.name)
 
 
-existing = MotionDict(a.out).index if a.merge else {}
+_md = MotionDict(a.out)
+existing = _md.index if a.merge else {}
 for sf in sorted(root.glob("*/sentence.json"), key=_num):
     meta = json.loads(sf.read_text(encoding="utf-8"))
     seq = sorted(meta["sequence"], key=lambda x: x.get("order", 0))
@@ -55,10 +61,16 @@ for sf in sorted(root.glob("*/sentence.json"), key=_num):
     sentences.append({"korean": meta["sentence"], "gloss": glosses, "complete": "일부" not in folder,
                       "folder": folder})
 
+import re  # noqa: E402
 for f in a.extra:
     meta = json.loads(Path(f).read_text(encoding="utf-8"))
-    g = meta.get("gloss_raw") or meta.get("gloss") or Path(f).stem
+    g = unicodedata.normalize("NFC", meta.get("gloss_raw") or meta.get("gloss") or Path(f).stem)
+    if a.suffix and not re.search(r"\d#?$", g):
+        g += a.suffix
     if g in clips:
+        continue
+    if a.merge and _md.resolve(g):                              # 같은 단어(번호만 다른 것 포함)가 이미 있으면 그대로
+        report.append(f"  {g:<8} 이미 있음({_md.resolve(g)}) → 그대로")
         continue
     frames, fps, dim = load_team_clip(f)
     clips[g] = (frames, fps, dim, f"{unicodedata.normalize('NFC', Path(f).name)} ({dim}D)")
@@ -70,6 +82,10 @@ calibrate_expressions([c[0] for c in clips.values()])
 L = bone_lengths([normalize(c[0]) for c in clips.values() if c[2] == 3])
 for g, (frames, fps, dim, src) in clips.items():
     fr = normalize(frames)
+    if a.trim:
+        n0 = len(fr)
+        fr = trim_rest(fr)
+        src = src.replace(")", f", {n0}→{len(fr)}프레임)", 1) if n0 != len(fr) else src
     if dim == 2:
         fr = lift_2d(fr, L)
         src = src.replace("(2D)", "(2D→3D)")
@@ -77,7 +93,9 @@ for g, (frames, fps, dim, src) in clips.items():
 saved = clips
 
 Path(a.sentences_out).parent.mkdir(parents=True, exist_ok=True)
-if a.merge and Path(a.sentences_out).exists():
+if a.no_sentences:
+    sentences = json.loads(Path(a.sentences_out).read_text(encoding="utf-8")) if Path(a.sentences_out).exists() else []
+elif a.merge and Path(a.sentences_out).exists():
     old = json.loads(Path(a.sentences_out).read_text(encoding="utf-8"))
     have = {s["korean"] for s in old}
     md = MotionDict(a.out)
