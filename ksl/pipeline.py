@@ -18,6 +18,35 @@ from .rag import SafetyRAG
 from .translate import Translator, split_sentences
 
 _norm = lambda t: re.sub(r"[\s.,!?·]", "", t)
+
+# 말할 때 섞이는 군말 (음성 입력): 혼자 떨어진 '어·음·아·에·엄·흠' 은 뜻이 없어서 지움 (붙어 있는 '어떻게' 등은 그대로)
+_FILLER = re.compile(r"(?:(?<=\s)|^)(?:어+|음+|으음+|아+|에+|엄+|흠+)[,.]?(?=\s|$)")
+
+
+def clean_spoken(text):
+    """'어 위험한 음 곳에서는' → '위험한 곳에서는'. 군말만 있으면 원래 글 그대로."""
+    t = re.sub(r"\s+", " ", _FILLER.sub(" ", text)).strip()
+    return t or text.strip()
+
+
+# 말투 바꾸기 (음성 입력): '착용해야 돼' 처럼 말하면 확정 안내 문장('착용하세요')과 맞춰 봄 (같은 문장이 있을 때만 씀)
+_ENDINGS = [(r"해야\s?(?:돼요|돼|되요|해요|해|됩니다|합니다|된다|한다)$", "하세요"), (r"해\s?주세요$", "하세요"), (r"하십시오$", "하세요"),
+            (r"해라$", "하세요"), (r"해요$", "하세요"), (r"해$", "하세요"), (r"합니다$", "하세요"), (r"춰야\s?(?:돼요|돼|해요|해)$", "추세요"),
+            (r"춰(?:요|라)?$", "추세요"), (r"써야\s?(?:돼요|돼|해요|해)$", "쓰세요"), (r"하세요$", "합니다")]
+
+
+def ending_variants(text):
+    t = re.sub(r"[\s.,!?·~]+$", "", text.strip())
+    out = []
+    for pat, rep in _ENDINGS:
+        v = re.sub(pat, rep, t)
+        if v != t and v not in out:
+            out.append(v)
+    for v in list(out):                                   # '금지해요' → '금지하세요' → '금지합니다' (확정 문장이 '~합니다' 일 때)
+        w = re.sub(r"하세요$", "합니다", v)
+        if w != v and w not in out:
+            out.append(w)
+    return out
 # 문단 앞 번호 표시: 1.  (1)  ①  가.  (가)  -  ·  O
 _MARK = re.compile(r"^\s*(?:\(?\d{1,2}[.)]|\(\d{1,2}\)|[\u2460-\u2473]|\(?[가-하][.)]|\([가-하]\)|[-·•O○]\s)\s*")
 
@@ -317,6 +346,7 @@ class SafetySignPipeline:
                 "sign_text": "", "sentences": [], "motion": None, "sources": [], "top_score": round(score, 4)}
 
     def query(self, text, beam=4):
+        text = clean_spoken(text)                                    # 음성 입력의 '어·음' 같은 군말 빼기
         r = self._query(text, beam)
         r["topic"] = self.topic(text) if r.get("mode") != "none" else None
         return r
@@ -324,8 +354,9 @@ class SafetySignPipeline:
     def _query(self, text, beam=4):
         """검색창 하나로: 확정 문장이면 그대로 번역, 질문처럼 보이면 문서 검색 후 답변, 아니면 문장 번역.
         안전 문서와 관련이 없는 입력(인사·잡담·문서 밖 주제)은 답하지 않음."""
-        if _norm(text) in self._memory:
-            return {"mode": "translate", **self.translate_text(text, beam)}
+        hit = self._memory_hit(text)
+        if hit:                                                      # 확정 안내 문장 (말투만 달라도: '착용해야 돼' → '착용하세요')
+            return {"mode": "translate", **self.translate_text(hit["korean"], beam)}
         t = text.strip()
         is_sentence = re.search(r"(다|요|세요|시오)[.!]?$", t) is not None   # 완결된 안내 문장
         if self._Q.search(t) or not is_sentence:                              # 질문 또는 '감전 위험' 같은 키워드
@@ -335,6 +366,14 @@ class SafetySignPipeline:
             return self._abstain(text, 0.0)
         return {"mode": "translate", **self.translate_text(text, beam)}
 
+    def _memory_hit(self, text):
+        """확정 안내 문장 찾기: 그대로, 또는 끝맺음만 바꿔서 같은 문장이 있으면 그 문장."""
+        for t in [text] + ending_variants(text):
+            hit = self._memory.get(_norm(t))
+            if hit:
+                return hit
+        return None
+
     @property
     def tr(self):
         if self._tr is None:
@@ -343,7 +382,7 @@ class SafetySignPipeline:
 
     def topic(self, text):
         """질문의 '주제' 키: 같은 안내 문장 또는 같은 문서 쪽으로 답이 가면 같은 주제 (예시 질문 중복 제거용)."""
-        hit = self._memory.get(_norm(text))
+        hit = self._memory_hit(text)
         if hit:
             return "demo:" + hit["korean"]
         demo, score = self.best_demo(text)
@@ -408,6 +447,13 @@ class SafetySignPipeline:
                 answer_text = " ".join(" ".join(strip_marks(t).split("\n")) for t in found)
         else:
             top = self._evidence(hits)
+            if top < self.min_score and self.in_domain(question):
+                # 띄어쓰기만 다를 수 있음 (음성 입력: '정전기 안전화' ↔ 문서 '정전기안전화') → 붙여서 한 번 더
+                #  산업안전 핵심어가 있는 질문만 (문서 밖 질문에 엉뚱하게 답하지 않게), 기준 점수는 같음
+                joined = re.sub(r"\s", "", question)
+                hits2 = self.rag.search(joined, self.k)
+                if self._evidence(hits2) >= self.min_score:
+                    hits, top = hits2, self._evidence(hits2)
             if top < self.min_score:                       # 근거 약함 → 답하지 않음
                 return self._abstain(question, top)
             texts, mode = self.rag.answer(question, hits)
