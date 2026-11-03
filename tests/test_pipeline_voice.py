@@ -23,16 +23,31 @@ def test_voice_like_queries(pipe):
 
 
 def test_substitute_and_short_sign(pipe):
-    """동작 없는 단어는 대체 표현으로(기록), 답변 수어는 짧게 (확정 문장 또는 첫 문장)."""
+    """동작 없는 단어는 대체 표현으로(기록), 답변 수어는 화면 답변의 핵심 문장에서 (준비된 질문도)."""
     r = pipe.sign_sentence("안전모를 쓰세요.")
     assert r["gloss"][:2] == ["머리0", "보호1"] and r["sub_of"][:2] == ["안전모", "안전모"]
     assert any(x["gloss"] == "안전모" for x in pipe.missing.top(subs=True))
     a = pipe.query("보호구에 이상이 있는지 어떻게 확인해요?")
-    assert a["answer_mode"] == "demo" and a["sentences"][0]["gloss"] == ["보호1", "이상하다1", "없다1", "확인1"]   # 보호구 수어 포함
+    sa = a["sentences"][0]
+    assert a["answer_mode"] == "demo" and sa["korean"] in a["answer_text"]          # 화면 답변과 같은 내용
+    assert {"보호1", "이상하다1"} <= set(sa["gloss"])
     b = pipe.query("정화통은 언제 교체해요?")
     sg = b["sentences"][0]
     assert len(b["sentences"]) == 1 and sg["method"].startswith("keypoints_") and sg["korean"] in b["answer_text"]
-    assert len(sg["gloss"]) <= 9 and any("6개월" in (w or "") for w in sg["words"])   # 핵심 단어만, '언제' 질문은 기간 포함
+    assert len(sg["gloss"]) <= 7 and any("6개월" in (w or "") for w in sg["words"])   # 핵심 단어만, '언제' 질문은 기간 포함
+    assert {"정화통", "바꾸다1"} <= set(sg["gloss"])
+
+
+def test_keypoints_short_answer_keeps_all_meaning(pipe):
+    """짧은 답변(Claude 답변 모드)은 뜻 있는 말을 빠짐없이: '정화통은 6개월마다 교체해야 합니다' → 6개월 정화통 교체 해야 함."""
+    from ksl import keypoints
+    a = "정화통은 6개월마다 교체해야 합니다."
+    r = keypoints.rule_based(pipe, "정화통은 언제 교체해요?", a, [a])
+    assert [u["gloss"] for u in r["units"]] == ["6개월", "정화통", "바꾸다1", "필요1"]
+    assert [u["word"] for u in r["units"]][2] == "교체"                           # '교체해야 / 해야 함' 겹치지 않게
+    a = "보호구는 늘 사용할 수 있도록 관리하고 깨끗하게 유지해야 합니다. 사용하지 않을 때는 건조한 곳에 보관합니다."
+    g = [u["gloss"] for u in keypoints.rule_based(pipe, "보호구는 어떻게 관리해요?", a, [a.split(". ")[0] + ".", a.split(". ")[1]])["units"]]
+    assert "보호1" in g and "깨끗하다1" in g and "필요1" in g and not any(x.startswith("가능") for x in g)   # 첫 문장, '할 수 있도록'은 뺌
 
 
 def test_keypoints_llm_only_uses_answer_words(pipe, monkeypatch):
@@ -55,6 +70,7 @@ def test_keypoints_llm_only_uses_answer_words(pipe, monkeypatch):
                                          content=[types.SimpleNamespace(type="text", text=_json.dumps(reply, ensure_ascii=False))])
 
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+    monkeypatch.setenv("KSL_KEYPOINTS", "llm")                              # 기본은 규칙, 켰을 때만 Claude
     monkeypatch.setattr(anthropic, "Anthropic", Fake)
     r = keypoints.extract(pipe, "정화통은 언제 교체해요?", answer, [answer])
     assert r["method"] == "llm" and "우주선" not in [u["word"] for u in r["units"]]

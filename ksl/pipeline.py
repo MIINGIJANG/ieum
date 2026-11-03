@@ -496,14 +496,13 @@ class SafetySignPipeline:
         # 수어: 답변 문장에 실제로 있는 말만 수어 단어로 (data/sign/sign_words.csv). 번역 모델은 아직 엉뚱한 단어를 만들어서 답변에는 쓰지 않음
         #  짧게 (화면 답변 글은 전체 그대로): 준비된 안내 문장으로 답한 질문은 그 확정 문장의 수어,
         #  아니면 답변의 핵심 (ksl/keypoints.py: 질문과 가장 관련 있는 문장의 핵심 단어, 키가 있으면 Claude 가 고름)
+        #  준비된 안내 문장으로 답한 질문도 화면 답변의 핵심을 수어로 (확정 문장 수어는 답변 글과 내용이 달라 보일 수 있음.
+        #  확정 문장 수어는 그 문장을 직접 입력했을 때 번역에 씀)
+        from .keypoints import extract
         sents = []
-        if mode == "demo" and self._memory.get(_norm(demo["korean"])):
-            sents = [self.translate_one(demo["korean"], beam)]
-        else:
-            from .keypoints import extract
-            kp = extract(self, question, answer_text, split_sentences(answer_text) or [answer_text])
-            if kp and kp["units"]:
-                sents = [self._units_sentence(kp["units"], kp["text"], method="keypoints_" + kp["method"])]
+        kp = extract(self, question, answer_text, split_sentences(answer_text) or [answer_text])
+        if kp and kp["units"]:
+            sents = [self._units_sentence(kp["units"], kp["text"], method="keypoints_" + kp["method"])]
         return {
             "question": question,
             "answer_mode": mode,                       # demo | llm | extractive
