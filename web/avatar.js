@@ -431,6 +431,10 @@ export class SignAvatar {
     this.spinePos = pos("chest") || pos("spine");
     this.shoulderW = pos("leftUpperArm").distanceTo(pos("rightUpperArm"));
     const eye = pos("leftEye") || pos("head").add(new THREE.Vector3(0, 0.08, 0.05));
+    // 두 눈 가운데·사이 거리 (얼굴 점이 있는 동작에서 얼굴 근처 손을 얼굴 크기 기준으로 맞출 때)
+    const le = pos("leftEye"), re = pos("rightEye");
+    this.eyeC = le && re ? le.clone().add(re).multiplyScalar(0.5) : eye.clone().setX(0);
+    this.eyeD = le && re ? le.distanceTo(re) : 0.064;
     this.eyeY = eye.y;
     this.noseAbove = (eye.y - 0.025 - this.neckY) / Math.max(this.shoulderW, 1e-6);
     const skull = this._skull();
@@ -554,6 +558,21 @@ export class SignAvatar {
     const face = smooth01(wr.y, -0.1, 0.25);                              // 0: 목 아래, 1: 얼굴 높이
     const W = new THREE.Vector3(Wn.x, Wa.y + (Wn.y - Wa.y) * face, Wa.z + (Wn.z - Wa.z) * face);
     W.y += this._dyNow || 0;                                                // 단어마다 손 평균 높이를 수어 공간 가운데로
+    // 얼굴 점(fk: 코·왼눈·오른눈)이 있는 동작: 얼굴 가까이 있는 손은 '두 눈 가운데에서 눈 사이 거리 몇 배' 로 옮김
+    //  (어깨너비로 옮기면 머리에 비해 어깨가 넓은 아바타는 눈앞에 와야 할 손이 얼굴 바깥·위로 감: 보안경 등)
+    //  손이 얼굴에서 눈 사이 거리 2.5배 안이면 완전히, 4.5배 밖이면 예전 방식, 그 사이는 섞음
+    if (fr.fk && fr.fk[1] && fr.fk[2]) {
+      const le = V(fr.fk[1]), re = V(fr.fk[2]), C = le.clone().add(re).multiplyScalar(0.5);
+      const e = Math.hypot(le.x - re.x, le.y - re.y);
+      const hd = fr[s.hand], hc = hd && hd[0] && hd[9] ? V(hd[0]).add(V(hd[9])).multiplyScalar(0.5) : wr.clone();
+      const w = e > 1e-3 ? 1 - smooth01(hc.distanceTo(C) / e, 2.5, 4.5) : 0;
+      if (w > 0) {
+        const rel = wr.clone().sub(C).divideScalar(e);
+        const Wf = this.eyeC.clone().add(new THREE.Vector3(rel.x, rel.y, 0).multiplyScalar(this.eyeD));
+        Wf.z = Math.max(W.z, this.eyeC.z + this.eyeD * 0.8);                      // 앞뒤는 얼굴 앞
+        W.lerp(Wf, w);
+      }
+    }
     // 팔이 다 펴지지 않게: 어깨에서 팔 길이의 70% 를 넘으면 서서히 88% 까지만
     //  (수어하는 손은 몸 앞 가까이 — 팔을 쭉 뻗으면 앞으로 나란히처럼 어색함. 팔꿈치가 굽고 아래로 내려옴)
     {

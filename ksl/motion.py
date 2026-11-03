@@ -44,8 +44,10 @@ def normalize(frames):
 
     out = []
     for f in frames:
-        g = {k: v for k, v in f.items() if k not in ("body", "lh", "rh", "face")}
+        g = {k: v for k, v in f.items() if k not in ("body", "lh", "rh", "face", "fk")}
         g.update({"body": tr(f["body"]), "lh": tr(f.get("lh")), "rh": tr(f.get("rh"))})
+        if f.get("fk"):
+            g["fk"] = tr(f["fk"])
         out.append(g)
     return out
 
@@ -141,6 +143,7 @@ def load_mediapipe_avatar(path, L=None, ref_nose=0.524):
     - MediaPipe 어깨 점은 AI Hub(OpenPose) 보다 안쪽에 잡혀 어깨너비가 좁게 나옴 → 어깨너비 단위로 재면 얼굴·손·팔이 20~30% 크게 나옴
       → 목→코 높이가 AI Hub 3D 자료 중앙값(ref_nose, 어깨너비 단위)과 같아지도록 어깨를 뺀 모든 점을 목 기준으로 줄임
     - rest_weight 0.5 이상인 손은 손 모양 없음(None) → 아바타가 힘 뺀 손으로
+    - 얼굴 점 "fk": [코, 왼눈, 오른눈] → 아바타가 얼굴 근처 손을 얼굴 크기 기준으로 맞춤 (눈앞·턱 등 닿는 자리가 맞게)
     반환: (frames, fps, 3)"""
     import numpy as np
     d = json.loads(Path(path).read_text(encoding="utf-8"))
@@ -192,7 +195,8 @@ def load_mediapipe_avatar(path, L=None, ref_nose=0.524):
         p = neck + (p - neck) * k_s                               # 어깨 말고 모두 줄임 (어깨너비 단위 맞추기)
         p[[11, 12]] = keep
         body = [p[0], neck, p[12], p[14], p[16], p[11], p[13], p[15]]
-        f = {"body": [[round(float(v), 4) for v in q] for q in body]}
+        f = {"body": [[round(float(v), 4) for v in q] for q in body],
+             "fk": [[round(float(v), 4) for v in p[i]] for i in (0, 2, 5)]}
         for k, wi in (("rh", 16), ("lh", 15)):
             if W[k][t] >= 0.5:
                 f[k] = None
@@ -883,6 +887,8 @@ def _lerp_pts(a, b, t):
 
 def _lerp(fa, fb, t):
     out = {k: _lerp_pts(fa.get(k), fb.get(k), t) for k in ("body", "lh", "rh")}
+    if fa.get("fk") and fb.get("fk"):
+        out["fk"] = _lerp_pts(fa["fk"], fb["fk"], t)
     ea, eb = fa.get("expr"), fb.get("expr")
     if ea or eb:
         ea, eb = ea or {}, eb or {}
