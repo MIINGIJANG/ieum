@@ -84,9 +84,9 @@
   form.query #go:disabled { opacity: .4; cursor: wait; }
   form.query #mic[hidden] { display: none; }
   form.query.listening #mic { color: #f39a45; }   /* 듣는 동안: 배경 없이 마이크만 주황색 */
-  form.query #wave { display: none; width: 40px; height: 40px; margin-right: 10px; color: var(--ink); }
+  form.query #wave { display: none; width: 48px; height: 40px; margin-right: 10px; color: var(--ink); }
   form.query.listening #wave { display: block; }
-  form.query.listening input { padding-right: 144px; }
+  form.query.listening input { padding-right: 152px; }
   /* 예시 질문 2개: 휴대폰은 한 줄에 1개씩 2줄, PC 는 한 줄에 2개. 버튼 폭은 질문 길이에 맞춤 */
   .examples { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; }
   @media (min-width: 761px) { .examples { flex-direction: row; flex-wrap: wrap; justify-content: center; } }   /* PC: 한 줄에 2개 */
@@ -401,7 +401,7 @@ function updateGo() {
 }
 // 파형: 마이크 소리 크기(PC) 또는 말소리 감지(휴대폰: 음성 인식과 마이크를 같이 열면 인식이 끊기는 기기가 있음)
 const wave = (() => {
-  const cv = $("wave"), N = 6, levels = new Array(N).fill(0);
+  const cv = $("wave"), N = 10, levels = new Array(N).fill(0);
   let raf = 0, last = 0, stream = null, ctx = null, an = null, buf = null, speaking = false;
   function level() {
     if (an) {
