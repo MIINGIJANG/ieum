@@ -961,10 +961,12 @@ def neutral_frame():
 
 
 def compose(glosses, mdict: MotionDict, fps=FPS, transition=0.25, missing_sec=0.6, speed=0.8, skip_missing=True,
-            lead=0.45, lead_out=0.8, hold=0.07, fingerspell=None, fs_words=None):
+            lead=0.45, lead_out=0.8, hold=0.07, fingerspell=None, fs_words=None, dur_range=(0.6, 1.4), dur_keep=0.25):
     """글로스 순서대로 동작 클립을 이어붙임.
 
     - speed: 재생 속도 (조원 자료는 문장 수어에서 단어만 잘라 0.4~0.8초로 짧음 → 0.8배로 조금 천천히)
+    - dur_range: 단어 길이 맞추기 (초). 사전 영상에서 잘라 온 단어는 2~5초로 길고, 문장에서 자른 단어는 0.3초로 짧기도 해서
+      문장 안에서 빨라졌다 느려졌다 함 → 위보다 길면 넘는 부분을 dur_keep 만큼만 남기고, 아래보다 짧으면 모자란 만큼의 절반 늘림
     - 클립 사이: 손이 멀리 움직이거나 손을 많이 돌릴수록 길게 (transition × 0.6~1.8), 최소 저크 곡선으로 보간.
       연결 프레임에는 tr={"a": 앞 단어 마지막 프레임, "b": 뒤 단어 첫 프레임, "t": 0~1} → 아바타는 두 자세의 '회전'을 섞음
       (관절 좌표를 직선으로 섞으면 팔이 짧아졌다 길어지고 손목이 꺾임)
@@ -1008,7 +1010,13 @@ def compose(glosses, mdict: MotionDict, fps=FPS, transition=0.25, missing_sec=0.
         elif clip and clip["frames"]:
             cf = clip.get("fps", fps)
             src = _relax_low_hands(_one_euro(_stabilize_fingers(_smooth_hand_rot(_despike(_filter_face(_fix_hands(clip["frames"]))), cf)), cf))
-            n = max(2, round(len(src) * fps / cf / speed))
+            dur = len(src) / cf / speed
+            lo, hi = dur_range or (0, 1e9)
+            if dur > hi:
+                dur = hi + (dur - hi) * dur_keep
+            elif dur < lo:
+                dur = lo - (lo - dur) * 0.5
+            n = max(2, round(dur * fps))
             seg = _resample(src, n)
             has = True
         elif skip_missing:

@@ -139,6 +139,7 @@
   ol.glosses li.nomo { background: #d9dcd6; border-color: #d9dcd6; color: var(--ink); }   /* 동작 없는 단어: 재생 안 함 */
   ol.glosses li.play { cursor: pointer; }   /* 동작 있는 단어: 누르면 그 단어만 다시 보기 */
   ol.glosses li.fs { border-style: dashed; }   /* 지문자로 표현한 단어 */
+  ol.glosses li.sub { border-style: dashed; }  /* 대체 표현 (비슷한 뜻의 다른 수어) */
   ol.glosses li.fs::after { content: "지문자"; margin-left: 4px; font-size: 0.7em; opacity: 0.65; vertical-align: 0.15em; }
   ol.glosses li.play:hover { border-color: var(--ink); }
   ol.glosses li.active { background: var(--ink); color: #fff; border-color: var(--ink); }   /* 지금 표현 중 */
@@ -544,6 +545,8 @@ function render() {
       if (!(seg && seg.has_motion)) li.className = "nomo";
       else {
         li.className = seg.fingerspell ? "play fs" : "play";
+        const subOf = s.sub_of && s.sub_of[i];
+        if (subOf) { li.classList.add("sub"); li.title = `'${subOf}' 수어가 없어 비슷한 뜻의 수어로 보여줌 (검수 전)`; }
         if (seg.fingerspell) li.title = `수어 동작이 없어 지문자로 표현: ${seg.fs_text}` + (seg.fs_verified ? "" : " (손 모양 검수 전)");
         li.tabIndex = 0; li.setAttribute("role", "button");
         li.onclick = () => playWord(it);

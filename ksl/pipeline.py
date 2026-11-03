@@ -239,6 +239,15 @@ class SafetySignPipeline:
         self.motion = MotionDict(motion_dir) if motion_dir and Path(motion_dir).exists() else None
         from .missing import MissingLog
         self.missing = MissingLog()                 # 동작이 없는 단어 기록 (GET /missing)
+        # 대체 표현: 동작이 없는 단어를 이미 있는 수어로 (data/sign/substitutes.csv, 검수 필요 → 쓸 때마다 기록)
+        self.substitutes = {}
+        sp = Path(sentences).parent / "substitutes.csv" if sentences else Path("data/sign/substitutes.csv")
+        if sp.exists():
+            for ln in sp.read_text(encoding="utf-8").splitlines():
+                if not ln.strip() or ln.startswith("#") or ln.startswith("말,"):
+                    continue
+                w, gl, *_ = ln.split(",")
+                self.substitutes[w.strip()] = gl.split()
         from .fingerspell import load_table
         self.fingerspell = load_table(Path(motion_dir).parent / "fingerspell.json" if motion_dir else "data/sign/fingerspell.json") \
             if os.environ.get("KSL_FINGERSPELL", "0") == "1" else None   # 동작이 없는 단어 → 지문자 (기본 끔, KSL_FINGERSPELL=1 이면 켬 — 손 모양 검수 전)
@@ -309,9 +318,24 @@ class SafetySignPipeline:
                 "method": "memory",                              # 검수된 확정 글로스 사용
                 "complete": hit.get("complete", True)}           # False: 일부 단어 동작만 확보
 
+    def _substitute(self, units, text):
+        """동작이 없는 단어 중 대체 표현이 있는 것은 그 수어들로 바꿈 (예: 안전모 → 머리 보호). 바꾼 것은 기록."""
+        out = []
+        for u in units:
+            sub = self.substitutes.get(u["gloss"])
+            if sub and self.motion and not self.motion.get(u["gloss"]) and all(self.motion.get(g) for g in sub):
+                self.missing.record_sub(u["gloss"], sub, text)
+                for k, g in enumerate(sub):                        # 화면 글자: 첫 수어에 원래 말, 나머지는 수어 이름
+                    out.append({**u, "gloss": g, "word": u["word"] if k == 0 else "", "nms": u["nms"] if k == 0 else None,
+                                "sub_of": u["gloss"]})
+            else:
+                out.append(u)
+        return out
+
     def sign_sentence(self, text, skip=()):
         """답변 문장 하나 → 그 문장에서 뽑은 수어 단어 + 재생 시간."""
         units = [u for u in self.sign_words.analyze(text) if u["gloss"] not in skip]   # 한국수어 어순 (ksl/order.py)
+        units = self._substitute(units, text)
         glosses = [u["gloss"] for u in units]
         tl, t = [], 0.0
         for u in units:
@@ -320,6 +344,7 @@ class SafetySignPipeline:
             tl.append({"gloss": u["gloss"], "start": round(t, 3), "duration": d, "nms": u["nms"]})
             t += d
         return {"korean": text, "gloss": glosses, "words": [u["word"] for u in units], "nms": [u["nms"] for u in units],
+                "sub_of": [u.get("sub_of") for u in units],                  # 대체 표현이면 원래 말 (화면에 표시)
                 "timeline": tl, "lexicon_terms": [], "dropped_terms": [],
                 "unverified_terms": [], "has_unk": False, "method": "extract",   # 답변 문장에서 단어 추출
                 "complete": all(self.motion and self.motion.get(g) for g in glosses)}
@@ -335,6 +360,8 @@ class SafetySignPipeline:
         sc = (self._dm @ self._dv.transform([question]).T).toarray().ravel()
         i = int(np.argmax(sc))
         return self.demo[i], float(sc[i])
+
+    SIGN_MAX = 14            # 답변 수어: 두 문장을 합쳐 이 단어 수를 넘으면 첫 문장만
 
     _Q = re.compile(r"(\?|까|나요|니까|어떻게|언제|어디|무엇|뭐|뭘|왜|누가|알려|궁금|어떤|되나|하나|해요\??$|돼요\??$)")
 
@@ -464,19 +491,27 @@ class SafetySignPipeline:
                 return self._abstain(question, top)
             answer_text = " ".join(texts)
         # 수어: 답변 문장에 실제로 있는 말만 수어 단어로 (data/sign/sign_words.csv). 번역 모델은 아직 엉뚱한 단어를 만들어서 답변에는 쓰지 않음
+        #  짧게 (화면 답변 글은 전체 그대로): 준비된 안내 문장으로 답한 질문은 그 확정 문장의 수어,
+        #  아니면 답변 첫 문장 (두 문장을 합쳐도 SIGN_MAX 단어 이하이면 둘째 문장까지)
         sents = []
-        for p in (split_sentences(answer_text) or [answer_text]):
-            sg = self.sign_sentence(p)                               # 앞 문장에 나온 단어도 답변에 있으면 그대로
-            if sg["gloss"]:
+        if mode == "demo" and self._memory.get(_norm(demo["korean"])):
+            sents = [self.translate_one(demo["korean"], beam)]
+        else:
+            for p in (split_sentences(answer_text) or [answer_text]):
+                sg = self.sign_sentence(p)                           # 앞 문장에 나온 단어도 답변에 있으면 그대로
+                if not sg["gloss"]:
+                    continue
+                if sents and (len(sents) >= 2 or sum(len(x["gloss"]) for x in sents) + len(sg["gloss"]) > self.SIGN_MAX):
+                    break
                 sents.append(sg)
         return {
             "question": question,
             "answer_mode": mode,                       # demo | llm | extractive
             "answer_text": answer_text,                # 화면에 보여줄 답변 (문서 근거)
-            "sign_text": answer_text,                  # 수어 단어를 뽑은 문장 (= 답변)
+            "sign_text": " ".join(s["korean"] for s in sents),   # 수어로 보여주는 문장 (짧게 줄인 것)
             "sentences": sents,                        # 문장별 글로스 + 타임라인
             "motion": self.motion_for([g for s in sents for g in s["gloss"]],     # 전체 문장 이어붙인 동작
-                                      [n for s in sents for n in s["nms"]],
+                                      [n for s in sents for n in (s.get("nms") or [None] * len(s["gloss"]))],
                                       [s["korean"] for s in sents for _ in s["gloss"]]),
             "sources": merge_sources(hits, self.titles, self._order, self.tables, self.images),   # 출처: 문서 제목·쪽·전체 문장
         }

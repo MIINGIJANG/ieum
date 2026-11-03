@@ -668,6 +668,20 @@ export class SignAvatar {
     }
   }
 
+  // 바로 전 화면에서 두 손(손 ↔ 손, 손 ↔ 다른 팔 아래팔)이 얼마나 가까운지 → 0(손가락 굵기 2배 밖) ~ 1(1.25배 안)
+  _handsTooClose() {
+    const rmin = (this.config && this.config.handGap) ?? 0.04;
+    const S = this._handShape, A = this._armShape || {}, H = this._handPos;
+    if (!rmin || !S || !H || !S.left || !S.right || !H.left || !H.right || (this.config && this.config.trCollide === false)) return 0;
+    const pts = (P) => S[P].map((p) => p.clone().add(H[P]));
+    const arm = (P) => (A[P] || []).map((p) => p.clone().add(H[P]));
+    const L = pts("left"), R = pts("right"), AL = arm("left"), AR = arm("right");
+    let worst = -Infinity;
+    const test = (X, Y, r) => { for (const a of X) for (const b of Y) worst = Math.max(worst, r * 2 - a.distanceTo(b)); };
+    test(L, R, rmin); test(L, AR, rmin * 1.5); test(AL, R, rmin * 1.5);
+    return smooth01(worst, 0, rmin * 0.75);
+  }
+
   // 실제 손 모양 기억 (손목 뼈 기준 위치): 손가락 마디·마디 가운데·손끝·손바닥 가운데
   _captureHandShape() {
     const V3 = THREE.Vector3;
@@ -691,6 +705,7 @@ export class SignAvatar {
       const m = ["IndexProximal", "MiddleProximal", "RingProximal", "LittleProximal"].map((n) => this.bone(P + n)).filter(Boolean);
       for (const b of m) pts.push(b.getWorldPosition(new V3()).add(H).multiplyScalar(0.5));          // 손바닥
       this._handShape[P] = pts.map((p) => p.sub(H));
+      (this._handPos = this._handPos || {})[P] = H.clone();
       // 아래팔: 손목 쪽 2/3 (팔꿈치 쪽은 몸 옆이라 다른 손과 잘 안 닿음), 손목 기준
       const low = this.bone(P + "LowerArm");
       if (low) {
@@ -943,6 +958,15 @@ export class SignAvatar {
         A = { q: new Map([...this.driven].map((o) => [o, (o.userData.target || o.quaternion).clone()])), tw: { ...this.st.twist }, th: { ...this.st.theta }, act: { ...this.st.act },
               pole: Object.fromEntries(Object.entries(this.st.pole).map(([P, v]) => [P, v.clone()])) };
       }
+      // 연결 구간에서 두 손이 서로 뚫고 지나가지 않게: 바로 전 화면의 두 손이 가까우면(손가락 굵기 2배 안)
+      //  이 프레임만 겹침 검사가 들어간 보통 자세 계산(_pose) 쪽으로 섞음 (가까워지면 빠르게 0.02초, 멀어지면 천천히 0.15초)
+      let live = null;
+      const kGoal = this._handsTooClose(), ku = this.st.trK ?? 0;
+      this.st.trK = ku + (kGoal - ku) * (1 - Math.exp(-(this._dt || 0.016) / (kGoal > ku ? 0.02 : 0.15)));
+      if (this.st.trK > 0.01 && fr.body) {
+        this._pose(fr);
+        live = new Map([...this.driven].map((o) => [o, o.userData.target.clone()]));
+      }
       const B = this._poseSnap(m, fr.tr.b), t = minJerk(clamp(fr.tr.t, 0, 1));
       if (!A) A = this._poseSnap(m, key);
       if (A !== this._trA) {
@@ -953,6 +977,7 @@ export class SignAvatar {
       for (const [o, q] of A.q) {
         const qb = B.q.get(o);
         o.userData.target = qb ? q.clone().slerp(qb, t) : q.clone();
+        if (live && live.has(o)) o.userData.target.slerp(live.get(o), this.st.trK);
         this.driven.add(o);
       }
       for (const P of ["left", "right"]) {
@@ -971,6 +996,7 @@ export class SignAvatar {
       return;
     }
     const w = fr && fr.rest > 0 ? Math.min(1, fr.rest) : 0;
+    this.st.trK = 0;
     this._wasLive = !!fr;
     this._trA = null;
     this._pose(fr);

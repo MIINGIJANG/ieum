@@ -292,6 +292,10 @@ pip install pytest httpx && python -m pytest -q tests     # 약 15초, 번역 �
 - 프레임 = `body` 8점 + 오른손/왼손 21점, 목=(0,0) · 어깨너비=1 로 정규화 → 다른 영상 클립끼리 크기·위치가 맞음
 - 글로스 클립 사이 0.2초 보간, 동작 없는 글로스는 회색 글자. 지문자(`ksl/fingerspell.py`, 손 모양 표 `data/sign/fingerspell.json`)는 손 모양 검수 전이라 기본 꺼짐 (`KSL_FINGERSPELL=1` 로 켬)
 - 동작 없는 단어 기록: `GET /missing` · `/missing.html` (많이 나온 단어부터 수어 동작을 추가하면 됨, `KSL_MISSING_LOG`)
+- 대체 표현: 동작 없는 단어를 이미 있는 수어로 (`data/sign/substitutes.csv`, 예: 안전모 → 머리+보호). 쓸 때마다 `/missing.html` 의 '대체 표현' 표에 기록 → 수어 전문가 검수
+- 답변 수어는 짧게: 준비된 안내 문장으로 답한 질문은 그 확정 문장, 아니면 답변 첫 문장(두 문장 합쳐 14단어 이하면 둘째까지). 화면 답변 글은 전체
+- 단어 길이 맞추기: 0.6~1.4초 밖이면 서서히 맞춤 (사전 영상에서 자른 긴 단어 · 아주 짧은 단어)
+- Space 가 멈추면: 배포할 때마다, 그리고 6시간마다(`.github/workflows/keepalive-space.yml`) 확인해서 다시 켬
 - AI Hub 키포인트(OpenPose JSON, 2D/3D, people 이 list/dict 어느 쪽이든)와 MediaPipe 결과를 같은 형식으로 변환
 - 동작사전 만들 때 같은 글로스 클립이 여러 개면 길이가 중앙값에 가장 가까운 1개 사용
 

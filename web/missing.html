@@ -10,6 +10,7 @@
   body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Apple SD Gothic Neo", sans-serif; }
   main { max-width: 900px; margin: 0 auto; padding: 24px 16px 48px; }
   h1 { font-size: 22px; margin: 0 0 4px; }
+  h2.sub2 { font-size: 18px; margin: 32px 0 4px; }
   p.sub { color: var(--sub); margin: 0 0 16px; }
   .bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
   .bar span { color: var(--sub); }
@@ -36,6 +37,9 @@
     <span id="sum"></span>
   </div>
   <div id="out"></div>
+  <h2 class="sub2">대체 표현으로 보여준 단어</h2>
+  <p class="sub">수어 동작이 없어 비슷한 뜻의 다른 수어로 대신 보여준 단어예요 (data/sign/substitutes.csv). 수어 전문가 검수가 필요해요.</p>
+  <div id="subs"></div>
 </main>
 <script>
 const out = document.getElementById("out"), sum = document.getElementById("sum");
@@ -48,6 +52,12 @@ async function load() {
     last = await r.json();
   } catch (e) { out.innerHTML = '<div class="empty">불러오지 못했어요.</div>'; return; }
   sum.textContent = `단어 ${last.total_words}개 · 모두 ${last.total_count}번`;
+  const subs = last.substitutes || [];
+  document.getElementById("subs").innerHTML = subs.length
+    ? `<table><thead><tr><th>단어</th><th>대신 보여준 수어</th><th style="text-align:right">횟수</th><th>나온 문장</th></tr></thead><tbody>${
+        subs.map((x) => `<tr><td class="g">${esc(label(x.gloss))}</td><td>${esc((x.used || []).map(label).join(" + "))}</td><td class="n">${x.count}</td><td class="ex">${
+          (x.examples || []).map((e) => `<div>${esc(e)}</div>`).join("") || "—"}</td></tr>`).join("")}</tbody></table>`
+    : '<div class="empty">아직 없어요.</div>';
   if (!last.items.length) { out.innerHTML = '<div class="empty">아직 기록이 없어요. 질문을 몇 개 해 보세요.</div>'; return; }
   out.innerHTML = `<table><thead><tr><th>단어</th><th style="text-align:right">횟수</th><th>나온 문장</th><th class="t">마지막</th></tr></thead><tbody>${
     last.items.map((x) => `<tr><td class="g" title="${esc(x.gloss)}">${esc(label(x.gloss))}</td><td class="n">${x.count}</td><td class="ex">${

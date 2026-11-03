@@ -20,3 +20,14 @@ def test_voice_like_queries(pipe):
         r = pipe.query(v)
         assert r["mode"] == "translate" and r["sentences"][0]["gloss"] == clean["sentences"][0]["gloss"]
     assert pipe.query("정전기 안전화는 어떤 역할을 해요")["mode"] == "ask"   # 문서는 '정전기안전화' 로 붙여 씀
+
+
+def test_substitute_and_short_sign(pipe):
+    """동작 없는 단어는 대체 표현으로(기록), 답변 수어는 짧게 (확정 문장 또는 첫 문장)."""
+    r = pipe.sign_sentence("안전모를 쓰세요.")
+    assert r["gloss"][:2] == ["머리0", "보호1"] and r["sub_of"][:2] == ["안전모", "안전모"]
+    assert any(x["gloss"] == "안전모" for x in pipe.missing.top(subs=True))
+    a = pipe.query("보호구에 이상이 있는지 어떻게 확인해요?")
+    assert a["answer_mode"] == "demo" and a["sentences"][0]["gloss"] == ["이상하다1", "없다1", "확인1"]
+    b = pipe.query("정화통은 언제 교체해요?")
+    assert len(b["sentences"]) <= 2 and b["answer_text"].startswith(b["sign_text"][:10])
