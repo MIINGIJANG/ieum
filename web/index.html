@@ -65,7 +65,7 @@
   form.query { position: relative; width: min(100%, 640px); }
   form.query input {
     width: 100%;
-    padding: 15px 96px 15px 20px;
+    padding: 15px 104px 15px 20px;
     border: 2px solid var(--ink);
     border-radius: 999px;
     background: var(--surface);
@@ -73,7 +73,8 @@
   }
   form.query input:focus, form.query input:focus-visible { outline: none; }
   /* 입력창 오른쪽: [음성 파형(듣는 동안)] [↓ 보내기] [마이크] */
-  form.query .tools { position: absolute; right: 7px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; gap: 2px; }
+  /* 세 요소 모두 같은 크기(40px)의 원 칸에 들어 있는 것처럼: 칸 너비·간격 같게 */
+  form.query .tools { position: absolute; right: 7px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; gap: 6px; }
   form.query .tools button {
     width: 40px; height: 40px; border: 0; border-radius: 50%;
     background: transparent; color: var(--ink); cursor: pointer;
@@ -83,9 +84,9 @@
   form.query #go:disabled { opacity: .4; cursor: wait; }
   form.query #mic[hidden] { display: none; }
   form.query.listening #mic { background: var(--ink); color: var(--surface); }   /* 듣는 동안: 둥근 검은 원에 흰 마이크 */
-  form.query #wave { display: none; width: 96px; height: 28px; margin-right: 4px; color: var(--ink); }
+  form.query #wave { display: none; width: 40px; height: 40px; color: var(--ink); }   /* 마이크 원과 같은 너비 */
   form.query.listening #wave { display: block; }
-  form.query.listening input { padding-right: 196px; }
+  form.query.listening input { padding-right: 150px; }
   /* 예시 질문 2개: 휴대폰은 한 줄에 1개씩 2줄, PC 는 한 줄에 2개. 버튼 폭은 질문 길이에 맞춤 */
   .examples { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; }
   @media (min-width: 761px) { .examples { flex-direction: row; flex-wrap: wrap; justify-content: center; } }   /* PC: 한 줄에 2개 */
@@ -202,7 +203,7 @@
       <div class="tools">
         <canvas id="wave" aria-hidden="true"></canvas>
         <button id="go" type="button" aria-label="수어로 보기">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4.6v14.6M5.6 12.8l6.4 6.4 6.4-6.4"/></svg>
         </button>
         <button id="mic" type="button" aria-label="음성으로 질문하기" hidden>
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8.6" y="2.4" width="6.8" height="12" rx="3.4" fill="currentColor"/><path d="M5.6 11.4a6.4 6.4 0 0 0 12.8 0M12 17.9v3.3M8.8 21.2h6.4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
@@ -400,7 +401,7 @@ function updateGo() {
 }
 // 파형: 마이크 소리 크기(PC) 또는 말소리 감지(휴대폰: 음성 인식과 마이크를 같이 열면 인식이 끊기는 기기가 있음)
 const wave = (() => {
-  const cv = $("wave"), N = 16, levels = new Array(N).fill(0);
+  const cv = $("wave"), N = 6, levels = new Array(N).fill(0);
   let raf = 0, last = 0, stream = null, ctx = null, an = null, buf = null, speaking = false;
   function level() {
     if (an) {
@@ -424,7 +425,7 @@ const wave = (() => {
     g.fillStyle = getComputedStyle(cv).color;
     const step = w / N;
     levels.forEach((v, i) => {
-      const bh = Math.max(2.5, v * (h - 4));    // 조용하면 점, 소리가 나면 막대
+      const bh = Math.max(2.5, v * 20);    // 조용하면 점, 소리가 나면 막대 (최대 높이는 아이콘 높이 정도)
       const x = i * step + step / 2 - 1.25;
       g.globalAlpha = v < 0.1 ? 0.45 : 0.9;
       g.beginPath(); g.roundRect(x, (h - bh) / 2, 2.5, bh, 1.25); g.fill();
