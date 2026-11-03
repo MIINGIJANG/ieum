@@ -28,7 +28,7 @@ def test_substitute_and_short_sign(pipe):
     assert r["gloss"][:2] == ["머리0", "보호1"] and r["sub_of"][:2] == ["안전모", "안전모"]
     assert any(x["gloss"] == "안전모" for x in pipe.missing.top(subs=True))
     a = pipe.query("보호구에 이상이 있는지 어떻게 확인해요?")
-    assert a["answer_mode"] == "demo" and a["sentences"][0]["gloss"] == ["이상하다1", "없다1", "확인1"]
+    assert a["answer_mode"] == "demo" and a["sentences"][0]["gloss"] == ["보호1", "이상하다1", "없다1", "확인1"]   # 보호구 수어 포함
     b = pipe.query("정화통은 언제 교체해요?")
     sg = b["sentences"][0]
     assert len(b["sentences"]) == 1 and sg["method"].startswith("keypoints_") and sg["korean"] in b["answer_text"]
