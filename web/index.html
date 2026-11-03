@@ -391,7 +391,8 @@ function listen() {
   };
   rec.onerror = (e) => {
     const msg = e.error === "not-allowed" || e.error === "service-not-allowed" ? "마이크 사용을 허용해 주세요"
-      : e.error === "no-speech" ? "말씀이 들리지 않았어요. 다시 눌러 주세요" : "음성 인식을 하지 못했어요";
+      : e.error === "no-speech" ? "말씀이 들리지 않았어요. 다시 눌러 주세요" : "";
+    if (!msg) return;                                // 그 밖의 오류(중간에 멈춤 등)는 안내 없이 원래 문구 그대로
     $("q").placeholder = msg;
     setTimeout(() => { $("q").placeholder = PH; }, 3000);
   };
