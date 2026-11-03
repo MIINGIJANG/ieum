@@ -30,4 +30,33 @@ def test_substitute_and_short_sign(pipe):
     a = pipe.query("보호구에 이상이 있는지 어떻게 확인해요?")
     assert a["answer_mode"] == "demo" and a["sentences"][0]["gloss"] == ["이상하다1", "없다1", "확인1"]
     b = pipe.query("정화통은 언제 교체해요?")
-    assert len(b["sentences"]) <= 2 and b["answer_text"].startswith(b["sign_text"][:10])
+    sg = b["sentences"][0]
+    assert len(b["sentences"]) == 1 and sg["method"].startswith("keypoints_") and sg["korean"] in b["answer_text"]
+    assert len(sg["gloss"]) <= 9 and any("6개월" in (w or "") for w in sg["words"])   # 핵심 단어만, '언제' 질문은 기간 포함
+
+
+def test_keypoints_llm_only_uses_answer_words(pipe, monkeypatch):
+    """Claude 로 핵심 고르기: 답변에 없는 말은 버림, 결과가 모자라면 규칙 기반으로 (실제 API 대신 가짜 응답)."""
+    import json as _json
+    import types
+    import anthropic
+    from ksl import keypoints
+
+    answer = "정화통은 6개월마다 교체하고, 보관 환경은 온도 5~30℃를 유지해야 한다."
+    reply = {"key_sentence": "정화통은 6개월마다 교체하고", "keywords": ["정화통", "6개월", "교체", "우주선"]}
+
+    class Fake:
+        def __init__(self, *a, **k):
+            self.beta = types.SimpleNamespace(messages=types.SimpleNamespace(create=self.create))
+
+        def create(self, **kw):
+            assert kw["output_config"]["format"]["type"] == "json_schema" and kw["fallbacks"] == "default"
+            return types.SimpleNamespace(stop_reason="end_turn",
+                                         content=[types.SimpleNamespace(type="text", text=_json.dumps(reply, ensure_ascii=False))])
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+    monkeypatch.setattr(anthropic, "Anthropic", Fake)
+    r = keypoints.extract(pipe, "정화통은 언제 교체해요?", answer, [answer])
+    assert r["method"] == "llm" and "우주선" not in [u["word"] for u in r["units"]]
+    reply["keywords"] = ["우주선", "로켓"]                                 # 답변에 없는 말뿐 → 규칙 기반
+    assert keypoints.extract(pipe, "정화통은 언제 교체해요?", answer, [answer])["method"] == "rule"

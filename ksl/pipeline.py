@@ -335,6 +335,11 @@ class SafetySignPipeline:
     def sign_sentence(self, text, skip=()):
         """답변 문장 하나 → 그 문장에서 뽑은 수어 단어 + 재생 시간."""
         units = [u for u in self.sign_words.analyze(text) if u["gloss"] not in skip]   # 한국수어 어순 (ksl/order.py)
+        return self._units_sentence(units, text)
+
+    def _units_sentence(self, units, text, method="extract"):
+        """수어 단어 목록(analyze 결과) → 문장 결과 (대체 표현 적용·기록, 재생 시간)."""
+        units = [dict(u, nms=u.get("nms")) for u in units]
         units = self._substitute(units, text)
         glosses = [u["gloss"] for u in units]
         tl, t = [], 0.0
@@ -346,7 +351,7 @@ class SafetySignPipeline:
         return {"korean": text, "gloss": glosses, "words": [u["word"] for u in units], "nms": [u["nms"] for u in units],
                 "sub_of": [u.get("sub_of") for u in units],                  # 대체 표현이면 원래 말 (화면에 표시)
                 "timeline": tl, "lexicon_terms": [], "dropped_terms": [],
-                "unverified_terms": [], "has_unk": False, "method": "extract",   # 답변 문장에서 단어 추출
+                "unverified_terms": [], "has_unk": False, "method": method,   # extract: 답변 문장에서 단어 추출, keypoints_*: 핵심 추출
                 "complete": all(self.motion and self.motion.get(g) for g in glosses)}
 
     def translate_text(self, text, beam=4):
@@ -360,8 +365,6 @@ class SafetySignPipeline:
         sc = (self._dm @ self._dv.transform([question]).T).toarray().ravel()
         i = int(np.argmax(sc))
         return self.demo[i], float(sc[i])
-
-    SIGN_MAX = 14            # 답변 수어: 두 문장을 합쳐 이 단어 수를 넘으면 첫 문장만
 
     _Q = re.compile(r"(\?|까|나요|니까|어떻게|언제|어디|무엇|뭐|뭘|왜|누가|알려|궁금|어떤|되나|하나|해요\??$|돼요\??$)")
 
@@ -492,18 +495,15 @@ class SafetySignPipeline:
             answer_text = " ".join(texts)
         # 수어: 답변 문장에 실제로 있는 말만 수어 단어로 (data/sign/sign_words.csv). 번역 모델은 아직 엉뚱한 단어를 만들어서 답변에는 쓰지 않음
         #  짧게 (화면 답변 글은 전체 그대로): 준비된 안내 문장으로 답한 질문은 그 확정 문장의 수어,
-        #  아니면 답변 첫 문장 (두 문장을 합쳐도 SIGN_MAX 단어 이하이면 둘째 문장까지)
+        #  아니면 답변의 핵심 (ksl/keypoints.py: 질문과 가장 관련 있는 문장의 핵심 단어, 키가 있으면 Claude 가 고름)
         sents = []
         if mode == "demo" and self._memory.get(_norm(demo["korean"])):
             sents = [self.translate_one(demo["korean"], beam)]
         else:
-            for p in (split_sentences(answer_text) or [answer_text]):
-                sg = self.sign_sentence(p)                           # 앞 문장에 나온 단어도 답변에 있으면 그대로
-                if not sg["gloss"]:
-                    continue
-                if sents and (len(sents) >= 2 or sum(len(x["gloss"]) for x in sents) + len(sg["gloss"]) > self.SIGN_MAX):
-                    break
-                sents.append(sg)
+            from .keypoints import extract
+            kp = extract(self, question, answer_text, split_sentences(answer_text) or [answer_text])
+            if kp and kp["units"]:
+                sents = [self._units_sentence(kp["units"], kp["text"], method="keypoints_" + kp["method"])]
         return {
             "question": question,
             "answer_mode": mode,                       # demo | llm | extractive

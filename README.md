@@ -293,7 +293,9 @@ pip install pytest httpx && python -m pytest -q tests     # 약 15초, 번역 �
 - 글로스 클립 사이 0.2초 보간, 동작 없는 글로스는 회색 글자. 지문자(`ksl/fingerspell.py`, 손 모양 표 `data/sign/fingerspell.json`)는 손 모양 검수 전이라 기본 꺼짐 (`KSL_FINGERSPELL=1` 로 켬)
 - 동작 없는 단어 기록: `GET /missing` · `/missing.html` (많이 나온 단어부터 수어 동작을 추가하면 됨, `KSL_MISSING_LOG`)
 - 대체 표현: 동작 없는 단어를 이미 있는 수어로 (`data/sign/substitutes.csv`, 예: 안전모 → 머리+보호). 쓸 때마다 `/missing.html` 의 '대체 표현' 표에 기록 → 수어 전문가 검수
-- 답변 수어는 짧게: 준비된 안내 문장으로 답한 질문은 그 확정 문장, 아니면 답변 첫 문장(두 문장 합쳐 14단어 이하면 둘째까지). 화면 답변 글은 전체
+- 답변 수어는 핵심만 (`ksl/keypoints.py`): 준비된 안내 문장으로 답한 질문은 그 확정 문장, 아니면 답변에서 질문과 가장 관련 있는 문장의 핵심 단어(최대 7개).
+  질문에 나온 말·산업안전 핵심어·수어 동작이 있는 말 우선, 부정·금지·의무는 늘, '언제·몇' 질문은 기간·숫자 포함. 답변에 있는 말만 씀.
+  `ANTHROPIC_API_KEY` 가 있으면 Claude(`KSL_KEYPOINT_MODEL`, 기본 claude-opus-5-5, 거절 시 서버 대체 모델)가 고르고 답변에 없는 말은 버림 → 모자라면 규칙 기반. `KSL_KEYPOINTS=rule` 로 규칙만. 화면 답변 글은 전체
 - 단어 길이 맞추기: 0.6~1.4초 밖이면 서서히 맞춤 (사전 영상에서 자른 긴 단어 · 아주 짧은 단어)
 - Space 가 멈추면: 배포할 때마다, 그리고 6시간마다(`.github/workflows/keepalive-space.yml`) 확인해서 다시 켬
 - AI Hub 키포인트(OpenPose JSON, 2D/3D, people 이 list/dict 어느 쪽이든)와 MediaPipe 결과를 같은 형식으로 변환
