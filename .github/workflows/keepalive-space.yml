@@ -1,0 +1,22 @@
+# Hugging Face Space(MIINGI/ieum)가 멈춰 있으면 다시 켬 + 잠들지 않게 6시간마다 한 번 들어가 봄
+# 필요: 저장소 Secrets 의 HF_TOKEN (배포와 같은 Write 토큰). Actions 탭에서 'Run workflow' 로 바로 실행할 수도 있음
+name: Space 깨우기
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+jobs:
+  wake:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - run: pip install -U huggingface_hub
+      - name: 멈춰 있으면 다시 켜기
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: python scripts/deploy/ensure_running.py MIINGI/ieum
+      - name: 사이트에 한 번 들어가 보기 (오래 안 쓰면 잠드는 것 방지)
+        run: curl -fsS --max-time 60 https://miingi-ieum.hf.space/health || echo "아직 켜지는 중"

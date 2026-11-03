@@ -35,3 +35,8 @@ jobs:
             echo "::error::업로드 실패 (토큰이 Read 권한이거나 MIINGI/ieum 쓰기 권한이 없음): $(grep -m1 -iE 'error|denied|forbidden|401|403' up.txt | head -c 300)"; exit 1
           fi
           cat up.txt
+      - name: 멈춰 있으면 다시 켜기 (일시정지·잠자기 상태면 올려도 사이트가 안 열림)
+        continue-on-error: true          # 다시 켜지 못해도 올리기는 성공한 것
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: python scripts/deploy/ensure_running.py MIINGI/ieum

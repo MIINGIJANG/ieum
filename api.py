@@ -226,7 +226,8 @@ def examples():
 def missing(n: int = 100):
     """수어 동작이 없어 회색(또는 지문자)으로 나온 단어: 많이 나온 순서 (ksl/missing.py). 다음에 추가할 수어 고르기용."""
     items = pipe.missing.top(n)
-    return {"total_words": len(pipe.missing.data), "total_count": sum(v["count"] for v in pipe.missing.data.values()), "items": items}
+    return {"total_words": len(pipe.missing.data), "total_count": sum(v["count"] for v in pipe.missing.data.values()), "items": items,
+            "substitutes": pipe.missing.top(n, subs=True)}   # 대체 표현으로 보여준 단어 (data/sign/substitutes.csv, 검수 필요)
 
 
 @app.post("/motion")

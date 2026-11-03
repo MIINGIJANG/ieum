@@ -51,5 +51,8 @@ def test_missing_log(tmp_path):
     log.record(["때2"], ["작업할 때 조심"])
     top = log.top()
     assert top[0]["gloss"] == "때2" and top[0]["count"] == 2 and top[0]["examples"] == ["작업할 때 조심"]
-    assert json.loads((tmp_path / "m.json").read_text(encoding="utf-8"))["FS:정화통"]["count"] == 1
+    assert json.loads((tmp_path / "m.json").read_text(encoding="utf-8"))["missing"]["FS:정화통"]["count"] == 1
+    log.record_sub("안전모", ["머리0", "보호1"], "안전모를 쓰세요")
+    sub = MissingLog(tmp_path / "m.json").top(subs=True)
+    assert sub[0]["gloss"] == "안전모" and sub[0]["used"] == ["머리0", "보호1"]   # 대체 표현은 따로 기록
     assert MissingLog(tmp_path / "m.json").top()[0]["count"] == 2              # 다시 열어도 이어서
