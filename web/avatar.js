@@ -408,6 +408,7 @@ export class SignAvatar {
       R.a = pos(P + "LowerArm").distanceTo(R.sho);
       R.b = pos(P + "Hand").distanceTo(pos(P + "LowerArm"));
       R.handLen = pos(P + "Hand").distanceTo(pos(P + "MiddleDistal") || pos(P + "MiddleProximal")) + 0.025;
+      R.palmLen = pos(P + "Hand").distanceTo(pos(P + "MiddleProximal"));            // 손목 → 가운데 손가락 뿌리
       // 손가락 '바깥쪽'(가운데 손가락에서 멀어지는 방향) — 손가락끼리 겹치지 않게 벌림 제한할 때
       const mid = pos(P + "MiddleProximal");
       R.out = FINGERS.map(([names]) => { const b = pos(P + names[0]); return b && mid ? dir(mid, b.clone()) : new THREE.Vector3(); });
@@ -431,6 +432,10 @@ export class SignAvatar {
     this.spinePos = pos("chest") || pos("spine");
     this.shoulderW = pos("leftUpperArm").distanceTo(pos("rightUpperArm"));
     const eye = pos("leftEye") || pos("head").add(new THREE.Vector3(0, 0.08, 0.05));
+    // 두 눈 가운데·사이 거리 (얼굴 점이 있는 동작에서 얼굴 근처 손을 얼굴 크기 기준으로 맞출 때)
+    const le = pos("leftEye"), re = pos("rightEye");
+    this.eyeC = le && re ? le.clone().add(re).multiplyScalar(0.5) : eye.clone().setX(0);
+    this.eyeD = le && re ? le.distanceTo(re) : 0.064;
     this.eyeY = eye.y;
     this.noseAbove = (eye.y - 0.025 - this.neckY) / Math.max(this.shoulderW, 1e-6);
     const skull = this._skull();
@@ -554,6 +559,23 @@ export class SignAvatar {
     const face = smooth01(wr.y, -0.1, 0.25);                              // 0: 목 아래, 1: 얼굴 높이
     const W = new THREE.Vector3(Wn.x, Wa.y + (Wn.y - Wa.y) * face, Wa.z + (Wn.z - Wa.z) * face);
     W.y += this._dyNow || 0;                                                // 단어마다 손 평균 높이를 수어 공간 가운데로
+    // 얼굴 점(fk: 코·왼눈·오른눈)이 있는 동작: 얼굴 가까이 있는 손은 '두 눈 가운데에서 눈 사이 거리 몇 배' 로 옮김
+    //  (어깨너비로 옮기면 머리에 비해 어깨가 넓은 아바타는 눈앞에 와야 할 손이 얼굴 바깥·위로 감: 보안경 등)
+    //  손이 얼굴에서 눈 사이 거리 2.5배 안이면 완전히, 4.5배 밖이면 예전 방식, 그 사이는 섞음
+    let faceW = 0;
+    if (fr.fk && fr.fk[1] && fr.fk[2]) {
+      const le = V(fr.fk[1]), re = V(fr.fk[2]), C = le.clone().add(re).multiplyScalar(0.5);
+      const e = Math.hypot(le.x - re.x, le.y - re.y);
+      const hd = fr[s.hand], hc = hd && hd[0] && hd[9] ? V(hd[0]).add(V(hd[9])).multiplyScalar(0.5) : wr.clone();
+      const w = e > 1e-3 ? 1 - smooth01(hc.distanceTo(C) / e, 2.5, 4.5) : 0;
+      if (w > 0) {
+        const rel = wr.clone().sub(C).divideScalar(e);
+        const Wf = this.eyeC.clone().add(new THREE.Vector3(rel.x, rel.y, 0).multiplyScalar(this.eyeD));
+        Wf.z = Math.max(W.z, this.eyeC.z + this.eyeD * 0.8);                      // 앞뒤는 얼굴 앞
+        W.lerp(Wf, w);
+        faceW = w;
+      }
+    }
     // 팔이 다 펴지지 않게: 어깨에서 팔 길이의 70% 를 넘으면 서서히 88% 까지만
     //  (수어하는 손은 몸 앞 가까이 — 팔을 쭉 뻗으면 앞으로 나란히처럼 어색함. 팔꿈치가 굽고 아래로 내려옴)
     {
@@ -569,20 +591,27 @@ export class SignAvatar {
       this.st.act[P] = act;
       if (act > 0.001) { const B = W.clone(); this._signBox(B, R); W.lerp(B, act); }
     }
-    // 얼굴 안으로 들어가면 얼굴 앞쪽으로
-    const fromHead = W.clone().sub(this.headCenter);
-    if (fromHead.length() < this.headR) {
-      fromHead.z = Math.max(fromHead.z, 0.02);
-      W.copy(this.headCenter).add(fromHead.normalize().multiplyScalar(this.headR));
-    }
+    // 얼굴 안으로 들어가면 얼굴 앞쪽으로. 얼굴 앞 손(faceW)은 머리 중심에서 바깥(위·옆)이 아니라 앞으로만 밀어냄
+    //  (눈앞에서 손으로 모양을 만드는 수어가 위로 밀려 이마·안전모에 가던 것)
+    const pushOut = (p, r) => {                                               // 점 p 를 반지름 r 머리 공 밖으로 보낼 이동량
+      const ft = p.clone().sub(this.headCenter), d = ft.length();
+      if (d >= r) return null;
+      const radial = ft.clone().setZ(Math.max(ft.z, 0.02)).normalize().multiplyScalar(r - d);
+      const xy2 = ft.x * ft.x + ft.y * ft.y;
+      const fwd = new THREE.Vector3(0, 0, xy2 < r * r ? Math.sqrt(r * r - xy2) - ft.z : r - d);
+      return radial.multiplyScalar(1 - faceW).add(fwd.multiplyScalar(faceW));
+    };
+    const m0 = pushOut(W, this.headR);
+    if (m0) W.add(m0);
     const hd = fr[s.hand];
     if (hd && hd[0]) {
-      for (const tipIdx of [8, 12]) {                                         // 손가락 끝이 얼굴을 뚫지 않게
-        if (!hd[tipIdx]) continue;
-        const dir = V(hd[tipIdx]).sub(V(hd[0])).normalize();
-        const tip = W.clone().add(dir.multiplyScalar(R.handLen));
-        const ft = tip.clone().sub(this.headCenter), d = ft.length(), need = this.headR * 1.02 - d;
-        if (need > 0) { ft.z = Math.max(ft.z, 0.02); W.add(ft.normalize().multiplyScalar(need)); }
+      // 손가락 끝이 얼굴을 뚫지 않게: 끝 자리는 데이터의 손 모양 그대로 (굽힌 손가락은 손목 가까이) 아바타 손 크기로
+      const hs = hd[9] ? (R.palmLen || R.handLen * 0.5) / Math.max(1e-6, V(hd[9]).distanceTo(V(hd[0]))) : 0;
+      for (const tipIdx of [8, 12]) {
+        if (!hd[tipIdx] || !hs) continue;
+        const tip = W.clone().add(V(hd[tipIdx]).sub(V(hd[0])).multiplyScalar(hs));
+        const m = pushOut(tip, this.headR * 1.02);
+        if (m) W.add(m);
       }
       // 손끝이 몸통 안으로 들어가지 않게. 몸통 옆·아래 경계에서 밀어내는 정도를 서서히 줄임 (경계를 넘는 순간 손이 튀지 않게)
       let push = 0;

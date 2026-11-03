@@ -44,8 +44,10 @@ def normalize(frames):
 
     out = []
     for f in frames:
-        g = {k: v for k, v in f.items() if k not in ("body", "lh", "rh", "face")}
+        g = {k: v for k, v in f.items() if k not in ("body", "lh", "rh", "face", "fk")}
         g.update({"body": tr(f["body"]), "lh": tr(f.get("lh")), "rh": tr(f.get("rh"))})
+        if f.get("fk"):
+            g["fk"] = tr(f["fk"])
         out.append(g)
     return out
 
@@ -141,6 +143,7 @@ def load_mediapipe_avatar(path, L=None, ref_nose=0.524):
     - MediaPipe 어깨 점은 AI Hub(OpenPose) 보다 안쪽에 잡혀 어깨너비가 좁게 나옴 → 어깨너비 단위로 재면 얼굴·손·팔이 20~30% 크게 나옴
       → 목→코 높이가 AI Hub 3D 자료 중앙값(ref_nose, 어깨너비 단위)과 같아지도록 어깨를 뺀 모든 점을 목 기준으로 줄임
     - rest_weight 0.5 이상인 손은 손 모양 없음(None) → 아바타가 힘 뺀 손으로
+    - 얼굴 점 "fk": [코, 왼눈, 오른눈] → 아바타가 얼굴 근처 손을 얼굴 크기 기준으로 맞춤 (눈앞·턱 등 닿는 자리가 맞게)
     반환: (frames, fps, 3)"""
     import numpy as np
     d = json.loads(Path(path).read_text(encoding="utf-8"))
@@ -192,7 +195,8 @@ def load_mediapipe_avatar(path, L=None, ref_nose=0.524):
         p = neck + (p - neck) * k_s                               # 어깨 말고 모두 줄임 (어깨너비 단위 맞추기)
         p[[11, 12]] = keep
         body = [p[0], neck, p[12], p[14], p[16], p[11], p[13], p[15]]
-        f = {"body": [[round(float(v), 4) for v in q] for q in body]}
+        f = {"body": [[round(float(v), 4) for v in q] for q in body],
+             "fk": [[round(float(v), 4) for v in p[i]] for i in (0, 2, 5)]}
         for k, wi in (("rh", 16), ("lh", 15)):
             if W[k][t] >= 0.5:
                 f[k] = None
@@ -202,6 +206,49 @@ def load_mediapipe_avatar(path, L=None, ref_nose=0.524):
             f[k] = [[round(float(v), 4) for v in (p[wi] + q)] for q in rel]
         frames.append(f)
     return frames, float(d.get("fps", FPS)), 3
+
+
+def palm_to_face(frames, near=2.5, far=4.5, back=0.2):
+    """얼굴 앞 손의 손바닥이 얼굴(몸 가운데) 쪽을 보게 손을 손가락 축으로 돌림 (손가락 방향·모양·손목 자리는 그대로).
+    MediaPipe 가 눈앞에서 손을 동그랗게 만드는 장면(보안경 등)의 손바닥 방향을 앞(카메라)으로 잘못 잡는 일이 있어 손으로 보정.
+    얼굴 점(fk)이 있는 프레임만, 손이 두 눈 가운데에서 눈 사이 거리 near 배 안이면 완전히, far 배 밖이면 그대로, 그 사이는 섞음."""
+    import numpy as np
+
+    def rot(axis, ang):
+        a = axis / np.linalg.norm(axis)
+        K = np.array([[0, -a[2], a[1]], [a[2], 0, -a[0]], [-a[1], a[0], 0]])
+        return np.eye(3) + math.sin(ang) * K + (1 - math.cos(ang)) * K @ K
+
+    out = [dict(f) for f in frames]
+    for f in out:
+        fk = f.get("fk")
+        if not fk or not fk[1] or not fk[2]:
+            continue
+        C = (np.array(fk[1]) + np.array(fk[2])) / 2
+        e = math.dist(fk[1][:2], fk[2][:2])
+        for k, inward in (("rh", 1.0), ("lh", -1.0)):          # 오른손은 +x 쪽이 몸 가운데, 왼손은 -x 쪽
+            h = f.get(k)
+            if not h or any(p is None for p in h) or e < 1e-3:
+                continue
+            P = np.array(h, float)
+            hc = (P[0] + P[9]) / 2
+            t = (np.linalg.norm(hc - C) / e - near) / (far - near)
+            w = 1 - min(1.0, max(0.0, t))
+            w = w * w * (3 - 2 * w)
+            if w <= 0:
+                continue
+            fd = P[9] - P[0]; fd /= np.linalg.norm(fd)
+            n = np.cross(fd, P[17] - P[5]) * inward                # 손바닥 쪽 (오른손 기준 부호를 왼손에 맞춤)
+            tgt = np.array([inward, 0.0, back])                    # 몸 가운데 쪽 + 조금 몸 쪽 (z + 는 카메라에서 멀어지는 쪽)
+            proj = lambda v: v - fd * (v @ fd)
+            a, b = proj(n), proj(tgt)
+            if np.linalg.norm(a) < 1e-6 or np.linalg.norm(b) < 1e-6:
+                continue
+            a /= np.linalg.norm(a); b /= np.linalg.norm(b)
+            ang = math.atan2(np.cross(a, b) @ fd, a @ b) * w
+            Rm = rot(fd, ang)
+            f[k] = [[round(float(v), 4) for v in (P[0] + Rm @ (p - P[0]))] for p in P]
+    return out
 
 
 def load_team_clip(path):
@@ -883,6 +930,8 @@ def _lerp_pts(a, b, t):
 
 def _lerp(fa, fb, t):
     out = {k: _lerp_pts(fa.get(k), fb.get(k), t) for k in ("body", "lh", "rh")}
+    if fa.get("fk") and fb.get("fk"):
+        out["fk"] = _lerp_pts(fa["fk"], fb["fk"], t)
     ea, eb = fa.get("expr"), fb.get("expr")
     if ea or eb:
         ea, eb = ea or {}, eb or {}
