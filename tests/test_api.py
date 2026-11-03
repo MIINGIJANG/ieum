@@ -53,3 +53,13 @@ def test_missing(client):
 
 def test_utf8_header(client):
     assert "charset=utf-8" in client.get("/health").headers["content-type"]
+
+
+def test_query_prefetch_cache(client):
+    q = "보안경은 언제 써야 해요?"
+    before = client.get("/missing").json()["total_count"]
+    a = client.post("/query", json={"text": q, "prefetch": True}).json()     # 미리 받기: 기록 안 함
+    assert client.get("/missing").json()["total_count"] == before
+    assert client.post("/query", json={"text": q, "seen": True}).json() == {"ok": True}   # 보였을 때: 기록만
+    b = client.post("/query", json={"text": q}).json()                        # 같은 질문은 캐시
+    assert a == b

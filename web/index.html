@@ -65,28 +65,27 @@
   form.query { position: relative; width: min(100%, 640px); }
   form.query input {
     width: 100%;
-    padding: 15px 64px 15px 20px;
+    padding: 15px 96px 15px 20px;
     border: 2px solid var(--ink);
     border-radius: 999px;
     background: var(--surface);
     font-size: 1rem;
   }
   form.query input:focus, form.query input:focus-visible { outline: none; }
-  form.query button {
-    position: absolute; right: 7px; top: 50%; transform: translateY(-50%);
-    width: 42px; height: 42px; border: 0; border-radius: 50%;
-    background: var(--ink); color: #fff; cursor: pointer;
+  /* 입력창 오른쪽: [음성 파형(듣는 동안)] [↓ 보내기] [마이크] */
+  form.query .tools { position: absolute; right: 7px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; gap: 2px; }
+  form.query .tools button {
+    width: 40px; height: 40px; border: 0; border-radius: 50%;
+    background: transparent; color: var(--ink); cursor: pointer;
     display: grid; place-items: center; padding: 0;
   }
-  form.query button svg { width: 22px; height: 22px; }
-  form.query button:disabled { opacity: .5; cursor: wait; }
-  /* 입력창이 비어 있으면 마이크(음성 입력), 글자가 있으면 화살표(보내기) */
-  form.query .i-mic { display: none; }
-  form.query.mic .i-mic { display: block; }
-  form.query.mic .i-send { display: none; }
-  form.query.listening button { background: #d64545; animation: mic-pulse 1.2s ease-in-out infinite; }
-  @keyframes mic-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(214, 69, 69, .45); } 50% { box-shadow: 0 0 0 9px rgba(214, 69, 69, 0); } }
-  @media (prefers-reduced-motion: reduce) { form.query.listening button { animation: none; } }
+  form.query .tools button svg { width: 22px; height: 22px; }
+  form.query #go:disabled { opacity: .4; cursor: wait; }
+  form.query #mic[hidden] { display: none; }
+  form.query.listening #mic { background: var(--ink); color: var(--surface); }   /* 듣는 동안: 둥근 검은 원에 흰 마이크 */
+  form.query #wave { display: none; width: 96px; height: 28px; margin-right: 4px; color: var(--ink); }
+  form.query.listening #wave { display: block; }
+  form.query.listening input { padding-right: 196px; }
   /* 예시 질문 2개: 휴대폰은 한 줄에 1개씩 2줄, PC 는 한 줄에 2개. 버튼 폭은 질문 길이에 맞춤 */
   .examples { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; }
   @media (min-width: 761px) { .examples { flex-direction: row; flex-wrap: wrap; justify-content: center; } }   /* PC: 한 줄에 2개 */
@@ -200,10 +199,15 @@
     <p class="notice">일부 단어의 수어 동작만 준비되어 있습니다.</p>
     <form class="query" id="form">
       <input id="q" name="q" autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" placeholder="어떤 도움을 드릴까요?" aria-label="질문 또는 문장 입력">
-      <button id="go" type="button" aria-label="수어로 보기">
-        <svg class="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg>
-        <svg class="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
-      </button>
+      <div class="tools">
+        <canvas id="wave" aria-hidden="true"></canvas>
+        <button id="go" type="button" aria-label="수어로 보기">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg>
+        </button>
+        <button id="mic" type="button" aria-label="음성으로 질문하기" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8.6" y="2.4" width="6.8" height="12" rx="3.4" fill="currentColor"/><path d="M5.6 11.4a6.4 6.4 0 0 0 12.8 0M12 17.9v3.3M8.8 21.2h6.4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+        </button>
+      </div>
     </form>
     <div class="examples" id="examples"></div>
   </section>
@@ -298,11 +302,24 @@ const preloadPages = fetch(`${API}/pages`).then(r => r.ok ? r.json() : []).then(
   Promise.all(list.map(u => new Promise((res) => { const i = new Image(); i.onload = i.onerror = res; i.src = u; }))));
 const warmServer = fetch(`${API}/warmup`, { method: "POST" });
 const examplesReady = fetch(`${API}/examples`).then(r => r.ok ? r.json() : []);
+// 예시 질문의 답을 미리 받아 둠 → 예시를 골라 보내면 기다림 없이 바로 답 (보이는 예시는 로딩 중에, 새로 보이는 예시는 그때그때)
+const answers = new Map();
+function prefetchAnswer(q) {
+  if (!answers.has(q))
+    answers.set(q, fetch(`${API}/query`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: q, prefetch: true }),
+    }).then(r => r.ok ? r.json() : Promise.reject(new Error(r.status))).catch(e => { answers.delete(q); throw e; }));
+  return answers.get(q);
+}
+let answersDone;
+const answersReady = new Promise(r => { answersDone = r; });
 const bootAll = Promise.all([
   boot.add("avatar", avatarReady),
   boot.add("server", Promise.race([warmServer, new Promise(r => setTimeout(r, 15000))])),   // 서버 준비는 15초까지만 기다림
   boot.add("examples", examplesReady),
   boot.add("fonts", Promise.race([document.fonts ? document.fonts.ready : null, new Promise(r => setTimeout(r, 3000))])),  // 글꼴은 3초까지만 기다림
+  boot.add("answers", Promise.race([answersReady, new Promise(r => setTimeout(r, 20000))])),   // 예시 질문 답은 20초까지만 기다림
 ]);
 // 너무 오래 걸리면(느린 망) 60초 뒤에는 그냥 시작 (남은 준비는 뒤에서 계속)
 Promise.race([bootAll, new Promise(r => setTimeout(r, 60000))]).then(() => {
@@ -355,7 +372,8 @@ function renderExamples() {
   list.forEach(e => {
     const b = document.createElement("button");
     b.type = "button"; b.textContent = e.question;
-    b.onclick = () => { $("q").value = e.question; updateGo(); if (!touch) $("q").focus(); };   // 입력창에만 넣고, 화살표를 눌러야 넘어감 (휴대폰은 키보드 안 올림)
+    b.onclick = () => { $("q").value = e.question; if (!touch) $("q").focus(); };   // 입력창에만 넣고, 화살표를 눌러야 넘어감 (휴대폰은 키보드 안 올림)
+    if (answersDone === null) prefetchAnswer(e.question).catch(() => {});   // 로딩 뒤 새로 보이는 예시: 그때 미리 받아 둠
     $("examples").append(b);
   });
   // 보여줄 예시가 모자라도(모두 물어봄) 그 자리는 그대로 비워 둠 → 아래 아바타·결과가 위로 툭 올라가지 않게
@@ -369,19 +387,69 @@ function renderExamples() {
 $("form").onsubmit = (e) => { e.preventDefault(); run(); };   // 키보드 Enter: 늘 보내기
 
 // ---------- 음성 입력 ----------
-// 입력창이 비어 있으면 버튼이 마이크: 누르면 한국어로 듣고 말한 내용을 입력창에 넣음 (확인 뒤 화살표로 보냄)
-// 글자를 치거나 말한 내용이 들어가면 다시 화살표. 브라우저가 음성 인식을 못 하면 늘 화살표
+// 오른쪽 마이크를 누르면 한국어로 듣고 말한 내용을 입력창에 넣음 (확인 뒤 화살표로 보냄)
+// 듣는 동안 마이크는 둥근 검은 원에 흰 마이크, 왼쪽에 소리 파형이 오른쪽에서 왼쪽으로 흐름. 브라우저가 음성 인식을 못 하면 마이크 숨김
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let rec = null, listening = false;
 const PH = $("q").placeholder;
-let lastAsked = null;                            // 방금 보낸 질문: 입력창에 그대로 남아 있으면 마이크 (고치거나 예시를 고르면 화살표)
+$("mic").hidden = !SR;
 function updateGo() {
-  const v = $("q").value.trim();
-  const mic = !!SR && (listening || !v || v === lastAsked);
-  $("form").classList.toggle("mic", mic);
   $("form").classList.toggle("listening", listening);
-  $("go").setAttribute("aria-label", listening ? "듣기 멈추기" : mic ? "음성으로 질문하기" : "수어로 보기");
+  $("mic").setAttribute("aria-label", listening ? "듣기 멈추기" : "음성으로 질문하기");
+  $("mic").setAttribute("aria-pressed", String(listening));
 }
+// 파형: 마이크 소리 크기(PC) 또는 말소리 감지(휴대폰: 음성 인식과 마이크를 같이 열면 인식이 끊기는 기기가 있음)
+const wave = (() => {
+  const cv = $("wave"), N = 16, levels = new Array(N).fill(0);
+  let raf = 0, last = 0, stream = null, ctx = null, an = null, buf = null, speaking = false;
+  function level() {
+    if (an) {
+      an.getByteTimeDomainData(buf);
+      let sum = 0;
+      for (const v of buf) sum += ((v - 128) / 128) ** 2;
+      return Math.min(1, Math.sqrt(sum / buf.length) * 6);
+    }
+    return speaking ? 0.25 + Math.random() * 0.75 : Math.random() * 0.08;
+  }
+  function draw(t) {
+    raf = requestAnimationFrame(draw);
+    if (t - last < 70) return;                   // 70ms마다 한 칸씩 왼쪽으로
+    last = t;
+    levels.shift(); levels.push(level());
+    const dpr = devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+    if (cv.width !== w * dpr) { cv.width = w * dpr; cv.height = h * dpr; }
+    const g = cv.getContext("2d");
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, w, h);
+    g.fillStyle = getComputedStyle(cv).color;
+    const step = w / N;
+    levels.forEach((v, i) => {
+      const bh = Math.max(2.5, v * (h - 4));    // 조용하면 점, 소리가 나면 막대
+      const x = i * step + step / 2 - 1.25;
+      g.globalAlpha = v < 0.1 ? 0.45 : 0.9;
+      g.beginPath(); g.roundRect(x, (h - bh) / 2, 2.5, bh, 1.25); g.fill();
+    });
+  }
+  async function start() {
+    levels.fill(0); speaking = false;
+    cancelAnimationFrame(raf); raf = requestAnimationFrame(draw);
+    if (touch || !navigator.mediaDevices) return;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!listening) return stop();
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      an = ctx.createAnalyser(); an.fftSize = 512; buf = new Uint8Array(an.fftSize);
+      ctx.createMediaStreamSource(stream).connect(an);
+    } catch { an = null; }
+  }
+  function stop() {
+    cancelAnimationFrame(raf); raf = 0;
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    if (ctx) ctx.close().catch(() => {});
+    stream = ctx = an = null;
+  }
+  return { start, stop, speak: (v) => { speaking = v; } };
+})();
 function listen() {
   if (listening) { rec && rec.stop(); return; }
   rec = new SR();
@@ -389,6 +457,8 @@ function listen() {
   rec.onresult = (e) => {
     $("q").value = [...e.results].map((r) => r[0].transcript).join("").trim();
   };
+  rec.onspeechstart = () => wave.speak(true);
+  rec.onspeechend = () => wave.speak(false);
   rec.onerror = (e) => {
     const msg = e.error === "not-allowed" || e.error === "service-not-allowed" ? "마이크 사용을 허용해 주세요"
       : e.error === "no-speech" ? "말씀이 들리지 않았어요. 다시 눌러 주세요" : "";
@@ -396,15 +466,15 @@ function listen() {
     $("q").placeholder = msg;
     setTimeout(() => { $("q").placeholder = PH; }, 3000);
   };
-  rec.onend = () => { listening = false; updateGo(); };
+  rec.onend = () => { listening = false; wave.stop(); updateGo(); };
   try { rec.start(); } catch { return; }
   listening = true;
   $("q").value = "";
   updateGo();
+  wave.start();
 }
-$("go").onclick = () => { if ($("form").classList.contains("mic")) listen(); else run(); };
-$("q").addEventListener("input", updateGo);
-updateGo();
+$("mic").onclick = listen;
+$("go").onclick = () => { if (listening) rec && rec.stop(); run(); };
 
 async function run() {
   const q = $("q").value.trim();
@@ -412,17 +482,28 @@ async function run() {
   if (touch) $("q").blur();                     // 질문을 보내면 휴대폰 키보드 내림 (결과가 가려지지 않게)
   $("go").disabled = true;
   try {
-    // 서버가 질문인지(문서 검색) 문장인지(바로 번역) 판단 → data.mode
-    const res = await fetch(`${API}/query`, {
-      method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({text: q}),
-    });
-    if (res.status === 404 || res.status === 405)
-      throw new Error("서버가 예전 버전입니다. 터미널에서 Ctrl+C로 끄고 다시 실행하세요");
-    if (!res.ok) throw new Error(`서버 응답 ${res.status}`);
-    data = await res.json();
+    // 미리 받아 둔 답(예시 질문)이 있으면 바로 씀 (서버에는 물어봤다는 기록만)
+    let d = null;
+    if (answers.has(q)) {
+      try {
+        d = await answers.get(q);
+        fetch(`${API}/query`, { method: "POST", headers: {"Content-Type": "application/json"},
+                                body: JSON.stringify({text: q, seen: true}) }).catch(() => {});
+      } catch { d = null; }
+    }
+    if (!d) {
+      // 서버가 질문인지(문서 검색) 문장인지(바로 번역) 판단 → data.mode
+      const res = await fetch(`${API}/query`, {
+        method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({text: q}),
+      });
+      if (res.status === 404 || res.status === 405)
+        throw new Error("서버가 예전 버전입니다. 터미널에서 Ctrl+C로 끄고 다시 실행하세요");
+      if (!res.ok) throw new Error(`서버 응답 ${res.status}`);
+      d = await res.json();
+    }
+    data = d;
     asked.texts.push(q);                       // 한 질문(과 같은 주제)은 예시에서 빼기
-    lastAsked = q; updateGo();                 // 답변 화면에서도 마이크 (새로 치거나 예시를 고르면 화살표)
     if (data.topic) asked.topics.add(data.topic);
     renderExamples();
     showResults();
@@ -663,7 +744,10 @@ placeBoot();   // 예시 질문까지 그려진 첫 화면 기준으로 로딩 �
 examplesReady.then(list => {
   if (list.length) { POOL = shuffle(list); shown = []; renderExamples(); }
   placeBoot();
-}).catch(() => {});
+}).catch(() => {}).then(() => {
+  // 로딩 화면에서: 지금 보이는 예시 질문의 답을 미리 받아 둠
+  Promise.all(shown.map(e => prefetchAnswer(e.question).catch(() => {}))).then(() => { answersDone(); answersDone = null; });
+});
 </script>
 </body>
 </html>
