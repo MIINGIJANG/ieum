@@ -65,7 +65,7 @@
   form.query { position: relative; width: min(100%, 640px); }
   form.query input {
     width: 100%;
-    padding: 15px 104px 15px 20px;
+    padding: 15px 94px 15px 20px;
     border: 2px solid var(--ink);
     border-radius: 999px;
     background: var(--surface);
@@ -73,20 +73,20 @@
   }
   form.query input:focus, form.query input:focus-visible { outline: none; }
   /* 입력창 오른쪽: [음성 파형(듣는 동안)] [↓ 보내기] [마이크] */
-  /* 세 요소 모두 같은 크기(40px)의 원 칸에 들어 있는 것처럼: 칸 너비·간격 같게 */
-  form.query .tools { position: absolute; right: 7px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; gap: 6px; }
+  /* 세 요소 모두 배경 없음. 그림 사이 간격 = 마이크 그림과 입력창 오른쪽 테두리 사이 간격 (약 20px) */
+  form.query .tools { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; gap: 0; }
   form.query .tools button {
-    width: 40px; height: 40px; border: 0; border-radius: 50%;
+    width: 32px; height: 40px; border: 0; border-radius: 8px;
     background: transparent; color: var(--ink); cursor: pointer;
     display: grid; place-items: center; padding: 0;
   }
   form.query .tools button svg { width: 22px; height: 22px; }
   form.query #go:disabled { opacity: .4; cursor: wait; }
   form.query #mic[hidden] { display: none; }
-  form.query.listening #mic { background: var(--ink); color: var(--surface); }   /* 듣는 동안: 둥근 검은 원에 흰 마이크 */
-  form.query #wave { display: none; width: 40px; height: 40px; color: var(--ink); }   /* 마이크 원과 같은 너비 */
+  form.query.listening #mic { color: #f39a45; }   /* 듣는 동안: 배경 없이 마이크만 주황색 */
+  form.query #wave { display: none; width: 40px; height: 40px; margin-right: 10px; color: var(--ink); }
   form.query.listening #wave { display: block; }
-  form.query.listening input { padding-right: 150px; }
+  form.query.listening input { padding-right: 144px; }
   /* 예시 질문 2개: 휴대폰은 한 줄에 1개씩 2줄, PC 는 한 줄에 2개. 버튼 폭은 질문 길이에 맞춤 */
   .examples { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; }
   @media (min-width: 761px) { .examples { flex-direction: row; flex-wrap: wrap; justify-content: center; } }   /* PC: 한 줄에 2개 */
@@ -423,10 +423,10 @@ const wave = (() => {
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, w, h);
     g.fillStyle = getComputedStyle(cv).color;
-    const step = w / N;
+    const step = (w - 2.5) / (N - 1);            // 첫 막대는 왼쪽 끝, 마지막 막대는 오른쪽 끝
     levels.forEach((v, i) => {
       const bh = Math.max(2.5, v * 20);    // 조용하면 점, 소리가 나면 막대 (최대 높이는 아이콘 높이 정도)
-      const x = i * step + step / 2 - 1.25;
+      const x = i * step;
       g.globalAlpha = v < 0.1 ? 0.45 : 0.9;
       g.beginPath(); g.roundRect(x, (h - bh) / 2, 2.5, bh, 1.25); g.fill();
     });
