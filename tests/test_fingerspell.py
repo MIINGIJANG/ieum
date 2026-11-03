@@ -66,3 +66,45 @@ def test_missing_capture_replay(tmp_path):
     assert not log.top() and not log.top(subs=True) and len(calls) == 2
     log.replay(calls)                                # 실제로 물어봤을 때 기록
     assert log.top()[0]["gloss"] == "때2" and log.top(subs=True)[0]["gloss"] == "안전모"
+
+
+def test_missing_merge(tmp_path):
+    a = MissingLog(tmp_path / "a.json")
+    a.record(["때2"], ["문장 하나"])
+    other = {"missing": {"때2": {"count": 5, "last": "2026-11-01T00:00:00", "examples": ["문장 둘"]},
+                         "정화통": {"count": 2, "last": "2026-11-01T00:00:00", "examples": []}},
+             "substitutes": {"안전모": {"count": 1, "last": "", "examples": [], "used": ["머리0", "보호1"]}}}
+    v = a.version
+    a.merge(other)                                   # 예전 서버 기록 합치기: 횟수는 큰 쪽, 예시는 합침
+    top = {x["gloss"]: x for x in a.top()}
+    assert top["때2"]["count"] == 5 and set(top["때2"]["examples"]) == {"문장 하나", "문장 둘"}
+    assert top["정화통"]["count"] == 2 and a.top(subs=True)[0]["gloss"] == "안전모" and a.version > v
+
+
+def test_logsync_push_pull(tmp_path, monkeypatch):
+    import ksl.logsync as ls
+    store = {}
+
+    class FakeApi:
+        def __init__(self, token=None): pass
+        def create_repo(self, *a, **k): pass
+        def upload_file(self, path_or_fileobj, path_in_repo, **k): store[path_in_repo] = path_or_fileobj
+
+    def fake_download(repo, name, **k):
+        if name not in store:
+            raise FileNotFoundError
+        p = tmp_path / "dl.json"
+        p.write_bytes(store[name])
+        return str(p)
+
+    import huggingface_hub
+    monkeypatch.setattr(huggingface_hub, "HfApi", FakeApi)
+    monkeypatch.setattr(huggingface_hub, "hf_hub_download", fake_download)
+    monkeypatch.setenv("KSL_LOG_REPO", "me/logs")
+    a = MissingLog(tmp_path / "a.json")
+    s = ls.LogSync(a, token="t", interval=3600)
+    assert s.enabled and s.pull() == 0 and not s.push()        # 처음: 받을 것 없음, 바뀐 것 없으면 안 올림
+    a.record(["때2"], ["문장"])
+    assert s.push() and ls.FILE in store                        # 바뀌면 올림
+    b = MissingLog(tmp_path / "b.json")                          # 서버가 다시 켜짐 (파일 지워짐)
+    assert ls.LogSync(b, token="t").pull() == 1 and b.top()[0]["gloss"] == "때2"

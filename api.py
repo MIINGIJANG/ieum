@@ -19,6 +19,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from ksl.logsync import LogSync
 from ksl.pipeline import SafetySignPipeline
 
 
@@ -29,7 +30,9 @@ class UTF8JSON(JSONResponse):
 @asynccontextmanager
 async def lifespan(app):
     _warm_on_start()
+    sync.start()               # 수어 없는 단어 기록: 예전 서버의 기록 받기 + 10분마다 올리기 (ksl/logsync.py)
     yield
+    sync.stop()
 
 
 ROOT = Path(__file__).resolve().parent
@@ -62,6 +65,7 @@ pipe = SafetySignPipeline(
     os.environ.get("KSL_MOTION", "data/sign/motions"),
     os.environ.get("KSL_SENTENCES", "data/sign/demo_sentences.json"),
 )
+sync = LogSync(pipe.missing)
 
 
 # 번역 모델(torch)은 처음 문장을 번역할 때 불러옴 (서버 시작 빠르게).
@@ -251,12 +255,29 @@ def missing(n: int = 100):
     """수어 동작이 없어 회색(또는 지문자)으로 나온 단어: 많이 나온 순서 (ksl/missing.py). 다음에 추가할 수어 고르기용."""
     items = pipe.missing.top(n)
     return {"total_words": len(pipe.missing.data), "total_count": sum(v["count"] for v in pipe.missing.data.values()), "items": items,
-            "substitutes": pipe.missing.top(n, subs=True)}   # 대체 표현으로 보여준 단어 (data/sign/substitutes.csv, 검수 필요)
+            "substitutes": pipe.missing.top(n, subs=True),
+            "sync": sync.status}                                      # 기록 보관(HF 데이터셋) 상태   # 대체 표현으로 보여준 단어 (data/sign/substitutes.csv, 검수 필요)
 
 
 @app.post("/motion")
 def motion(req: Glosses):
     return pipe.motion_for(req.glosses, log=False) or {"fps": 30, "frames": [], "segments": []}
+
+
+_WCACHE = {}                   # 단어 하나 동작 (손 올리기 → 단어 → 손 내리기) 캐시
+
+
+@app.post("/motions")
+def motions(req: Glosses):
+    """단어마다 따로 만든 동작을 한 번에: 답이 나오면 화면이 미리 받아 둠 → 단어를 누르면 바로 다시 보기."""
+    out = {}
+    for g in dict.fromkeys(req.glosses[:40]):
+        if g not in _WCACHE:
+            if len(_WCACHE) >= 500:
+                _WCACHE.pop(next(iter(_WCACHE)), None)
+            _WCACHE[g] = pipe.motion_for([g], log=False) or {"fps": 30, "frames": [], "segments": []}
+        out[g] = _WCACHE[g]
+    return out
 
 
 # 웹 화면 (web/index.html, 3D 모델·라이브러리 포함). API 경로보다 뒤에 둬야 함
