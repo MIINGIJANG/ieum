@@ -138,8 +138,6 @@
   }
   ol.glosses li.nomo { background: #d9dcd6; border-color: #d9dcd6; color: var(--ink); }   /* 동작 없는 단어: 재생 안 함 */
   ol.glosses li.play { cursor: pointer; }   /* 동작 있는 단어: 누르면 그 단어만 다시 보기 */
-  ol.glosses li.fs { border-style: dashed; }   /* 지문자로 표현한 단어 */
-  ol.glosses li.sub { border-style: dashed; }  /* 대체 표현 (비슷한 뜻의 다른 수어) */
   ol.glosses li.fs::after { content: "지문자"; margin-left: 4px; font-size: 0.7em; opacity: 0.65; vertical-align: 0.15em; }
   ol.glosses li.play:hover { border-color: var(--ink); }
   ol.glosses li.active { background: var(--ink); color: #fff; border-color: var(--ink); }   /* 지금 표현 중 */
@@ -376,8 +374,10 @@ $("form").onsubmit = (e) => { e.preventDefault(); run(); };   // 키보드 Enter
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let rec = null, listening = false;
 const PH = $("q").placeholder;
+let lastAsked = null;                            // 방금 보낸 질문: 입력창에 그대로 남아 있으면 마이크 (고치거나 예시를 고르면 화살표)
 function updateGo() {
-  const mic = !!SR && (listening || !$("q").value.trim());
+  const v = $("q").value.trim();
+  const mic = !!SR && (listening || !v || v === lastAsked);
   $("form").classList.toggle("mic", mic);
   $("form").classList.toggle("listening", listening);
   $("go").setAttribute("aria-label", listening ? "듣기 멈추기" : mic ? "음성으로 질문하기" : "수어로 보기");
@@ -422,6 +422,7 @@ async function run() {
     if (!res.ok) throw new Error(`서버 응답 ${res.status}`);
     data = await res.json();
     asked.texts.push(q);                       // 한 질문(과 같은 주제)은 예시에서 빼기
+    lastAsked = q; updateGo();                 // 답변 화면에서도 마이크 (새로 치거나 예시를 고르면 화살표)
     if (data.topic) asked.topics.add(data.topic);
     renderExamples();
     showResults();
