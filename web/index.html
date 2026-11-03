@@ -128,7 +128,6 @@
   .controls label { font-size: 1rem; color: var(--muted); display: flex; gap: 6px; align-items: center; }
 
   /* 글로스 순서 */
-  .kp-note { margin: 0 0 6px; font-size: .82rem; color: var(--muted); text-align: center; }
   ol.glosses {
     list-style: none; margin: 0; padding: 0;
     display: flex; flex-wrap: wrap; gap: 6px; justify-content: center;
@@ -217,7 +216,6 @@
         <canvas id="av" aria-label="수어 아바타"></canvas>
         <span class="loading" id="loading"></span>
       </div>
-      <p class="kp-note" id="kpnote" hidden>답변의 핵심만 수어로 보여줘요</p>
       <ol class="glosses" id="glosses" aria-label="수어 순서"></ol>
       <div class="controls" id="controls">
         <button type="button" id="replay">다시 보기</button>
@@ -533,8 +531,6 @@ function render() {
   $("controls").hidden = false;
   motion = data.motion;
   const sents = data.sentences || [];
-  // 핵심 추출로 줄인 수어면 안내 (화면 답변 글은 전체)
-  $("kpnote").hidden = !sents.some(s => (s.method || "").startsWith("keypoints"));
 
   // 글로스 순서 (문장 사이 구분)
   items = [];
