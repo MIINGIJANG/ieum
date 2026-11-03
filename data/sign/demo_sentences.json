@@ -34,28 +34,31 @@
   "gloss": [
    "감전0",
    "위험1",
+   "보호1",
    "입다1"
   ],
-  "complete": false,
+  "complete": true,
   "folder": "04_감전보호구_일부단어"
  },
  {
   "korean": "보호구에 이상이 없는지 확인하세요.",
   "gloss": [
+   "보호1",
    "이상하다1",
    "없다1",
    "확인1"
   ],
-  "complete": false,
+  "complete": true,
   "folder": "05_보호구점검_일부단어"
  },
  {
   "korean": "보호구를 깨끗하게 관리하세요.",
   "gloss": [
+   "보호1",
    "깨끗하다1",
    "사용1"
   ],
-  "complete": false,
+  "complete": true,
   "folder": "06_보호장비_깨끗_일부단어"
  },
  {
