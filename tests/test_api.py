@@ -70,3 +70,8 @@ def test_motions_batch(client):
     assert set(r) == {"위험1", "없는단어"}                                  # 같은 단어는 한 번
     assert r["위험1"]["frames"] and r["위험1"]["segments"][0]["has_motion"]
     assert not r["없는단어"]["segments"][0]["has_motion"]
+
+
+def test_blocks_check(client):
+    r = client.get("/blocks_check").json()
+    assert r["total"] == len(r["rows"]) > 0 and all("problems" in x and "blocks" in x for x in r["rows"])

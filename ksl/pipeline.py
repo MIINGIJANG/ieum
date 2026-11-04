@@ -507,6 +507,9 @@ class SafetySignPipeline:
             from .keypoints import llm_sign_sentence
             hint = llm_sign_sentence(self, question, answer_text)
         kp = extract(self, question, answer_text, split_sentences(answer_text) or [answer_text], hint=hint)
+        if mode == "llm" and kp and kp.get("method") == "sign":
+            from .keypoints import llm_review                         # 블록 문장 점검 (규칙 + Claude 검수, 필요하면 고침)
+            kp = llm_review(self, question, answer_text, kp)
         if kp and kp["units"]:
             sents = [self._units_sentence(kp["units"], kp["text"], method="keypoints_" + kp["method"])]
         return {

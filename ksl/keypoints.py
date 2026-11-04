@@ -224,8 +224,8 @@ def check_blocks(units, sentence=None):
         probs.append("문장의 일부 말이 블록에 없음")
     if len(units) > HINT_MAX:
         probs.append(f"블록이 너무 많음({len(units)}개)")
-    if re.search(r"(있고|하고|되고)$", words[-2] if len(words) > 1 else "") and words[-1] in ("합니다",):
-        pass
+    if re.search(r"(위험|우려|가능성)이?\s*있고\b", joined + " "):
+        probs.append("조건이 '-고'로 이어짐 ('위험이 있고' → '위험이 있으면')")
     return probs
 
 
@@ -295,8 +295,11 @@ def llm_sign_sentence(pipe, question, answer_text):
                   "- 답변의 핵심(무엇을, 언제·어디서, 어떻게, 해야 하는지·하면 안 되는지)을 빠짐없이 담은 완성된 평서문 한 문장\n"
                   "- 질문에 대한 가장 중요한 한 가지만. 내용어(명사·동사·형용사) 3~6개. 조사·어미는 자연스럽게\n"
                   "- 어순: 언제·어디서 → 누가·무엇이 → 무엇을 → 어떻게 하다 → 해야/안 됨 (예: '작업 전에 보호구를 점검해야 합니다')\n"
-                  "- 쉼표(,)는 쓰지 말고 이어서 앞뒤 말이 끊기지 않게. 둘은 'A와 B', 셋 이상은 'A와 B 그리고 C' "
-                  "(예: '중성 세정제와 온수 그리고 부드러운 천으로 세척하고 헹궈야 합니다')\n"
+                  "- 쉼표(,)는 쓰지 말 것. 나열은 둘이면 'A와 B', 셋 이상이면 'A와 B 그리고 C' "
+                  "(예: '중성 세정제와 온수 그리고 부드러운 천으로 세척해야 합니다')\n"
+                  "- 조건·때는 반드시 '-면' 또는 '-ㄹ 때' (예: '추락할 위험이 있으면 안전대를 착용해야 합니다'). "
+                  "'-고'는 같은 무게의 동작을 나열할 때만 (예: '세척하고 헹궈야 합니다')\n"
+                  "- 문장은 '합니다'·'안 됩니다' 같은 끝맺음으로 끝낼 것\n"
                   "- 되도록 아래 '수어 단어' 목록의 말을 써 (뜻이 같으면 목록의 말로 바꿔도 됨). 목록에 없는 말은 꼭 필요한 것만\n"
                   "- 답변에 없는 내용은 더하지 말 것. 문장만 출력 (따옴표·설명 없이)\n\n"
                   f"[수어 단어]\n{', '.join(sign_vocab(pipe))}")
@@ -312,6 +315,41 @@ def llm_sign_sentence(pipe, question, answer_text):
         _SIGN_CACHE.clear()
     _SIGN_CACHE[key] = text or None
     return text or None
+
+
+REVIEW_SYSTEM = ("너는 청각장애인에게 보여줄 수어 단어 블록 문장을 검수한다. 블록을 순서대로 이어 읽었을 때 "
+                 "자연스러운 한국어 한 문장이고, 답변과 같은 뜻(특히 조건·부정·의무)인지 본다.")
+
+
+def llm_review(pipe, question, answer_text, kp):
+    """2단계 결과 점검: 규칙 검사(check_blocks) + Claude 검수. 고칠 점이 있으면 고친 문장으로 다시 만든 결과, 아니면 그대로."""
+    if not kp or kp.get("method") != "sign":
+        return kp
+    probs = check_blocks(kp["units"], kp["text"])
+    joined = " ".join(u["word"] for u in kp["units"] if u.get("word"))
+    key = ("review", answer_text.strip(), joined)
+    if key in _SIGN_CACHE:
+        fixed = _SIGN_CACHE[key]
+    else:
+        try:
+            from .rag import client
+            prompt = (f"[질문]\n{question}\n\n[답변]\n{answer_text}\n\n[블록 문장]\n{joined}\n\n"
+                      + (f"[자동 검사에서 찾은 문제]\n- " + "\n- ".join(probs) + "\n\n" if probs else "")
+                      + "블록 문장이 자연스럽고 완결된 한 문장이며 답변과 같은 뜻이면 'OK' 한 단어만.\n"
+                        "아니면 고친 문장 하나만 출력 (답변에 있는 말만, 내용어 3~6개, 쉼표 없이, 조건은 '-면', '합니다'로 끝맺음).")
+            r = client().messages.create(model=os.environ.get("LLM_MODEL", "claude-haiku-4-5-20251001"), max_tokens=150,
+                                         system=REVIEW_SYSTEM, messages=[{"role": "user", "content": prompt}])
+            text = "".join(b.text for b in r.content if b.type == "text").strip().split("\n")[0].strip(" \"'“”")
+            fixed = None if (r.stop_reason == "refusal" or not text or text.upper().startswith("OK")) else text
+        except Exception as e:
+            print("[이음] 수어 문장 검수 실패:", e)
+            fixed = None
+        _SIGN_CACHE[key] = fixed
+    if fixed:
+        r2 = from_hint(pipe, fixed, answer_text)
+        if r2 and len(check_blocks(r2["units"], r2["text"])) <= len(probs):
+            return dict(r2, reviewed=True)
+    return kp
 
 
 def extract(pipe, question, answer_text, sentences, hint=None):
