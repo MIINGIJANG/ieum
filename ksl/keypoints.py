@@ -157,7 +157,7 @@ def llm_based(pipe, question, answer_text):
     return {"text": key, "units": units[:MAX_UNITS], "method": "llm"}
 
 
-HINT_MAX = 10
+HINT_MAX = 12
 MARKS = ("must", "can", "cannot", "neg", "prohibit")
 MARK_EJ = re.compile(r"합니다|해야|됩니다|돼요|안\s|않|없|못|금지|수\s?있|마세요|마십시오|하세요|한다|된다|해요")
 
@@ -171,14 +171,19 @@ def _sentence_words(units, text, full=False):
     ej = [w.strip(".,!?·，") for w in raw]
     comma = [w.rstrip(".!?").endswith((",", "，")) for w in raw]
     owner = [None] * len(ej)
+    split = set()                                          # 한 어절을 두 블록이 나눠 가진 어절 ('정전기안전화는' → 정전기 / 안전화는)
     for n, u in enumerate(units):                          # 내용어 블록 → 그 말이 들어 있는 어절
         if (u.get("lemma") or "") in MARKS:
             continue
         w = re.sub(r"\s", "", u["word"]).strip(",，")
-        for i, e in enumerate(ej):
-            if owner[i] is None and w and (e.startswith(w) or w in e):
-                owner[i] = n
-                break
+        hit = next((i for i, e in enumerate(ej) if owner[i] is None and w and (e.startswith(w) or w in e)), None)
+        if hit is not None:
+            owner[hit] = n
+            continue
+        sh = next((i for i, e in enumerate(ej) if owner[i] is not None and w and w in e), None)
+        if sh is not None:
+            split.add(sh)
+            u["_ej"] = sh
     for n, u in enumerate(units):                          # 뜻을 바꾸는 말 블록 → 남은 어절 중 그 표현 ('합니다', '안 됩니다')
         if (u.get("lemma") or "") not in MARKS:
             continue
@@ -196,11 +201,14 @@ def _sentence_words(units, text, full=False):
     out = []
     for n, u in enumerate(units):
         idx = [i for i in range(len(ej)) if owner[i] == n]
+        sh = u.pop("_ej", None)
         if not idx:
-            out.append(u)
+            out.append(dict(u, word=u["word"].rstrip(",，") + (" 그리고" if sh is not None and comma[sh] else "")))
             continue
-        if full or (u.get("lemma") or "") in MARKS:
+        if (full or (u.get("lemma") or "") in MARKS) and idx[0] not in split:
             word = " ".join(ej[i] for i in idx)
+        elif full and idx[0] in split:                     # 나눠 가진 어절: 이 블록 몫만 + 뒤에 붙은 남은 어절
+            word = " ".join([u["word"].rstrip(",，")] + [ej[i] for i in idx[1:]])
         else:
             word = u["word"].rstrip(",，")
         if comma[idx[-1]]:
@@ -209,7 +217,7 @@ def _sentence_words(units, text, full=False):
     return out
 
 
-def check_blocks(units, sentence=None):
+def check_blocks(units, sentence=None, max_blocks=None):
     """블록만 이어 읽었을 때 완성된 문장인지 점검 → 문제 목록 (없으면 [])."""
     words = [u["word"] for u in units if u.get("word")]
     joined = " ".join(words)
@@ -218,18 +226,20 @@ def check_blocks(units, sentence=None):
         return ["블록 없음"]
     if not re.search(r"(다|요|니다|시오|세요)$", words[-1]):
         probs.append("문장 끝맺음(합니다·~다)이 없음")
-    if sentence and "," in sentence:
-        probs.append("쉼표로 끊김")
+    # 쉼표는 블록에 '그리고'를 붙여 이으므로 문제로 보지 않음
     if sentence and re.sub(r"[\s.,!?·]", "", joined.replace(" 그리고", "")) != re.sub(r"[\s.,!?·]", "", sentence):
         probs.append("문장의 일부 말이 블록에 없음")
-    if len(units) > HINT_MAX:
+    if len(units) > (max_blocks or HINT_MAX):
         probs.append(f"블록이 너무 많음({len(units)}개)")
     if re.search(r"(위험|우려|가능성)이?\s*있고\b", joined + " "):
         probs.append("조건이 '-고'로 이어짐 ('위험이 있고' → '위험이 있으면')")
     return probs
 
 
-def from_hint(pipe, hint, answer_text):
+REJECT = {}            # 수어용 문장 → 쓰지 않은 이유 (점검 페이지에 보여줌)
+
+
+def from_hint(pipe, hint, answer_text, max_blocks=None):
     """수어용 짧은 문장(준비된 답변의 'sign', Claude 답변의 '수어:' 줄)의 뜻 있는 말을 모두 순서대로.
     문장에 답변에 없는 말이 있으면 쓰지 않음 (지어낸 내용 방지). 수어 동작이 없는 말도 회색으로 남김 (뜻이 끊기지 않게)."""
     if not hint:
@@ -241,12 +251,14 @@ def from_hint(pipe, hint, answer_text):
         lem = u.get("lemma") or u["word"]
         if lem in ("neg", "prohibit", "cannot") or u["gloss"] in ("안하다", "금지", "못하다", "없다1"):
             if not neg_ok:
+                REJECT[hint] = "답변에 없는 부정·금지 표현"
                 return None                                             # 답변에 없는 부정·금지 → 뜻이 뒤집힘
             continue
         if not re.match(r"^[가-힣0-9]", lem) or lem in ("must", "can"):
             continue
         in_answer = re.sub(r"다$", "", lem)[:2] in flat or re.sub(r"\s", "", u["word"])[:2] in flat
         if not in_answer and not _has_sign(pipe, u["gloss"]):
+            REJECT[hint] = f"답변에 없는 말 '{u['word']}'"
             return None                                                 # 답변에도 수어 단어 목록에도 없는 말 → 지어낸 말로 보고 쓰지 않음
     picked, prev = [], None
     for u in units:
@@ -259,7 +271,8 @@ def from_hint(pipe, hint, answer_text):
     # 수어용 문장은 이미 수어 순서로 쓴 문장 → 블록도 그 문장 순서 그대로 (시간 말을 앞으로 옮기거나 강조어를 뒤로 보내지 않음)
     #  뜻을 바꾸는 말(해야 함·안 함)은 그 절의 끝 = 동사 바로 뒤
     picked.sort(key=lambda u: (u.get("ti", 0), (u.get("lemma") or "") in MARKS))
-    if len(picked) > HINT_MAX:                                         # 너무 긴 문장: 블록을 빼면 문장이 끊기므로 쓰지 않음
+    if max_blocks and len(picked) > max_blocks:                        # 너무 긴 문장: 블록을 빼면 문장이 끊기므로 쓰지 않음
+        REJECT[hint] = f"블록이 너무 많음({len(picked)}개)"
         return None
     picked = [dict(u, word=u["word"]) for u in picked]
     return {"text": hint, "units": _sentence_words(picked, hint, full=True), "method": "sign"} if len(picked) >= 2 else None
@@ -346,15 +359,14 @@ def llm_review(pipe, question, answer_text, kp):
             fixed = None
         _SIGN_CACHE[key] = fixed
     if fixed:
-        r2 = from_hint(pipe, fixed, answer_text)
+        r2 = from_hint(pipe, fixed, answer_text, HINT_MAX)
         if r2 and len(check_blocks(r2["units"], r2["text"])) <= len(probs):
             return dict(r2, reviewed=True)
     return kp
 
 
 def extract(pipe, question, answer_text, sentences, hint=None):
-    # 기본은 규칙 (결과가 늘 같고 시험 가능. Claude 답변 모드면 답변 글이 이미 짧고 정확해서 규칙으로 충분)
-    r = from_hint(pipe, hint, answer_text)                             # 수어용 짧은 문장이 있으면 그것 (사람·Claude 가 줄인 문장)
+    r = from_hint(pipe, hint, answer_text, HINT_MAX)                   # 수어용 짧은 문장이 있으면 그것 (사람·Claude 가 줄인 문장)
     if r:
         return r
     mode = os.environ.get("KSL_KEYPOINTS", "rule")                     # rule | llm
@@ -362,4 +374,15 @@ def extract(pipe, question, answer_text, sentences, hint=None):
         r = llm_based(pipe, question, answer_text)
         if r:
             return r
+    # 없거나 쓸 수 없으면: 단어를 골라내지 않고, 답변 중 질문에 가장 맞는 문장을 통째로 (블록만 읽어도 늘 완성된 문장)
+    asks_time = re.search(r"언제|몇|얼마|기간|시간|주기|마다", question) is not None
+    score = lambda t: _overlap(question, t) + (0.3 if asks_time and re.search(r"\d", t) else 0.0)
+    #  끝맺음이 있는 정상 문장만 (Claude 답변). 문서 원문 조각(표·목록·'~것')은 통째로 쓰면 더 어지러워서 핵심 단어로
+    sents = [x.strip() for x in sentences if re.search(r"(다|요)\.?$", x.strip()) and not re.search(r"[()<>:]", x)]
+    if sents:
+        best = max(sents, key=score)
+        pick = best if score(best) > score(sents[0]) + 0.25 else sents[0]   # 보통 첫 문장이 바로 답
+        r = from_hint(pipe, pick, answer_text, 16)
+        if r and not check_blocks(r["units"], r["text"], 16):
+            return dict(r, method="sentence")
     return rule_based(pipe, question, answer_text, sentences)

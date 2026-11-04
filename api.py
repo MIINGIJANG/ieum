@@ -263,7 +263,7 @@ def blocks_check():
         method = sents[0].get("method") if sents else None
         hint = sents[0]["korean"] if method == "keypoints_sign" else None
         rows.append({"question": e["question"], "answer": out.get("answer_text", ""), "answer_mode": out.get("answer_mode"),
-                     "blocks": [u["word"] for u in units], "method": method,
+                     "blocks": [u["word"] for u in units], "method": method, "debug": out.get("sign_debug"),
                      "problems": check_blocks(units, hint) if units else ["블록 없음"]})
     return {"rows": rows, "ok": sum(not r["problems"] for r in rows), "total": len(rows)}
 
