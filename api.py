@@ -250,6 +250,24 @@ def examples():
     return _EXAMPLES
 
 
+@app.get("/blocks_check")
+def blocks_check():
+    """수어 블록 점검: 예시 질문마다 답변·블록을 이어 읽은 문장·점검 결과 (web/blocks.html 이 표로 보여줌).
+    답은 캐시(서버가 켜질 때 미리 만든 예시 답)를 쓰므로 보통 비용 없음. 수어 없는 단어 기록은 하지 않음."""
+    from ksl.keypoints import check_blocks
+    rows = []
+    for e in examples():
+        out = cached_query(e["question"], log=False)
+        sents = out.get("sentences") or []
+        units = [{"word": w, "gloss": g} for s_ in sents for g, w in zip(s_["gloss"], s_.get("words") or s_["gloss"]) if w]
+        method = sents[0].get("method") if sents else None
+        hint = sents[0]["korean"] if method == "keypoints_sign" else None
+        rows.append({"question": e["question"], "answer": out.get("answer_text", ""), "answer_mode": out.get("answer_mode"),
+                     "blocks": [u["word"] for u in units], "method": method,
+                     "problems": check_blocks(units, hint) if units else ["블록 없음"]})
+    return {"rows": rows, "ok": sum(not r["problems"] for r in rows), "total": len(rows)}
+
+
 @app.get("/missing")
 def missing(n: int = 100):
     """수어 동작이 없어 회색(또는 지문자)으로 나온 단어: 많이 나온 순서 (ksl/missing.py). 다음에 추가할 수어 고르기용."""

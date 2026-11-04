@@ -105,19 +105,31 @@ def test_sign_hint_from_claude_and_answers(pipe, monkeypatch):
 
     def create(**kw):
         calls.append(kw)
-        out = "중성 세정제와 온수로 세척하고 헹군 후 건조해야 합니다." if kw.get("system") == keypoints.SIGN_SYSTEM else answer
+        out = {keypoints.SIGN_SYSTEM: "중성 세정제와 온수로 세척하고 헹군 후 건조해야 합니다.",
+               keypoints.REVIEW_SYSTEM: "OK"}.get(kw.get("system"), answer)
         return types.SimpleNamespace(stop_reason="end_turn", content=[types.SimpleNamespace(type="text", text=out)])
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
     monkeypatch.setattr(rag, "_CLIENT", types.SimpleNamespace(messages=types.SimpleNamespace(create=create)))
     rag._LLM_CACHE.clear()
     keypoints._SIGN_CACHE.clear()
     q = pipe.query("보호구 세척은 어떻게 해요?")
-    assert q["answer_mode"] == "llm" and q["answer_text"] == answer and len(calls) == 2
+    assert q["answer_mode"] == "llm" and q["answer_text"] == answer and len(calls) == 3   # 답변 → 수어 문장 → 검수
     assert answer in calls[1]["messages"][0]["content"] and "수어 단어" in calls[1]["messages"][0]["content"]
     g = q["sentences"][0]
     assert g["method"] == "keypoints_sign" and g["korean"].startswith("중성 세정제")
     assert [w for w in g["words"] if w][-1] == "합니다"
     rag._LLM_CACHE.clear()
+    keypoints._SIGN_CACHE.clear()
+
+    # 검수: 블록 문장이 어색하면('위험이 있고') 고친 문장으로
+    ans2 = "높이 2미터 이상인 곳에서 추락할 위험이 있으면 안전대를 착용해야 합니다."
+    bad = keypoints.from_hint(pipe, "높이 2미터 이상인 곳에서 추락할 위험이 있고 안전대를 착용해야 합니다.", ans2)
+    assert any("조건" in p for p in keypoints.check_blocks(bad["units"], bad["text"]))
+    monkeypatch.setattr(rag, "_CLIENT", types.SimpleNamespace(messages=types.SimpleNamespace(create=lambda **kw: types.SimpleNamespace(
+        stop_reason="end_turn", content=[types.SimpleNamespace(type="text", text="추락할 위험이 있으면 안전대를 착용해야 합니다.")]))))
+    fixed = keypoints.llm_review(pipe, "높은 곳에서는?", ans2, bad)
+    assert fixed.get("reviewed") and "있으면" in [u["word"] for u in fixed["units"]]
+    assert not keypoints.check_blocks(fixed["units"], fixed["text"])
     keypoints._SIGN_CACHE.clear()
 
     # 준비된 질문: 사람이 줄여 둔 문장

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>수어 블록 점검</title>
+<style>
+  :root { --bg: #f6f7f9; --card: #fff; --ink: #1d2330; --sub: #5d6676; --line: #e3e6eb; --bad: #b4471d; --good: #2f7d4f; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #14171c; --card: #1d2128; --ink: #e8ebf0; --sub: #9aa3b2; --line: #2c323c; --bad: #f08a5d; --good: #6fcf97; } }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Apple SD Gothic Neo", sans-serif; }
+  main { max-width: 1000px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  p.sub { color: var(--sub); margin: 0 0 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+  .q { font-weight: 700; }
+  .ans { color: var(--sub); font-size: 13px; margin: 4px 0 8px; }
+  .blocks { display: flex; flex-wrap: wrap; gap: 6px; }
+  .blocks span { border: 1px solid var(--line); border-radius: 8px; padding: 3px 9px; }
+  .st { margin-top: 8px; font-size: 13px; }
+  .st.ok { color: var(--good); } .st.bad { color: var(--bad); }
+  .meta { color: var(--sub); font-size: 12px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>수어 블록 점검</h1>
+  <p class="sub">예시 질문마다 수어 블록을 이어 읽었을 때 완성된 문장인지 자동으로 점검합니다 (끝맺음·쉼표·빠진 말·조건 표현·블록 수).</p>
+  <p class="sub" id="sum">불러오는 중…</p>
+  <div id="out"></div>
+</main>
+<script>
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const how = { keypoints_sign: "수어용 문장", keypoints_rule: "핵심 단어(예비 방식)", keypoints_llm: "Claude 핵심 단어" };
+fetch("blocks_check").then(r => r.json()).then(d => {
+  document.getElementById("sum").textContent = `${d.total}개 중 ${d.ok}개 통과`;
+  document.getElementById("out").innerHTML = d.rows.map(r => `<div class="card">
+    <div class="q">${esc(r.question)}</div>
+    <div class="ans">${esc(r.answer)}</div>
+    <div class="blocks">${r.blocks.map(b => `<span>${esc(b)}</span>`).join("")}</div>
+    <div class="st ${r.problems.length ? "bad" : "ok"}">${r.problems.length ? "⚠️ " + r.problems.map(esc).join(", ") : "✅ 완성된 문장"}</div>
+    <div class="meta">답변: ${esc(r.answer_mode || "-")} · 블록: ${esc(how[r.method] || r.method || "-")}</div>
+  </div>`).join("");
+}).catch(() => { document.getElementById("sum").textContent = "불러오지 못했어요."; });
+</script>
+</body>
+</html>

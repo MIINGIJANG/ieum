@@ -65,6 +65,16 @@ def main():
         lines += ["", "**답하면 안 되는데 답한 입력:** " + ", ".join(leaked)]
     if missed:
         lines += ["", "**답하지 못한 문서 안 질문:** " + ", ".join(missed)]
+    # 수어 블록 점검표: 예시 질문마다 블록을 이어 읽은 문장과 문제 (실패로 치지 않고 보기만)
+    from ksl.keypoints import check_blocks
+    lines += ["", "## 수어 블록 점검표 (예시 질문, Claude 없이 — 사이트는 Claude 2단계 문장이라 다를 수 있음)", "", "| 질문 | 블록을 이어 읽은 문장 | 점검 |", "|---|---|---|"]
+    for q in json.loads((ROOT / "data/kosha/example_questions.json").read_text(encoding="utf-8")):
+        out = pipe.query(q)
+        sents = out.get("sentences") or []
+        units = [{"word": w, "gloss": g} for s_ in sents for g, w in zip(s_["gloss"], s_.get("words") or s_["gloss"]) if w]
+        hint = sents[0]["korean"] if sents and sents[0].get("method") == "keypoints_sign" else None
+        probs = check_blocks(units, hint) if units else ["블록 없음"]
+        lines.append(f"| {q} | {' / '.join(u['word'] for u in units)} | {'✅' if not probs else '⚠️ ' + ', '.join(probs)} |")
     text = "\n".join(lines)
     print(text)
     if os.environ.get("GITHUB_STEP_SUMMARY"):

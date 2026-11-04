@@ -162,64 +162,71 @@ MARKS = ("must", "can", "cannot", "neg", "prohibit")
 MARK_EJ = re.compile(r"합니다|해야|됩니다|돼요|안\s|않|없|못|금지|수\s?있|마세요|마십시오|하세요|한다|된다|해요")
 
 
-def _sentence_words(units, text):
+def _sentence_words(units, text, full=False):
     """블록 글자를 문장에 쓰인 어절 그대로: '건조시켜야 / 합니다' (블록만 순서대로 읽어도 문장이 되게).
-    뜻을 바꾸는 말(해야 함·안 함 등)은 문장에서 다른 블록이 쓰지 않은 그 표현 어절('합니다', '안 됩니다')로."""
+    - 뜻을 바꾸는 말(해야 함·안 함 등)은 문장에서 다른 블록이 쓰지 않은 그 표현 어절('합니다', '안 됩니다')로
+    - 쉼표로 끝나는 어절은 블록에 '그리고'
+    - full: 수어용 문장이면 블록이 차지하지 않은 어절(동작 없는 군말 등)도 앞 블록에 붙임 → 블록을 이어 읽으면 문장 그대로"""
     raw = text.split()
-    ej = [w.strip(".,!?·") for w in raw]
-    comma = [w.rstrip(".!?").endswith((",", "，")) for w in raw]      # 쉼표로 끝나는 어절 → 블록에 '그리고' (문장이 이어지게)
-    used, at = set(), {}
-    for n, u in enumerate(units):
+    ej = [w.strip(".,!?·，") for w in raw]
+    comma = [w.rstrip(".!?").endswith((",", "，")) for w in raw]
+    owner = [None] * len(ej)
+    for n, u in enumerate(units):                          # 내용어 블록 → 그 말이 들어 있는 어절
         if (u.get("lemma") or "") in MARKS:
             continue
         w = re.sub(r"\s", "", u["word"]).strip(",，")
         for i, e in enumerate(ej):
-            if i not in used and w and (e.startswith(w) or w in e):
-                used.add(i)
-                at[n] = i
+            if owner[i] is None and w and (e.startswith(w) or w in e):
+                owner[i] = n
                 break
-    groups, cur = [], []                                   # 다른 블록이 쓰지 않은 어절 묶음 (문장 순서)
-    for i, e in enumerate(ej):
-        if i in used or not e:
-            if cur:
-                groups.append(cur)
-            cur = []
-        else:
-            cur.append(e)
-    if cur:
-        groups.append(cur)
-    picks = []                                             # 묶음 안에서 그 표현 어절만 ('안 됩니다', '수 있습니다', '합니다')
-    for g in groups:
-        txt = " ".join(g) + " "
-        m = MARK_EJ.search(txt)
-        if not m:
+    for n, u in enumerate(units):                          # 뜻을 바꾸는 말 블록 → 남은 어절 중 그 표현 ('합니다', '안 됩니다')
+        if (u.get("lemma") or "") not in MARKS:
             continue
-        pos, k0 = 0, 0
-        for k, e in enumerate(g):                         # 표현이 시작하는 어절
-            if pos + len(e) >= m.start():
-                k0 = k
+        for i, e in enumerate(ej):
+            if owner[i] is None and MARK_EJ.search(e + " " + (ej[i + 1] if i + 1 < len(ej) else "") + " "):
+                owner[i] = n
+                if len(e) <= 1 and i + 1 < len(ej) and owner[i + 1] is None:   # '안 / 됩니다' 처럼 한 글자면 다음 어절까지
+                    owner[i + 1] = n
                 break
-            pos += len(e) + 1
-        end = m.end()
-        pos, k1 = 0, k0
-        for k, e in enumerate(g):                         # 표현이 끝나는 어절 (최대 2어절)
-            if pos < end:
-                k1 = k
-            pos += len(e) + 1
-        if len(g[k0]) <= 1 and k0 + 1 < len(g):          # '안 / 됩니다', '못 / 합니다' 처럼 한 글자면 다음 어절까지
-            k1 = k0 + 1
-        picks.append(" ".join(g[k0:min(k1, k0 + 1) + 1]))
-    groups = picks
+    if full:                                               # 남은 어절은 앞 블록에 (처음이면 뒤 블록에)
+        for i in range(len(ej)):
+            if owner[i] is None and ej[i]:
+                prev = next((owner[j] for j in range(i - 1, -1, -1) if owner[j] is not None), None)
+                owner[i] = prev if prev is not None else next((owner[j] for j in range(i + 1, len(ej)) if owner[j] is not None), None)
     out = []
     for n, u in enumerate(units):
-        if (u.get("lemma") or "") in MARKS and groups:
-            u = dict(u, word=groups.pop(0))
-        elif n in at and comma[at[n]]:
-            last = max((m for m, i in at.items() if i == at[n]), default=n)   # 그 어절의 마지막 블록에만
-            if n == last:
-                u = dict(u, word=u["word"].rstrip(",，") + " 그리고")
-        out.append(u)
+        idx = [i for i in range(len(ej)) if owner[i] == n]
+        if not idx:
+            out.append(u)
+            continue
+        if full or (u.get("lemma") or "") in MARKS:
+            word = " ".join(ej[i] for i in idx)
+        else:
+            word = u["word"].rstrip(",，")
+        if comma[idx[-1]]:
+            word += " 그리고"
+        out.append(dict(u, word=word))
     return out
+
+
+def check_blocks(units, sentence=None):
+    """블록만 이어 읽었을 때 완성된 문장인지 점검 → 문제 목록 (없으면 [])."""
+    words = [u["word"] for u in units if u.get("word")]
+    joined = " ".join(words)
+    probs = []
+    if not words:
+        return ["블록 없음"]
+    if not re.search(r"(다|요|니다|시오|세요)$", words[-1]):
+        probs.append("문장 끝맺음(합니다·~다)이 없음")
+    if sentence and "," in sentence:
+        probs.append("쉼표로 끊김")
+    if sentence and re.sub(r"[\s.,!?·]", "", joined.replace(" 그리고", "")) != re.sub(r"[\s.,!?·]", "", sentence):
+        probs.append("문장의 일부 말이 블록에 없음")
+    if len(units) > HINT_MAX:
+        probs.append(f"블록이 너무 많음({len(units)}개)")
+    if re.search(r"(위험|우려|가능성)이?\s*있고\b", joined + " "):
+        probs.append("조건이 '-고'로 이어짐 ('위험이 있고' → '위험이 있으면')")
+    return probs
 
 
 def from_hint(pipe, hint, answer_text):
@@ -255,7 +262,7 @@ def from_hint(pipe, hint, answer_text):
     if len(picked) > HINT_MAX:                                         # 너무 긴 문장: 블록을 빼면 문장이 끊기므로 쓰지 않음
         return None
     picked = [dict(u, word=u["word"]) for u in picked]
-    return {"text": hint, "units": _sentence_words(picked, hint), "method": "sign"} if len(picked) >= 2 else None
+    return {"text": hint, "units": _sentence_words(picked, hint, full=True), "method": "sign"} if len(picked) >= 2 else None
 
 
 SIGN_SYSTEM = ("너는 산업안전 안내를 청각장애인에게 한국수어로 전하기 위해, 답변을 수어로 옮길 짧은 한국어 문장 하나로 바꾼다. "
@@ -288,8 +295,11 @@ def llm_sign_sentence(pipe, question, answer_text):
                   "- 답변의 핵심(무엇을, 언제·어디서, 어떻게, 해야 하는지·하면 안 되는지)을 빠짐없이 담은 완성된 평서문 한 문장\n"
                   "- 질문에 대한 가장 중요한 한 가지만. 내용어(명사·동사·형용사) 3~6개. 조사·어미는 자연스럽게\n"
                   "- 어순: 언제·어디서 → 누가·무엇이 → 무엇을 → 어떻게 하다 → 해야/안 됨 (예: '작업 전에 보호구를 점검해야 합니다')\n"
-                  "- 쉼표(,)는 쓰지 말고 이어서 앞뒤 말이 끊기지 않게. 둘은 'A와 B', 셋 이상은 'A와 B 그리고 C' "
-                  "(예: '중성 세정제와 온수 그리고 부드러운 천으로 세척하고 헹궈야 합니다')\n"
+                  "- 쉼표(,)는 쓰지 말 것. 나열은 둘이면 'A와 B', 셋 이상이면 'A와 B 그리고 C' "
+                  "(예: '중성 세정제와 온수 그리고 부드러운 천으로 세척해야 합니다')\n"
+                  "- 조건·때는 반드시 '-면' 또는 '-ㄹ 때' (예: '추락할 위험이 있으면 안전대를 착용해야 합니다'). "
+                  "'-고'는 같은 무게의 동작을 나열할 때만 (예: '세척하고 헹궈야 합니다')\n"
+                  "- 문장은 '합니다'·'안 됩니다' 같은 끝맺음으로 끝낼 것\n"
                   "- 되도록 아래 '수어 단어' 목록의 말을 써 (뜻이 같으면 목록의 말로 바꿔도 됨). 목록에 없는 말은 꼭 필요한 것만\n"
                   "- 답변에 없는 내용은 더하지 말 것. 문장만 출력 (따옴표·설명 없이)\n\n"
                   f"[수어 단어]\n{', '.join(sign_vocab(pipe))}")
@@ -305,6 +315,41 @@ def llm_sign_sentence(pipe, question, answer_text):
         _SIGN_CACHE.clear()
     _SIGN_CACHE[key] = text or None
     return text or None
+
+
+REVIEW_SYSTEM = ("너는 청각장애인에게 보여줄 수어 단어 블록 문장을 검수한다. 블록을 순서대로 이어 읽었을 때 "
+                 "자연스러운 한국어 한 문장이고, 답변과 같은 뜻(특히 조건·부정·의무)인지 본다.")
+
+
+def llm_review(pipe, question, answer_text, kp):
+    """2단계 결과 점검: 규칙 검사(check_blocks) + Claude 검수. 고칠 점이 있으면 고친 문장으로 다시 만든 결과, 아니면 그대로."""
+    if not kp or kp.get("method") != "sign":
+        return kp
+    probs = check_blocks(kp["units"], kp["text"])
+    joined = " ".join(u["word"] for u in kp["units"] if u.get("word"))
+    key = ("review", answer_text.strip(), joined)
+    if key in _SIGN_CACHE:
+        fixed = _SIGN_CACHE[key]
+    else:
+        try:
+            from .rag import client
+            prompt = (f"[질문]\n{question}\n\n[답변]\n{answer_text}\n\n[블록 문장]\n{joined}\n\n"
+                      + (f"[자동 검사에서 찾은 문제]\n- " + "\n- ".join(probs) + "\n\n" if probs else "")
+                      + "블록 문장이 자연스럽고 완결된 한 문장이며 답변과 같은 뜻이면 'OK' 한 단어만.\n"
+                        "아니면 고친 문장 하나만 출력 (답변에 있는 말만, 내용어 3~6개, 쉼표 없이, 조건은 '-면', '합니다'로 끝맺음).")
+            r = client().messages.create(model=os.environ.get("LLM_MODEL", "claude-haiku-4-5-20251001"), max_tokens=150,
+                                         system=REVIEW_SYSTEM, messages=[{"role": "user", "content": prompt}])
+            text = "".join(b.text for b in r.content if b.type == "text").strip().split("\n")[0].strip(" \"'“”")
+            fixed = None if (r.stop_reason == "refusal" or not text or text.upper().startswith("OK")) else text
+        except Exception as e:
+            print("[이음] 수어 문장 검수 실패:", e)
+            fixed = None
+        _SIGN_CACHE[key] = fixed
+    if fixed:
+        r2 = from_hint(pipe, fixed, answer_text)
+        if r2 and len(check_blocks(r2["units"], r2["text"])) <= len(probs):
+            return dict(r2, reviewed=True)
+    return kp
 
 
 def extract(pipe, question, answer_text, sentences, hint=None):
