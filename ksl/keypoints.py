@@ -165,15 +165,18 @@ MARK_EJ = re.compile(r"합니다|해야|됩니다|돼요|안\s|않|없|못|금�
 def _sentence_words(units, text):
     """블록 글자를 문장에 쓰인 어절 그대로: '건조시켜야 / 합니다' (블록만 순서대로 읽어도 문장이 되게).
     뜻을 바꾸는 말(해야 함·안 함 등)은 문장에서 다른 블록이 쓰지 않은 그 표현 어절('합니다', '안 됩니다')로."""
-    ej = [w.strip(".,!?·") for w in text.split()]
-    used = set()
-    for u in units:
+    raw = text.split()
+    ej = [w.strip(".,!?·") for w in raw]
+    comma = [w.rstrip(".!?").endswith((",", "，")) for w in raw]      # 쉼표로 끝나는 어절 → 블록에 '그리고' (문장이 이어지게)
+    used, at = set(), {}
+    for n, u in enumerate(units):
         if (u.get("lemma") or "") in MARKS:
             continue
-        w = re.sub(r"\s", "", u["word"])
+        w = re.sub(r"\s", "", u["word"]).strip(",，")
         for i, e in enumerate(ej):
             if i not in used and w and (e.startswith(w) or w in e):
                 used.add(i)
+                at[n] = i
                 break
     groups, cur = [], []                                   # 다른 블록이 쓰지 않은 어절 묶음 (문장 순서)
     for i, e in enumerate(ej):
@@ -208,9 +211,13 @@ def _sentence_words(units, text):
         picks.append(" ".join(g[k0:min(k1, k0 + 1) + 1]))
     groups = picks
     out = []
-    for u in units:
+    for n, u in enumerate(units):
         if (u.get("lemma") or "") in MARKS and groups:
             u = dict(u, word=groups.pop(0))
+        elif n in at and comma[at[n]]:
+            last = max((m for m, i in at.items() if i == at[n]), default=n)   # 그 어절의 마지막 블록에만
+            if n == last:
+                u = dict(u, word=u["word"].rstrip(",，") + " 그리고")
         out.append(u)
     return out
 
@@ -281,6 +288,8 @@ def llm_sign_sentence(pipe, question, answer_text):
                   "- 답변의 핵심(무엇을, 언제·어디서, 어떻게, 해야 하는지·하면 안 되는지)을 빠짐없이 담은 완성된 평서문 한 문장\n"
                   "- 질문에 대한 가장 중요한 한 가지만. 내용어(명사·동사·형용사) 3~6개. 조사·어미는 자연스럽게\n"
                   "- 어순: 언제·어디서 → 누가·무엇이 → 무엇을 → 어떻게 하다 → 해야/안 됨 (예: '작업 전에 보호구를 점검해야 합니다')\n"
+                  "- 쉼표(,)는 쓰지 말고 '와/과', '-고', '그리고'로 이어서 앞뒤 말이 끊기지 않게 "
+                  "(예: '세정제와 온수로 그리고 부드러운 천으로 세척하고 헹궈야 합니다')\n"
                   "- 되도록 아래 '수어 단어' 목록의 말을 써 (뜻이 같으면 목록의 말로 바꿔도 됨). 목록에 없는 말은 꼭 필요한 것만\n"
                   "- 답변에 없는 내용은 더하지 말 것. 문장만 출력 (따옴표·설명 없이)\n\n"
                   f"[수어 단어]\n{', '.join(sign_vocab(pipe))}")

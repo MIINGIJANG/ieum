@@ -96,6 +96,8 @@ def test_sign_hint_from_claude_and_answers(pipe, monkeypatch):
     ws = [u["word"] for u in keypoints.from_hint(pipe, "보호구는 수시로 점검해서 이상이 있으면 바꿔야 합니다.",
                                                  "보호구는 수시로 점검해서 이상이 있으면 바꿔야 합니다.")["units"]]
     assert "있으면" in ws and ws[-2:] == ["바꿔야", "합니다"]                       # 수어가 있는 '있다'는 빼지 않음
+    cw = [u["word"] for u in keypoints.from_hint(pipe, "중성 세정제와 온수, 부드러운 천으로 세척해야 합니다.", answer)["units"]]
+    assert "온수 그리고" in cw and "부드러운" in cw                                  # 쉼표 → '그리고' (문장이 이어지게)
     assert keypoints.from_hint(pipe, "보호구를 씻고 건조시켜야 합니다.", answer)["method"] == "sign"   # 수어 단어 목록의 같은 뜻 말(씻다)은 됨
 
     # 2단계: ① Claude 가 근거로 답변 → ② 그 답변으로 수어용 짧은 문장 (가짜 응답)
