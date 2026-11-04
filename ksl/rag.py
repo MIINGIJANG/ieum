@@ -208,6 +208,15 @@ _LLM_CACHE = {}               # (질문, 검색 결과) → Claude 답변
 _CLIENT = None                # Anthropic SDK 클라이언트 (연결 재사용)
 
 
+def client():
+    """Anthropic SDK 클라이언트 (연결 재사용, 답변 만들기·수어 문장 만들기가 함께 씀)."""
+    global _CLIENT
+    if _CLIENT is None:
+        import anthropic
+        _CLIENT = anthropic.Anthropic(timeout=30.0, max_retries=2)
+    return _CLIENT
+
+
 class TfidfRetriever:
     kind = "tfidf"
 
@@ -362,12 +371,8 @@ class SafetyRAG:
         key = (query.strip(), tuple((h["page"], h["text"][:40]) for h in hits), n)
         if key in _LLM_CACHE:                                   # 같은 질문은 다시 부르지 않음 (바로 답 + 비용 0)
             return list(_LLM_CACHE[key])
-        global _CLIENT
-        if _CLIENT is None:
-            import anthropic
-            # 연결 재사용 → 질문마다 접속하는 시간 절약. 429·5xx·연결 오류는 SDK 가 2번까지 다시 시도
-            _CLIENT = anthropic.Anthropic(timeout=30.0, max_retries=2)
-        r = _CLIENT.messages.create(
+        # 연결 재사용 → 질문마다 접속하는 시간 절약. 429·5xx·연결 오류는 SDK 가 2번까지 다시 시도
+        r = client().messages.create(
             model=os.environ.get("LLM_MODEL", "claude-haiku-4-5-20251001"),
             max_tokens=300,
             messages=[{"role": "user", "content": prompt}],
