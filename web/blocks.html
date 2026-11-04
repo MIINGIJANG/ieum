@@ -30,7 +30,7 @@
 </main>
 <script>
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const how = { keypoints_sign: "수어용 문장", keypoints_rule: "핵심 단어(예비 방식)", keypoints_llm: "Claude 핵심 단어" };
+const how = { keypoints_sign: "수어용 문장", keypoints_sentence: "답변 문장 그대로(수어용 문장을 못 씀)", keypoints_rule: "핵심 단어(예비 방식)", keypoints_llm: "Claude 핵심 단어" };
 fetch("blocks_check").then(r => r.json()).then(d => {
   document.getElementById("sum").textContent = `${d.total}개 중 ${d.ok}개 통과`;
   document.getElementById("out").innerHTML = d.rows.map(r => `<div class="card">
@@ -38,7 +38,8 @@ fetch("blocks_check").then(r => r.json()).then(d => {
     <div class="ans">${esc(r.answer)}</div>
     <div class="blocks">${r.blocks.map(b => `<span>${esc(b)}</span>`).join("")}</div>
     <div class="st ${r.problems.length ? "bad" : "ok"}">${r.problems.length ? "⚠️ " + r.problems.map(esc).join(", ") : "✅ 완성된 문장"}</div>
-    <div class="meta">답변: ${esc(r.answer_mode || "-")} · 블록: ${esc(how[r.method] || r.method || "-")}</div>
+    <div class="meta">답변: ${esc(r.answer_mode || "-")} · 블록: ${esc(how[r.method] || r.method || "-")}${r.debug && r.debug.reviewed ? " · Claude 검수로 고침" : ""}</div>
+    ${r.debug && r.debug.hint ? `<div class="meta">Claude 수어 문장: ${esc(r.debug.hint)}${r.debug.reject ? ` → 쓰지 않음: ${esc(r.debug.reject)}` : ""}</div>` : ""}
   </div>`).join("");
 }).catch(() => { document.getElementById("sum").textContent = "불러오지 못했어요."; });
 </script>

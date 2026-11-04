@@ -510,6 +510,9 @@ class SafetySignPipeline:
         if mode == "llm" and kp and kp.get("method") == "sign":
             from .keypoints import llm_review                         # 블록 문장 점검 (규칙 + Claude 검수, 필요하면 고침)
             kp = llm_review(self, question, answer_text, kp)
+        from .keypoints import REJECT
+        sign_debug = {"hint": hint, "used": (kp or {}).get("method"), "reviewed": bool((kp or {}).get("reviewed")),
+                      "reject": REJECT.get(hint) if hint else None}
         if kp and kp["units"]:
             sents = [self._units_sentence(kp["units"], kp["text"], method="keypoints_" + kp["method"])]
         return {
@@ -517,6 +520,7 @@ class SafetySignPipeline:
             "answer_mode": mode,                       # demo | llm | extractive
             "answer_text": answer_text,                # 화면에 보여줄 답변 (문서 근거)
             "sign_text": " ".join(s["korean"] for s in sents),   # 수어로 보여주는 문장 (짧게 줄인 것)
+            "sign_debug": sign_debug,                  # 점검용: Claude 수어 문장, 실제로 쓴 방식, 쓰지 않은 이유
             "sentences": sents,                        # 문장별 글로스 + 타임라인
             "motion": self.motion_for([g for s in sents for g in s["gloss"]],     # 전체 문장 이어붙인 동작
                                       [n for s in sents for n in (s.get("nms") or [None] * len(s["gloss"]))],

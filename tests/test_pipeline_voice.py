@@ -38,6 +38,19 @@ def test_substitute_and_short_sign(pipe):
     assert {"정화통", "바꾸다1"} <= set(sg["gloss"])
 
 
+def test_blocks_always_full_sentence_for_clean_answer(pipe):
+    """수어용 문장이 없을 때(Claude 실패 등): 끝맺음 있는 답변이면 단어를 골라내지 않고 그 문장을 통째로 → 블록만 읽어도 문장."""
+    from ksl import keypoints
+    from ksl.pipeline import split_sentences
+    a = "높이 또는 깊이 2미터 이상의 추락할 위험이 있는 장소에서 하는 작업은 안전대를 착용해야 합니다."
+    r = keypoints.extract(pipe, "2미터 넘는 높은 곳에서는 어떤 보호구를 착용해요?", a, split_sentences(a))
+    ws = [u["word"] for u in r["units"]]
+    assert r["method"] == "sentence" and ws[-2:] == ["착용해야", "합니다"] and not keypoints.check_blocks(r["units"], r["text"])
+    a2 = "정전기안전화는 물체의 낙하, 충격 또는 날카로운 물체에 의한 찔림 위험으로부터 발을 보호합니다."
+    ws2 = [u["word"] for u in keypoints.extract(pipe, "정전기안전화는 어떤 역할을 해요?", a2, [a2])["units"]]
+    assert ws2[:2] == ["정전기", "안전화는"] and "낙하 그리고" in ws2 and ws2[-1] == "보호합니다"   # 붙은 말·쉼표 처리
+
+
 def test_keypoints_short_answer_keeps_all_meaning(pipe):
     """짧은 답변(Claude 답변 모드)은 뜻 있는 말을 빠짐없이: '정화통은 6개월마다 교체해야 합니다' → 6개월 정화통 교체 해야 함."""
     from ksl import keypoints
@@ -74,8 +87,8 @@ def test_keypoints_llm_only_uses_answer_words(pipe, monkeypatch):
     monkeypatch.setattr(anthropic, "Anthropic", Fake)
     r = keypoints.extract(pipe, "정화통은 언제 교체해요?", answer, [answer])
     assert r["method"] == "llm" and "우주선" not in [u["word"] for u in r["units"]]
-    reply["keywords"] = ["우주선", "로켓"]                                 # 답변에 없는 말뿐 → 규칙 기반
-    assert keypoints.extract(pipe, "정화통은 언제 교체해요?", answer, [answer])["method"] == "rule"
+    reply["keywords"] = ["우주선", "로켓"]                                 # 답변에 없는 말뿐 → Claude 결과는 버리고 다른 방식으로
+    assert keypoints.extract(pipe, "정화통은 언제 교체해요?", answer, [answer])["method"] in ("sentence", "rule")
 
 
 def test_sign_hint_from_claude_and_answers(pipe, monkeypatch):
