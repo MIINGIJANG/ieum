@@ -1,12 +1,12 @@
-"""답변의 핵심만 수어로: 긴 문서 답변에서 질문과 가장 관련 있는 내용의 핵심 단어를 골라 짧은 수어로.
+"""답변을 수어로: 화면에는 자세한 답변, 수어(단어 블록)는 그 답변을 짧고 완성된 한 문장으로 줄인 것.
 
-- 규칙 기반 (기본): 화면 답변의 첫 문장(바로 답)을 쓰고, 다른 문장이 질문과 훨씬 더 맞으면 그 문장.
-  긴 문장은 쉼표·'~하고' 등으로 나눠 질문과 맞는 부분만. 그 안의 뜻 있는 말은 빠짐없이 순서대로
-  (있다·하다 같은 군말, 같은 수어 반복, 질문과 상관없는 회색 단어만 뺌. 해야 함·안 함·없다 같은 말은 늘 남김)
-  수어 어순(ksl/order.py)은 그대로, 최대 MAX_UNITS 단어
-- Claude (선택, ANTHROPIC_API_KEY 가 있고 KSL_KEYPOINTS=llm. 기본은 규칙): 답변에서 핵심 단어를 골라 달라고 하고,
-  답변에 실제로 있는 말만 남김 (없는 내용이 생기지 않게). 결과가 모자라거나 실패하면 규칙 기반으로
-반환: {"text": 핵심으로 고른 문장(화면 표시용), "units": [{gloss, word, nms, ...}], "method": "rule" | "llm"}
+순서 (extract)
+1. 수어용 문장(hint)이 있으면 그 문장의 뜻 있는 말을 모두 순서대로 → 블록만 읽어도 완성된 문장
+   - 준비된 질문: 사람이 줄여 둔 문장 (data/kosha/answers.json 의 sign)
+   - Claude 답변 모드 (2단계): ① 문서 근거로 답변(ksl/rag.py) → ② 그 답변을 Claude 가 수어 동작이 있는 말 위주의
+     짧은 한 문장으로 (llm_sign_sentence). 답변에도 수어 단어 목록에도 없는 말, 답변에 없는 부정·금지가 있으면 쓰지 않음
+2. 없으면 규칙 방식 (rule_based): 답변의 첫 문장(또는 질문과 맞는 부분)의 뜻 있는 말
+반환: {"text": 수어로 보여주는 문장, "units": [{gloss, word, nms, ...}], "method": "sign" | "rule" | "llm"}
 """
 import json
 import os
@@ -172,8 +172,96 @@ def llm_based(pipe, question, answer_text):
     return {"text": key, "units": units[:MAX_UNITS], "method": "llm"}
 
 
-def extract(pipe, question, answer_text, sentences):
+HINT_MAX = 8
+
+
+def from_hint(pipe, hint, answer_text):
+    """수어용 짧은 문장(준비된 답변의 'sign', Claude 답변의 '수어:' 줄)의 뜻 있는 말을 모두 순서대로.
+    문장에 답변에 없는 말이 있으면 쓰지 않음 (지어낸 내용 방지). 수어 동작이 없는 말도 회색으로 남김 (뜻이 끊기지 않게)."""
+    if not hint:
+        return None
+    units = pipe.sign_words.analyze(hint)
+    flat = re.sub(r"\s", "", answer_text)
+    neg_ok = re.search(r"않|안\s|안된|금지|없|못|말아|마십|마세", answer_text) is not None
+    for u in units:
+        lem = u.get("lemma") or u["word"]
+        if lem in ("neg", "prohibit", "cannot") or u["gloss"] in ("안하다", "금지", "못하다", "없다1"):
+            if not neg_ok:
+                return None                                             # 답변에 없는 부정·금지 → 뜻이 뒤집힘
+            continue
+        if not re.match(r"^[가-힣0-9]", lem) or lem in ("must", "can"):
+            continue
+        in_answer = re.sub(r"다$", "", lem)[:2] in flat or re.sub(r"\s", "", u["word"])[:2] in flat
+        if not in_answer and not _has_sign(pipe, u["gloss"]):
+            return None                                                 # 답변에도 수어 단어 목록에도 없는 말 → 지어낸 말로 보고 쓰지 않음
+    picked, prev = [], None
+    for u in units:
+        e, w = _eff(pipe, u["gloss"]), u.get("lemma") or u["word"]
+        if e == prev or w in FILLER or u["gloss"] in FILLER:             # 바로 앞과 같은 수어만 뺌 (세정제·세척처럼 떨어져 있으면 둘 다)
+            continue
+        prev = e
+        picked.append(dict(u, word=_plain(u)))
+    while len(picked) > HINT_MAX:                                       # 너무 길면 회색 단어부터 뒤에서 뺌
+        k = next((i for i in range(len(picked) - 1, -1, -1)
+                  if not _has_sign(pipe, picked[i]["gloss"]) and not KEEP_GLOSS.match(picked[i]["gloss"])), len(picked) - 1)
+        picked.pop(k)
+    for k in range(len(picked) - 1):
+        if picked[k + 1]["gloss"].startswith("필요") and re.search(r"야$", picked[k]["word"]):
+            picked[k] = dict(picked[k], word=re.sub(r"(해|어|아|여)?야$", "", picked[k]["word"]) or picked[k]["word"])
+    return {"text": hint, "units": picked, "method": "sign"} if len(picked) >= 2 else None
+
+
+SIGN_SYSTEM = ("너는 산업안전 안내를 청각장애인에게 한국수어로 전하기 위해, 답변을 수어로 옮길 짧은 한국어 문장 하나로 바꾼다. "
+               "답변에 없는 내용은 절대 더하지 않는다. 부정·금지·의무(안 된다, 하지 마라, 해야 한다)는 반드시 살린다.")
+_SIGN_CACHE = {}
+
+
+def sign_vocab(pipe):
+    """수어 동작이 있는 말 (동작사전 글로스 + 단어표에서 동작 있는 글로스로 연결되는 말 + 대체 표현이 있는 말)."""
+    if getattr(pipe, "_sign_vocab", None) is None:
+        words = {re.sub(r"[_\-]?\d+#?$", "", g) for g in (pipe.motion.index if pipe.motion else {})}
+        words |= {w for w, _, g in pipe.sign_words.rules if _has_sign(pipe, g)}
+        words |= set(pipe.substitutes)
+        pipe._sign_vocab = sorted(w for w in words if re.match(r"^[가-힣]", w))
+    return pipe._sign_vocab
+
+
+def llm_sign_sentence(pipe, question, answer_text):
+    """2단계: Claude 가 만든 답변 → 수어로 보여줄 짧고 완성된 한 문장 (가능하면 수어 동작이 있는 말로).
+    블록(수어 단어)만 순서대로 읽어도 뜻이 통하게. 실패하면 None (규칙 방식으로)."""
+    if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")):
+        return None
+    key = (question.strip(), answer_text.strip())
+    if key in _SIGN_CACHE:
+        return _SIGN_CACHE[key]
+    try:
+        from .rag import client
+        prompt = (f"[질문]\n{question}\n\n[답변]\n{answer_text}\n\n"
+                  "위 답변을 수어로 옮길 한국어 문장 하나로 바꿔 줘.\n"
+                  "- 답변의 핵심(무엇을, 언제·어디서, 어떻게, 해야 하는지·하면 안 되는지)을 빠짐없이 담은 완성된 평서문 한 문장\n"
+                  "- 내용어(명사·동사·형용사) 4~8개. 조사·어미는 자연스럽게\n"
+                  "- 되도록 아래 '수어 단어' 목록의 말을 써 (뜻이 같으면 목록의 말로 바꿔도 됨). 목록에 없는 말은 꼭 필요한 것만\n"
+                  "- 답변에 없는 내용은 더하지 말 것. 문장만 출력 (따옴표·설명 없이)\n\n"
+                  f"[수어 단어]\n{', '.join(sign_vocab(pipe))}")
+        r = client().messages.create(model=os.environ.get("LLM_MODEL", "claude-haiku-4-5-20251001"), max_tokens=150,
+                                     system=SIGN_SYSTEM, messages=[{"role": "user", "content": prompt}])
+        if r.stop_reason == "refusal":
+            return None
+        text = "".join(b.text for b in r.content if b.type == "text").strip().split("\n")[0].strip(" \"'“”")
+    except Exception as e:
+        print("[이음] 수어 문장 만들기 실패:", e)
+        return None
+    if len(_SIGN_CACHE) > 500:
+        _SIGN_CACHE.clear()
+    _SIGN_CACHE[key] = text or None
+    return text or None
+
+
+def extract(pipe, question, answer_text, sentences, hint=None):
     # 기본은 규칙 (결과가 늘 같고 시험 가능. Claude 답변 모드면 답변 글이 이미 짧고 정확해서 규칙으로 충분)
+    r = from_hint(pipe, hint, answer_text)                             # 수어용 짧은 문장이 있으면 그것 (사람·Claude 가 줄인 문장)
+    if r:
+        return r
     mode = os.environ.get("KSL_KEYPOINTS", "rule")                     # rule | llm
     if mode == "llm":
         r = llm_based(pipe, question, answer_text)

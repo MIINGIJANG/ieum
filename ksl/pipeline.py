@@ -468,6 +468,7 @@ class SafetySignPipeline:
             # 수어: 조원이 확정한 안내 문장 / 화면 답변: 그 문장의 문서 근거 답변
             texts, mode = [demo["korean"]], "demo"
             a = self.answers.get(demo["korean"])
+            hint = a.get("sign") if a else None                      # 사람이 줄여 둔 수어용 문장 (data/kosha/answers.json)
             if a:
                 answer_text = a["answer"]
                 on_page = [h for h in self.rag.search(question, 60) if h["page"] in a["pages"]]
@@ -487,6 +488,7 @@ class SafetySignPipeline:
             if top < self.min_score:                       # 근거 약함 → 답하지 않음
                 return self._abstain(question, top)
             texts, mode = self.rag.answer(question, hits)
+            hint = None
             if mode == "llm" and any("찾을 수 없" in t for t in texts):   # Claude 도 문서에서 근거를 못 찾음 → 답하지 않음
                 return self._abstain(question, top)
             texts = self._clean_answer([" ".join(strip_marks(t).split("\n")) for t in texts], hits)
@@ -500,7 +502,11 @@ class SafetySignPipeline:
         #  확정 문장 수어는 그 문장을 직접 입력했을 때 번역에 씀)
         from .keypoints import extract
         sents = []
-        kp = extract(self, question, answer_text, split_sentences(answer_text) or [answer_text])
+        if hint is None and mode == "llm":
+            # 2단계: Claude 가 만든 답변 → 수어 동작이 있는 단어로 짧고 완성된 한 문장 (ksl/keypoints.py llm_sign_sentence)
+            from .keypoints import llm_sign_sentence
+            hint = llm_sign_sentence(self, question, answer_text)
+        kp = extract(self, question, answer_text, split_sentences(answer_text) or [answer_text], hint=hint)
         if kp and kp["units"]:
             sents = [self._units_sentence(kp["units"], kp["text"], method="keypoints_" + kp["method"])]
         return {
