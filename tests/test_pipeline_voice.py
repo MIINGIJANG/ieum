@@ -93,6 +93,9 @@ def test_sign_hint_from_claude_and_answers(pipe, monkeypatch):
     assert keypoints.from_hint(pipe, "세척하면 안 됩니다.", answer) is None                 # 답변에 없는 부정 → 뜻이 뒤집혀서 안 씀
     ng = keypoints.from_hint(pipe, "손상된 보호구는 사용하면 안 됩니다.", "손상된 보호구는 사용하면 안 됩니다.")
     assert [u["word"] for u in ng["units"]][-1] == "안 됩니다"
+    ws = [u["word"] for u in keypoints.from_hint(pipe, "보호구는 수시로 점검해서 이상이 있으면 바꿔야 합니다.",
+                                                 "보호구는 수시로 점검해서 이상이 있으면 바꿔야 합니다.")["units"]]
+    assert "있으면" in ws and ws[-2:] == ["바꿔야", "합니다"]                       # 수어가 있는 '있다'는 빼지 않음
     assert keypoints.from_hint(pipe, "보호구를 씻고 건조시켜야 합니다.", answer)["method"] == "sign"   # 수어 단어 목록의 같은 뜻 말(씻다)은 됨
 
     # 2단계: ① Claude 가 근거로 답변 → ② 그 답변으로 수어용 짧은 문장 (가짜 응답)

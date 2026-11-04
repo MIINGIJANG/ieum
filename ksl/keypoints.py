@@ -237,7 +237,8 @@ def from_hint(pipe, hint, answer_text):
     picked, prev = [], None
     for u in units:
         e, w = _eff(pipe, u["gloss"]), u.get("lemma") or u["word"]
-        if e == prev or w in FILLER or u["gloss"] in FILLER:             # 바로 앞과 같은 수어만 뺌 (세정제·세척처럼 떨어져 있으면 둘 다)
+        filler = (w in FILLER or u["gloss"] in FILLER) and not _has_sign(pipe, u["gloss"])   # '있으면'처럼 수어가 있는 말은 남김 (문장이 끊기지 않게)
+        if e == prev or filler:                                         # 바로 앞과 같은 수어만 뺌 (세정제·세척처럼 떨어져 있으면 둘 다)
             continue
         prev = e
         picked.append(u)
