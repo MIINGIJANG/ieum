@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
 <title>이음</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>👷</text></svg>">
 <link rel="icon" type="image/png" sizes="32x32" href="./favicon-32.png">
@@ -29,6 +30,34 @@
     --caution-ink: #3d2e00;
     --block-gap: 20px;         /* 화면의 모든 박스·요소 사이 세로 간격 (하나로 통일) */
     --font: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+    --nomo: #d9dcd6;           /* 동작 없는 단어 박스 */
+    --on-ink: #ffffff;         /* 진한 바탕 위 글자 */
+    --warn-bg: #fffaea;
+    --th-bg: #f1f2ef;
+    --cell-line: #9aa1a8;
+    --pdf-bg: #f2f2f2;
+    --error: #9b1c1c;
+    color-scheme: light;
+  }
+  /* 기기 설정이 다크 모드면 자동으로 어두운 화면 */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --sign-blue: #6ea0e6;
+      --sign-blue-deep: #4a82d0;
+      --concrete: #15191e;
+      --surface: #1f252c;
+      --ink: #e6e9ec;
+      --muted: #9aa5b1;
+      --line: #353d46;
+      --caution-ink: #ffe9a8;
+      --nomo: #2c333b;
+      --on-ink: #15191e;
+      --warn-bg: #2e2810;
+      --th-bg: #262d35;
+      --cell-line: #4c5560;
+      --error: #ff8a80;
+      color-scheme: dark;
+    }
   }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
@@ -136,11 +165,11 @@
     padding: .25em .62em; border-radius: 8px; background: var(--surface); border: 1px solid var(--line);
     font-weight: 500; transition: background .15s, color .15s;
   }
-  ol.glosses li.nomo { background: #d9dcd6; border-color: #d9dcd6; color: var(--ink); }   /* 동작 없는 단어: 재생 안 함 */
+  ol.glosses li.nomo { background: var(--nomo); border-color: var(--nomo); color: var(--ink); }   /* 동작 없는 단어: 재생 안 함 */
   ol.glosses li.play { cursor: pointer; }   /* 동작 있는 단어: 누르면 그 단어만 다시 보기 */
   ol.glosses li.fs::after { content: "지문자"; margin-left: 4px; font-size: 0.7em; opacity: 0.65; vertical-align: 0.15em; }
   ol.glosses li.play:hover { border-color: var(--ink); }
-  ol.glosses li.active { background: var(--ink); color: #fff; border-color: var(--ink); }   /* 지금 표현 중 */
+  ol.glosses li.active { background: var(--ink); color: var(--on-ink); border-color: var(--ink); }   /* 지금 표현 중 */
 
   /* ---------- 답변 · 출처 ---------- */
   .answer { background: var(--surface); border-radius: 14px; padding: 18px; border: 1px solid var(--line); }
@@ -149,7 +178,7 @@
   .answer .hint { color: var(--muted); font-size: 1rem; margin: -4px 0 0; }
   .answer > :last-child { margin-bottom: 0; }
   .warn {
-    border-left: 4px solid var(--caution); background: #fffaea; padding: 8px 12px; border-radius: 0 8px 8px 0;
+    border-left: 4px solid var(--caution); background: var(--warn-bg); padding: 8px 12px; border-radius: 0 8px 8px 0;
     font-size: 1rem; margin: 0 0 12px;
   }
   .info { display: grid; gap: var(--block-gap); }
@@ -162,14 +191,14 @@
   .src b .t2 { white-space: nowrap; }
   @media (max-width: 760px) { .src b .t1 { display: block; } }   /* 휴대폰: 제목 앞부분 / 마지막 단어 + 페이지 두 줄 */
   .src .tbl { overflow-x: auto; margin: 6px 0 8px; }
-  .src .pdf { overflow: hidden; margin: 8px 0 0; border: 1px solid var(--line); border-radius: 6px; background: #f2f2f2; }   /* 쪽 이미지 바탕과 같은 회색 */
+  .src .pdf { overflow: hidden; margin: 8px 0 0; border: 1px solid var(--line); border-radius: 6px; background: var(--pdf-bg); }   /* 쪽 이미지 바탕과 같은 회색 */
   .src .pdf img { display: block; max-width: none; height: auto; }
   .src table { border-collapse: collapse; width: 100%; font-size: 1rem; color: var(--ink); background: var(--surface); }
-  .src th, .src td { border: 1px solid #9aa1a8; padding: 5px 8px; vertical-align: middle; line-height: 1.45; }
-  .src th { background: #f1f2ef; font-weight: 500; text-align: center; }
+  .src th, .src td { border: 1px solid var(--cell-line); padding: 5px 8px; vertical-align: middle; line-height: 1.45; }
+  .src th { background: var(--th-bg); font-weight: 500; text-align: center; }
   .src td:first-child { text-align: center; }
   .empty { color: var(--muted); }
-  .error { color: #9b1c1c; }
+  .error { color: var(--error); }
 
   /* 첫 로딩 화면: 아바타·출처 이미지·번역 모델을 모두 준비한 뒤 사라짐 (사용 중에는 기다림 없음) */
   .boot { position: fixed; inset: 0; z-index: 1000; background: var(--concrete); }
