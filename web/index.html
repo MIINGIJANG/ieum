@@ -165,7 +165,7 @@
     padding: .25em .62em; border-radius: 8px; background: var(--surface); border: 1px solid var(--line);
     font-weight: 500; transition: background .15s, color .15s;
   }
-  ol.glosses li.nomo { background: var(--nomo); color: var(--ink); }   /* 동작 없는 단어: 재생 안 함 */
+  ol.glosses li.nomo { background: transparent; color: var(--muted); }   /* 동작 없는 단어: 재생 안 함 → 빈 칸처럼 흐리게 (라이트·다크 모두 구분되게) */
   ol.glosses li.play { cursor: pointer; }   /* 동작 있는 단어: 누르면 그 단어만 다시 보기 */
   ol.glosses li.fs::after { content: "지문자"; margin-left: 4px; font-size: 0.7em; opacity: 0.65; vertical-align: 0.15em; }
   ol.glosses li.play:hover { border-color: var(--ink); }
