@@ -242,6 +242,9 @@ def from_hint(pipe, hint, answer_text):
             continue
         prev = e
         picked.append(u)
+    # 수어용 문장은 이미 수어 순서로 쓴 문장 → 블록도 그 문장 순서 그대로 (시간 말을 앞으로 옮기거나 강조어를 뒤로 보내지 않음)
+    #  뜻을 바꾸는 말(해야 함·안 함)은 그 절의 끝 = 동사 바로 뒤
+    picked.sort(key=lambda u: (u.get("ti", 0), (u.get("lemma") or "") in MARKS))
     if len(picked) > HINT_MAX:                                         # 너무 긴 문장: 블록을 빼면 문장이 끊기므로 쓰지 않음
         return None
     picked = [dict(u, word=u["word"]) for u in picked]
@@ -277,6 +280,7 @@ def llm_sign_sentence(pipe, question, answer_text):
                   "위 답변을 수어로 옮길 한국어 문장 하나로 바꿔 줘.\n"
                   "- 답변의 핵심(무엇을, 언제·어디서, 어떻게, 해야 하는지·하면 안 되는지)을 빠짐없이 담은 완성된 평서문 한 문장\n"
                   "- 질문에 대한 가장 중요한 한 가지만. 내용어(명사·동사·형용사) 3~6개. 조사·어미는 자연스럽게\n"
+                  "- 어순: 언제·어디서 → 누가·무엇이 → 무엇을 → 어떻게 하다 → 해야/안 됨 (예: '작업 전에 보호구를 점검해야 합니다')\n"
                   "- 되도록 아래 '수어 단어' 목록의 말을 써 (뜻이 같으면 목록의 말로 바꿔도 됨). 목록에 없는 말은 꼭 필요한 것만\n"
                   "- 답변에 없는 내용은 더하지 말 것. 문장만 출력 (따옴표·설명 없이)\n\n"
                   f"[수어 단어]\n{', '.join(sign_vocab(pipe))}")
