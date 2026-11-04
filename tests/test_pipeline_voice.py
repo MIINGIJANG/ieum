@@ -44,7 +44,7 @@ def test_keypoints_short_answer_keeps_all_meaning(pipe):
     a = "정화통은 6개월마다 교체해야 합니다."
     r = keypoints.rule_based(pipe, "정화통은 언제 교체해요?", a, [a])
     assert [u["gloss"] for u in r["units"]] == ["6개월", "정화통", "바꾸다1", "필요1"]
-    assert [u["word"] for u in r["units"]][2] == "교체"                           # '교체해야 / 해야 함' 겹치지 않게
+    assert [u["word"] for u in r["units"]] == ["6개월마다", "정화통은", "교체해야", "합니다"]   # 블록이 문장 어절 그대로
     a = "보호구는 늘 사용할 수 있도록 관리하고 깨끗하게 유지해야 합니다. 사용하지 않을 때는 건조한 곳에 보관합니다."
     g = [u["gloss"] for u in keypoints.rule_based(pipe, "보호구는 어떻게 관리해요?", a, [a.split(". ")[0] + ".", a.split(". ")[1]])["units"]]
     assert "보호1" in g and "깨끗하다1" in g and "필요1" in g and not any(x.startswith("가능") for x in g)   # 첫 문장, '할 수 있도록'은 뺌
@@ -87,10 +87,12 @@ def test_sign_hint_from_claude_and_answers(pipe, monkeypatch):
     r = keypoints.extract(pipe, "보호구 세척은 어떻게 해요?", answer, [answer],
                           hint="중성 세정제와 온수로 세척한 후 헹구고 건조시켜야 합니다.")
     words = [u["word"] for u in r["units"]]
-    assert r["method"] == "sign" and "세척한" in words and "건조시켜" in words and words[-1] == "해야 함"
+    assert r["method"] == "sign" and words == ["중성", "세정제와", "온수로", "세척한", "후", "헹구고", "건조시켜야", "합니다"]
     bad = keypoints.extract(pipe, "보호구 세척은 어떻게 해요?", answer, [answer], hint="표백제로 소독해야 합니다.")
     assert bad["method"] == "rule"                                        # 답변에 없는 말(표백제·소독) → 쓰지 않음
     assert keypoints.from_hint(pipe, "세척하면 안 됩니다.", answer) is None                 # 답변에 없는 부정 → 뜻이 뒤집혀서 안 씀
+    ng = keypoints.from_hint(pipe, "손상된 보호구는 사용하면 안 됩니다.", "손상된 보호구는 사용하면 안 됩니다.")
+    assert [u["word"] for u in ng["units"]][-1] == "안 됩니다"
     assert keypoints.from_hint(pipe, "보호구를 씻고 건조시켜야 합니다.", answer)["method"] == "sign"   # 수어 단어 목록의 같은 뜻 말(씻다)은 됨
 
     # 2단계: ① Claude 가 근거로 답변 → ② 그 답변으로 수어용 짧은 문장 (가짜 응답)
@@ -109,7 +111,7 @@ def test_sign_hint_from_claude_and_answers(pipe, monkeypatch):
     assert answer in calls[1]["messages"][0]["content"] and "수어 단어" in calls[1]["messages"][0]["content"]
     g = q["sentences"][0]
     assert g["method"] == "keypoints_sign" and g["korean"].startswith("중성 세정제")
-    assert [w for w in g["words"] if w][-1] == "해야 함"
+    assert [w for w in g["words"] if w][-1] == "합니다"
     rag._LLM_CACHE.clear()
     keypoints._SIGN_CACHE.clear()
 
