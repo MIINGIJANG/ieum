@@ -73,8 +73,17 @@ def main():
         "centers": [[round(float(v), 1) for v in km.cluster_centers_[i]] for i in order],
         "counts": [int(counts[i]) for i in order],
     }
+    # 손가락 시너지 (Santello, Flanders & Soechting 1998 'Postural hand synergies'): 15마디 각도의 주성분.
+    #  손 모양 대부분이 몇 개 성분의 조합으로 설명됨 → 아바타가 이 공간으로 살짝 끌어당겨 따로 노는 마디(추정 떨림)를 줄임
+    mu = X.mean(axis=0)
+    U, S_, Vt = np.linalg.svd(X - mu, full_matrices=False)
+    var = (S_ ** 2) / (S_ ** 2).sum()
+    k = int(np.searchsorted(np.cumsum(var), 0.9) + 1)                # 분산 90% 를 설명하는 성분 수
+    res["synergy"] = {"mean": [round(float(v), 2) for v in mu], "comps": [[round(float(v), 4) for v in Vt[i]] for i in range(k)],
+                      "var": [round(float(v), 3) for v in var[:k]]}
     Path(a.out).write_text(json.dumps(res, ensure_ascii=False), encoding="utf-8")
-    print(f"손 프레임 {len(X)}개 → 손 모양 {a.k}개, 군집 안 평균 거리 {res['scale']}° → {a.out}")
+    print(f"손 프레임 {len(X)}개 → 손 모양 {a.k}개, 군집 안 평균 거리 {res['scale']}°, 시너지 {len(res['synergy']['comps'])}개"
+          f"(분산 {sum(res['synergy']['var']):.0%}, 첫 둘 {sum(res['synergy']['var'][:2]):.0%}) → {a.out}")
 
 
 if __name__ == "__main__":

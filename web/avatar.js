@@ -1095,22 +1095,44 @@ export class SignAvatar {
         // 손목이 덜 꺾이게 팔꿈치 자리 고르기: 손목 자리는 그대로, 팔꿈치가 돌 수 있는 원 위(지금 자리 ±60°)에서
         //  아래팔이 손 방향을 가장 잘 따라가는 자리 (손등 쪽 젖힘은 더 피함). 지금 자리 ±40° 안에서만.
         //  팔꿈치가 어깨 가까이 들리거나('앞으로 나란히') 몸 옆으로 많이 벌어지면 벌점, 많이 돌수록 조금 벌점 (config.elbowSeek, 기본 1)
+        //  + 데이터 위팔 방향 충실도(SMPLify-X 식), 직전 화면 대비 관절 변화 최소(최소 토크 변화, Uno·Kawato 1989),
+        //    손을 입·얼굴 쪽으로 쓰기 쉬운 자세 가산(Kim·Rosen 2012 팔꿈치 회전각 예측)
         const hd = fr[s.hand], seek = (this.config && this.config.elbowSeek) ?? 1;
         if (seek > 0 && hd && hd[0] && hd[9] && hd[5] && hd[17]) {
           const hf = V(hd[9]).sub(V(hd[0])).normalize();
           const palmN = new THREE.Vector3().crossVectors(V(hd[5]).sub(V(hd[0])), V(hd[17]).sub(V(hd[0]))).normalize()
             .multiplyScalar(sign > 0 ? -1 : 1);                               // 손바닥 쪽 (왼손·오른손 방향 맞춤)
           const axisSW = W.clone().sub(sho2).normalize();
+          const dataUp = el.clone().sub(sh).normalize();                        // 데이터 위팔 방향 (SMPLify-X 식 데이터 충실도)
+          const prevP = this.st.pole[P];                                        // 직전 화면 팔꿈치 방향 (최소 토크 변화: 관절을 덜 바꿈)
+          const mouth = this.headCenter ? this.headCenter.clone().add(new THREE.Vector3(0, -0.06, 0.08)) : null;
           let best = null;
           for (let deg = -40; deg <= 40; deg += 8) {
             const pc = pole.clone().applyAxisAngle(axisSW, D(deg));
-            const [Ec] = this._ik(sho2, W, R.a, R.b, pc);
+            const [Ec, Wc, nc] = this._ik(sho2, W, R.a, R.b, pc);
             const fa = W.clone().sub(Ec).normalize();
             const bend = fa.angleTo(hf);                                        // 손목 꺾임 (라디안)
             const ext = Math.max(0, -hf.clone().sub(fa).dot(palmN));           // 손등 쪽으로 젖혀지는 정도 (더 피함)
             const high = Math.max(0, Ec.y - (sho2.y - 0.12));                   // 팔꿈치가 어깨 가까이 들림 (m)
             const wide = Math.max(0, Math.abs(Ec.x - this.spinePos.x) - (this.shoulderW * 0.5 + 0.06));   // 팔꿈치가 옆으로 벌어짐 (m)
-            const cost = bend + 0.8 * ext + 6 * high + 5 * wide + 0.25 * Math.abs(D(deg)) / seek;
+            const fid = Ec.clone().sub(sho2).normalize().angleTo(dataUp);       // 데이터 위팔과 다른 정도
+            const chg = prevP && !this.st.pure ? pc.angleTo(prevP) : 0;         // 직전 화면과 다른 정도
+            // 손을 입·얼굴 쪽으로 움직이기 쉬운 자세 (Kim·Rosen 2012: 조작성 타원의 큰 축이 손→입 방향과 맞을수록)
+            let reach = 0;
+            if (mouth) {
+              const r = Wc.clone().sub(sho2), r2 = Wc.clone().sub(Ec), cE = nc.clone().cross(r2);
+              const M = [[0, 0, 0], [0, 0, 0], [0, 0, 0]], v = [r.x, r.y, r.z], c = [cE.x, cE.y, cE.z], rr = r.lengthSq();
+              for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) M[i][j] = (i === j ? rr : 0) - v[i] * v[j] + c[i] * c[j];
+              let e = [0.577, 0.577, 0.577];
+              for (let it = 0; it < 12; it++) {                                   // 가장 큰 축 (거듭제곱법)
+                const n = [0, 1, 2].map((i) => M[i][0] * e[0] + M[i][1] * e[1] + M[i][2] * e[2]);
+                const L = Math.hypot(...n) || 1; e = n.map((x) => x / L);
+              }
+              const m = mouth.clone().sub(Wc).normalize();
+              reach = Math.abs(e[0] * m.x + e[1] * m.y + e[2] * m.z);
+            }
+            const cost = bend + 0.8 * ext + 6 * high + 5 * wide + 0.25 * Math.abs(D(deg)) / seek
+                       + 0.3 * fid + 0.5 * chg - 0.15 * reach;
             if (!best || cost < best[0]) best = [cost, pc];
           }
           pole = best[1].normalize();
@@ -1199,7 +1221,7 @@ export class SignAvatar {
       this.st.twist[P] = 0;
     }
     local = lowerW2.clone().invert().multiply(handW);
-    // ---- 손목 꺾임 한계: 손바닥 쪽 굽힘 65° · 손등 쪽 젖힘 55° · 좌우 22° (사람 손목은 좌우로 많이 못 꺾음)
+    // ---- 손목 꺾임 한계 (사람 손목은 좌우로 많이 못 꺾음)
     //  손 데이터의 손목과 팔 데이터의 손목이 많이 어긋나면 손 추정이 불확실 → 한계를 70% 로.
     //  '꺾임'만 줄이고 비틀림은 그대로, 한계 근처에서 부드럽게 멈춤 (딱 걸려 꺾여 보이지 않게)
     const bw = fr.body && fr.body[s.wri];
@@ -1209,7 +1231,8 @@ export class SignAvatar {
     const side = new THREE.Vector3().crossVectors(R.handF, R.palm).normalize();
     const along = Math.max(cur.dot(R.handF), 1e-3);
     const flexA = Math.atan2(cur.dot(R.palm), along), devA = Math.atan2(cur.dot(side), along);
-    const flex2 = softRange(flexA, -D(55) * shrink, D(65) * shrink), dev2 = softLimit(devA, D(22) * shrink);
+    // 일상 동작에서 쓰는 손목 범위(Ryu 외 1991: 굽힘·젖힘 각 40° 안팎) 쪽으로: 손바닥 쪽 55° · 손등 쪽 45° · 좌우 20°
+    const flex2 = softRange(flexA, -D(45) * shrink, D(55) * shrink), dev2 = softLimit(devA, D(20) * shrink);
     if (Math.abs(flex2 - flexA) > 1e-4 || Math.abs(dev2 - devA) > 1e-4 || cur.dot(R.handF) < 1e-3) {
       const swing = new THREE.Quaternion().setFromUnitVectors(R.handF, cur);
       const twistQ = swing.clone().invert().multiply(local);
@@ -1227,6 +1250,13 @@ export class SignAvatar {
       const m = x[6 + j], r = x[9 + j], l = x[12 + j];
       x[9 + j] = 0.7 * r + 0.15 * m + 0.15 * l;
       x[12 + j] = 0.7 * l + 0.3 * r;
+    }
+    // 손가락 시너지 (Santello 외 1998): 데이터에서 뽑은 주성분 공간(분산 90%)으로 35% 끌어당김 → 따로 노는 마디 줄임
+    const syn = this.handshapes && this.handshapes.synergy;
+    if (x && !fs && syn && syn.comps && syn.comps.length) {
+      const mu = syn.mean, d = x.map((v, i) => v - mu[i]), rec = mu.slice();
+      for (const c of syn.comps) { let a = 0; for (let i = 0; i < 15; i++) a += d[i] * c[i]; for (let i = 0; i < 15; i++) rec[i] += a * c[i]; }
+      for (let i = 0; i < 15; i++) x[i] = 0.65 * x[i] + 0.35 * rec[i];
     }
     const base = (this.handshapes && this.handshapes.base) || new Array(15).fill(10);
     const prior = x && !fs ? this._handPrior(x) : null;
