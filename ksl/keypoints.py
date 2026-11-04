@@ -162,64 +162,71 @@ MARKS = ("must", "can", "cannot", "neg", "prohibit")
 MARK_EJ = re.compile(r"합니다|해야|됩니다|돼요|안\s|않|없|못|금지|수\s?있|마세요|마십시오|하세요|한다|된다|해요")
 
 
-def _sentence_words(units, text):
+def _sentence_words(units, text, full=False):
     """블록 글자를 문장에 쓰인 어절 그대로: '건조시켜야 / 합니다' (블록만 순서대로 읽어도 문장이 되게).
-    뜻을 바꾸는 말(해야 함·안 함 등)은 문장에서 다른 블록이 쓰지 않은 그 표현 어절('합니다', '안 됩니다')로."""
+    - 뜻을 바꾸는 말(해야 함·안 함 등)은 문장에서 다른 블록이 쓰지 않은 그 표현 어절('합니다', '안 됩니다')로
+    - 쉼표로 끝나는 어절은 블록에 '그리고'
+    - full: 수어용 문장이면 블록이 차지하지 않은 어절(동작 없는 군말 등)도 앞 블록에 붙임 → 블록을 이어 읽으면 문장 그대로"""
     raw = text.split()
-    ej = [w.strip(".,!?·") for w in raw]
-    comma = [w.rstrip(".!?").endswith((",", "，")) for w in raw]      # 쉼표로 끝나는 어절 → 블록에 '그리고' (문장이 이어지게)
-    used, at = set(), {}
-    for n, u in enumerate(units):
+    ej = [w.strip(".,!?·，") for w in raw]
+    comma = [w.rstrip(".!?").endswith((",", "，")) for w in raw]
+    owner = [None] * len(ej)
+    for n, u in enumerate(units):                          # 내용어 블록 → 그 말이 들어 있는 어절
         if (u.get("lemma") or "") in MARKS:
             continue
         w = re.sub(r"\s", "", u["word"]).strip(",，")
         for i, e in enumerate(ej):
-            if i not in used and w and (e.startswith(w) or w in e):
-                used.add(i)
-                at[n] = i
+            if owner[i] is None and w and (e.startswith(w) or w in e):
+                owner[i] = n
                 break
-    groups, cur = [], []                                   # 다른 블록이 쓰지 않은 어절 묶음 (문장 순서)
-    for i, e in enumerate(ej):
-        if i in used or not e:
-            if cur:
-                groups.append(cur)
-            cur = []
-        else:
-            cur.append(e)
-    if cur:
-        groups.append(cur)
-    picks = []                                             # 묶음 안에서 그 표현 어절만 ('안 됩니다', '수 있습니다', '합니다')
-    for g in groups:
-        txt = " ".join(g) + " "
-        m = MARK_EJ.search(txt)
-        if not m:
+    for n, u in enumerate(units):                          # 뜻을 바꾸는 말 블록 → 남은 어절 중 그 표현 ('합니다', '안 됩니다')
+        if (u.get("lemma") or "") not in MARKS:
             continue
-        pos, k0 = 0, 0
-        for k, e in enumerate(g):                         # 표현이 시작하는 어절
-            if pos + len(e) >= m.start():
-                k0 = k
+        for i, e in enumerate(ej):
+            if owner[i] is None and MARK_EJ.search(e + " " + (ej[i + 1] if i + 1 < len(ej) else "") + " "):
+                owner[i] = n
+                if len(e) <= 1 and i + 1 < len(ej) and owner[i + 1] is None:   # '안 / 됩니다' 처럼 한 글자면 다음 어절까지
+                    owner[i + 1] = n
                 break
-            pos += len(e) + 1
-        end = m.end()
-        pos, k1 = 0, k0
-        for k, e in enumerate(g):                         # 표현이 끝나는 어절 (최대 2어절)
-            if pos < end:
-                k1 = k
-            pos += len(e) + 1
-        if len(g[k0]) <= 1 and k0 + 1 < len(g):          # '안 / 됩니다', '못 / 합니다' 처럼 한 글자면 다음 어절까지
-            k1 = k0 + 1
-        picks.append(" ".join(g[k0:min(k1, k0 + 1) + 1]))
-    groups = picks
+    if full:                                               # 남은 어절은 앞 블록에 (처음이면 뒤 블록에)
+        for i in range(len(ej)):
+            if owner[i] is None and ej[i]:
+                prev = next((owner[j] for j in range(i - 1, -1, -1) if owner[j] is not None), None)
+                owner[i] = prev if prev is not None else next((owner[j] for j in range(i + 1, len(ej)) if owner[j] is not None), None)
     out = []
     for n, u in enumerate(units):
-        if (u.get("lemma") or "") in MARKS and groups:
-            u = dict(u, word=groups.pop(0))
-        elif n in at and comma[at[n]]:
-            last = max((m for m, i in at.items() if i == at[n]), default=n)   # 그 어절의 마지막 블록에만
-            if n == last:
-                u = dict(u, word=u["word"].rstrip(",，") + " 그리고")
-        out.append(u)
+        idx = [i for i in range(len(ej)) if owner[i] == n]
+        if not idx:
+            out.append(u)
+            continue
+        if full or (u.get("lemma") or "") in MARKS:
+            word = " ".join(ej[i] for i in idx)
+        else:
+            word = u["word"].rstrip(",，")
+        if comma[idx[-1]]:
+            word += " 그리고"
+        out.append(dict(u, word=word))
     return out
+
+
+def check_blocks(units, sentence=None):
+    """블록만 이어 읽었을 때 완성된 문장인지 점검 → 문제 목록 (없으면 [])."""
+    words = [u["word"] for u in units if u.get("word")]
+    joined = " ".join(words)
+    probs = []
+    if not words:
+        return ["블록 없음"]
+    if not re.search(r"(다|요|니다|시오|세요)$", words[-1]):
+        probs.append("문장 끝맺음(합니다·~다)이 없음")
+    if sentence and "," in sentence:
+        probs.append("쉼표로 끊김")
+    if sentence and re.sub(r"[\s.,!?·]", "", joined.replace(" 그리고", "")) != re.sub(r"[\s.,!?·]", "", sentence):
+        probs.append("문장의 일부 말이 블록에 없음")
+    if len(units) > HINT_MAX:
+        probs.append(f"블록이 너무 많음({len(units)}개)")
+    if re.search(r"(있고|하고|되고)$", words[-2] if len(words) > 1 else "") and words[-1] in ("합니다",):
+        pass
+    return probs
 
 
 def from_hint(pipe, hint, answer_text):
@@ -255,7 +262,7 @@ def from_hint(pipe, hint, answer_text):
     if len(picked) > HINT_MAX:                                         # 너무 긴 문장: 블록을 빼면 문장이 끊기므로 쓰지 않음
         return None
     picked = [dict(u, word=u["word"]) for u in picked]
-    return {"text": hint, "units": _sentence_words(picked, hint), "method": "sign"} if len(picked) >= 2 else None
+    return {"text": hint, "units": _sentence_words(picked, hint, full=True), "method": "sign"} if len(picked) >= 2 else None
 
 
 SIGN_SYSTEM = ("너는 산업안전 안내를 청각장애인에게 한국수어로 전하기 위해, 답변을 수어로 옮길 짧은 한국어 문장 하나로 바꾼다. "
