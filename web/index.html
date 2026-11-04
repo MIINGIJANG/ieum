@@ -622,6 +622,15 @@ function render() {
   let k = 0;
   sents.forEach((s) => {
     s.gloss.forEach((g, i) => {
+      // 대체 표현의 두 번째 수어부터(안전화 → 보호 + 신발)는 블록을 따로 만들지 않고 앞 블록('안전화는')에 묶음
+      //  → 블록만 읽어도 문장이 끊기지 않게. 재생 중에는 그 블록이 계속 표시됨
+      const subOf = s.sub_of && s.sub_of[i];
+      if (subOf && i > 0 && s.sub_of[i - 1] === subOf && !(s.words && s.words[i]) && items.length) {
+        const prev = items[items.length - 1];
+        items.push({ gloss: g, li: prev.li, seg: motion ? motion.segments[k] : null, nms: (s.nms && s.nms[i]) || null, cont: true });
+        k++;
+        return;
+      }
       const li = document.createElement("li");
       li.textContent = (s.words && s.words[i]) || label(g);   // 답변에 쓰인 모양 그대로 (예: '이상이', '깨끗하게')
       const seg = motion ? motion.segments[k] : null;
@@ -629,7 +638,6 @@ function render() {
       if (!(seg && seg.has_motion)) li.className = "nomo";
       else {
         li.className = seg.fingerspell ? "play fs" : "play";
-        const subOf = s.sub_of && s.sub_of[i];
         if (subOf) { li.classList.add("sub"); li.title = `'${subOf}' 수어가 없어 비슷한 뜻의 수어로 보여줌 (검수 전)`; }
         if (seg.fingerspell) li.title = `수어 동작이 없어 지문자로 표현: ${seg.fs_text}` + (seg.fs_verified ? "" : " (손 모양 검수 전)");
         li.tabIndex = 0; li.setAttribute("role", "button");
@@ -643,7 +651,7 @@ function render() {
   });
 
   balanceRows(ol); setTimeout(() => balanceRows(ol), 400);   // 결과가 다 그려진 뒤 한 번 더
-  setTimeout(() => fetchWords(items.filter(it => it.seg && it.seg.has_motion).map(it => it.seg.gloss || it.gloss)), 300);   // 단어 다시 보기용 동작 미리 받기
+  setTimeout(() => fetchWords(items.filter(it => !it.cont && it.seg && it.seg.has_motion).map(it => it.seg.gloss || it.gloss)), 300);   // 단어 다시 보기용 동작 미리 받기
 
   // 답변
   const a = $("answer");
@@ -711,7 +719,7 @@ function play(m = motion, only = null) {
       ? { gloss: seg.gloss || it.gloss, t: (f - seg.start) / (seg.end - seg.start), nms: it && it.nms, text: mouthText(seg.gloss || it.gloss) } : null;
     // 단어 표정·고개·입 모양 + 단어 사이 연결 구간(회전으로 섞기)용 동작 전체. 프레임 사이는 보간 (화면 주사율로 부드럽게)
     if (window.avatar) { if (fr && window.avatar.setFrameAt) window.avatar.setFrameAt(m, Math.min(frameF, n - 1), word); else window.avatar.setFrame(fr, word, m); }
-    items.forEach(x => x.li.classList.toggle("active", x === it));
+    items.forEach(x => x.li.classList.toggle("active", !!it && x.li === it.li));   // 대체 표현은 블록 하나를 함께 씀
     if (frameF < n) raf = requestAnimationFrame(loop);
     else {
       // 동작이 화면에서 완전히 끝난 뒤(손 내리기까지)에 강조를 끔
