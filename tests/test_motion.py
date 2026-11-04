@@ -177,9 +177,9 @@ def test_team_3d_words():
     """팀원 3D 처리본(2026-11-03)에서 가져온 단어: 동작이 있고, 이 저장소 좌표 기준(+Y 아래)으로 코가 목보다 위."""
     from ksl.motion import MotionDict
     md = MotionDict(ROOT / "data/sign/motions")
-    for g in ["근로자1", "소음1", "추락1", "찾다1", "못하다1", "아직1"]:
+    for g in ["소음1", "추락1", "찾다1", "못하다1", "아직1"]:
         c = md.get(g)
         assert c and c["frames"], g
         f = next(x for x in c["frames"] if x.get("body") and x["body"][0] and x["body"][1])
         assert f["body"][0][1] < f["body"][1][1] - 0.2, g                     # 코가 목보다 위 (뒤집히지 않음)
-    assert md.get("문서1") is None and md.get("안전모1") is None and md.get("물건1") is None              # 어색해서 뺀 단어, 검수에서 뺀 단어
+    assert md.get("문서1") is None and md.get("안전모1") is None and md.get("근로자1") is None and md.get("받다1") is None and md.get("물건1") is None              # 어색해서 뺀 단어, 검수에서 뺀 단어
