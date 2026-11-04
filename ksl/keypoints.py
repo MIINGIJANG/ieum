@@ -48,17 +48,6 @@ def _clauses(sentence):
     return [x.strip() for x in parts if len(x.strip()) >= 4] or [sentence]
 
 
-JOSA = re.compile(r"(은|는|이|가|을|를|의|에|에서|에서는|에는|으로|로|와|과|도|에게)$")
-
-
-def _plain(u):
-    """화면 글자: '보호구를'·'작업에서는' → '보호구'·'작업' (조사만 뗌. '6개월마다'처럼 뜻 있는 말은 그대로)"""
-    w, lem = u["word"], u.get("lemma") or ""
-    if lem and re.match(r"^[가-힣0-9]+$", lem) and w.startswith(lem) and JOSA.fullmatch(w[len(lem):] or "은"):
-        return lem
-    return w
-
-
 def _eff(pipe, g):
     """화면·동작에 실제로 쓰일 첫 수어 (대체 표현이면 그 첫 수어) → 같은 수어가 두 번 나오지 않게."""
     if pipe.motion and pipe.motion.get(g):
@@ -114,11 +103,7 @@ def rule_based(pipe, question, answer_text, sentences):
                      if not KEEP_GLOSS.match(picked[k]["gloss"]) and (picked[k].get("lemma") or "") not in question), len(picked) - 1)
         picked.pop(drop)
     picked = picked or units[:MAX_UNITS]
-    picked = [dict(u, word=_plain(u)) for u in picked]
-    for k in range(len(picked) - 1):                 # '착용해야 / 해야 함' → '착용 / 해야 함' (화면 글자만)
-        if picked[k + 1]["gloss"].startswith("필요") and re.search(r"야$", picked[k]["word"]):
-            picked[k] = dict(picked[k], word=re.sub(r"(해|어|아|여)?야$", "", picked[k]["word"]) or picked[k]["word"])
-    return {"text": text, "units": picked, "method": "rule"}
+    return {"text": text, "units": _sentence_words(picked, text), "method": "rule"}
 
 
 SYSTEM = ("너는 산업안전 문서의 답변을 청각장애인에게 수어로 짧게 전하기 위해 핵심 단어를 고른다. "
@@ -172,7 +157,62 @@ def llm_based(pipe, question, answer_text):
     return {"text": key, "units": units[:MAX_UNITS], "method": "llm"}
 
 
-HINT_MAX = 8
+HINT_MAX = 10
+MARKS = ("must", "can", "cannot", "neg", "prohibit")
+MARK_EJ = re.compile(r"합니다|해야|됩니다|돼요|안\s|않|없|못|금지|수\s?있|마세요|마십시오|하세요|한다|된다|해요")
+
+
+def _sentence_words(units, text):
+    """블록 글자를 문장에 쓰인 어절 그대로: '건조시켜야 / 합니다' (블록만 순서대로 읽어도 문장이 되게).
+    뜻을 바꾸는 말(해야 함·안 함 등)은 문장에서 다른 블록이 쓰지 않은 그 표현 어절('합니다', '안 됩니다')로."""
+    ej = [w.strip(".,!?·") for w in text.split()]
+    used = set()
+    for u in units:
+        if (u.get("lemma") or "") in MARKS:
+            continue
+        w = re.sub(r"\s", "", u["word"])
+        for i, e in enumerate(ej):
+            if i not in used and w and (e.startswith(w) or w in e):
+                used.add(i)
+                break
+    groups, cur = [], []                                   # 다른 블록이 쓰지 않은 어절 묶음 (문장 순서)
+    for i, e in enumerate(ej):
+        if i in used or not e:
+            if cur:
+                groups.append(cur)
+            cur = []
+        else:
+            cur.append(e)
+    if cur:
+        groups.append(cur)
+    picks = []                                             # 묶음 안에서 그 표현 어절만 ('안 됩니다', '수 있습니다', '합니다')
+    for g in groups:
+        txt = " ".join(g) + " "
+        m = MARK_EJ.search(txt)
+        if not m:
+            continue
+        pos, k0 = 0, 0
+        for k, e in enumerate(g):                         # 표현이 시작하는 어절
+            if pos + len(e) >= m.start():
+                k0 = k
+                break
+            pos += len(e) + 1
+        end = m.end()
+        pos, k1 = 0, k0
+        for k, e in enumerate(g):                         # 표현이 끝나는 어절 (최대 2어절)
+            if pos < end:
+                k1 = k
+            pos += len(e) + 1
+        if len(g[k0]) <= 1 and k0 + 1 < len(g):          # '안 / 됩니다', '못 / 합니다' 처럼 한 글자면 다음 어절까지
+            k1 = k0 + 1
+        picks.append(" ".join(g[k0:min(k1, k0 + 1) + 1]))
+    groups = picks
+    out = []
+    for u in units:
+        if (u.get("lemma") or "") in MARKS and groups:
+            u = dict(u, word=groups.pop(0))
+        out.append(u)
+    return out
 
 
 def from_hint(pipe, hint, answer_text):
@@ -200,15 +240,11 @@ def from_hint(pipe, hint, answer_text):
         if e == prev or w in FILLER or u["gloss"] in FILLER:             # 바로 앞과 같은 수어만 뺌 (세정제·세척처럼 떨어져 있으면 둘 다)
             continue
         prev = e
-        picked.append(dict(u, word=_plain(u)))
-    while len(picked) > HINT_MAX:                                       # 너무 길면 회색 단어부터 뒤에서 뺌
-        k = next((i for i in range(len(picked) - 1, -1, -1)
-                  if not _has_sign(pipe, picked[i]["gloss"]) and not KEEP_GLOSS.match(picked[i]["gloss"])), len(picked) - 1)
-        picked.pop(k)
-    for k in range(len(picked) - 1):
-        if picked[k + 1]["gloss"].startswith("필요") and re.search(r"야$", picked[k]["word"]):
-            picked[k] = dict(picked[k], word=re.sub(r"(해|어|아|여)?야$", "", picked[k]["word"]) or picked[k]["word"])
-    return {"text": hint, "units": picked, "method": "sign"} if len(picked) >= 2 else None
+        picked.append(u)
+    if len(picked) > HINT_MAX:                                         # 너무 긴 문장: 블록을 빼면 문장이 끊기므로 쓰지 않음
+        return None
+    picked = [dict(u, word=u["word"]) for u in picked]
+    return {"text": hint, "units": _sentence_words(picked, hint), "method": "sign"} if len(picked) >= 2 else None
 
 
 SIGN_SYSTEM = ("너는 산업안전 안내를 청각장애인에게 한국수어로 전하기 위해, 답변을 수어로 옮길 짧은 한국어 문장 하나로 바꾼다. "
@@ -239,7 +275,7 @@ def llm_sign_sentence(pipe, question, answer_text):
         prompt = (f"[질문]\n{question}\n\n[답변]\n{answer_text}\n\n"
                   "위 답변을 수어로 옮길 한국어 문장 하나로 바꿔 줘.\n"
                   "- 답변의 핵심(무엇을, 언제·어디서, 어떻게, 해야 하는지·하면 안 되는지)을 빠짐없이 담은 완성된 평서문 한 문장\n"
-                  "- 내용어(명사·동사·형용사) 4~8개. 조사·어미는 자연스럽게\n"
+                  "- 질문에 대한 가장 중요한 한 가지만. 내용어(명사·동사·형용사) 3~6개. 조사·어미는 자연스럽게\n"
                   "- 되도록 아래 '수어 단어' 목록의 말을 써 (뜻이 같으면 목록의 말로 바꿔도 됨). 목록에 없는 말은 꼭 필요한 것만\n"
                   "- 답변에 없는 내용은 더하지 말 것. 문장만 출력 (따옴표·설명 없이)\n\n"
                   f"[수어 단어]\n{', '.join(sign_vocab(pipe))}")
