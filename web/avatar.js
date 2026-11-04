@@ -1092,6 +1092,29 @@ export class SignAvatar {
         let pole = raw.multiplyScalar(wr_).add(def.multiplyScalar(1 - wr_));
         pole.y = Math.min(pole.y, -0.2);
         pole.normalize();
+        // 손목이 덜 꺾이게 팔꿈치 자리 고르기: 손목 자리는 그대로, 팔꿈치가 돌 수 있는 원 위(지금 자리 ±60°)에서
+        //  아래팔이 손 방향을 가장 잘 따라가는 자리 (손등 쪽 젖힘은 더 피함). 지금 자리 ±40° 안에서만.
+        //  팔꿈치가 어깨 가까이 들리거나('앞으로 나란히') 몸 옆으로 많이 벌어지면 벌점, 많이 돌수록 조금 벌점 (config.elbowSeek, 기본 1)
+        const hd = fr[s.hand], seek = (this.config && this.config.elbowSeek) ?? 1;
+        if (seek > 0 && hd && hd[0] && hd[9] && hd[5] && hd[17]) {
+          const hf = V(hd[9]).sub(V(hd[0])).normalize();
+          const palmN = new THREE.Vector3().crossVectors(V(hd[5]).sub(V(hd[0])), V(hd[17]).sub(V(hd[0]))).normalize()
+            .multiplyScalar(sign > 0 ? -1 : 1);                               // 손바닥 쪽 (왼손·오른손 방향 맞춤)
+          const axisSW = W.clone().sub(sho2).normalize();
+          let best = null;
+          for (let deg = -40; deg <= 40; deg += 8) {
+            const pc = pole.clone().applyAxisAngle(axisSW, D(deg));
+            const [Ec] = this._ik(sho2, W, R.a, R.b, pc);
+            const fa = W.clone().sub(Ec).normalize();
+            const bend = fa.angleTo(hf);                                        // 손목 꺾임 (라디안)
+            const ext = Math.max(0, -hf.clone().sub(fa).dot(palmN));           // 손등 쪽으로 젖혀지는 정도 (더 피함)
+            const high = Math.max(0, Ec.y - (sho2.y - 0.12));                   // 팔꿈치가 어깨 가까이 들림 (m)
+            const wide = Math.max(0, Math.abs(Ec.x - this.spinePos.x) - (this.shoulderW * 0.5 + 0.06));   // 팔꿈치가 옆으로 벌어짐 (m)
+            const cost = bend + 0.8 * ext + 6 * high + 5 * wide + 0.25 * Math.abs(D(deg)) / seek;
+            if (!best || cost < best[0]) best = [cost, pc];
+          }
+          pole = best[1].normalize();
+        }
         const prevPole = this.st.pole[P];
         if (prevPole && !this.st.pure) pole = prevPole.clone().lerp(pole, 1 - Math.exp(-this._dt / 0.12)).normalize();
         let [E, W2, hinge] = this._ik(sho2, W, R.a, R.b, pole);
@@ -1143,7 +1166,21 @@ export class SignAvatar {
     }
     const f = V(h[9]).sub(V(h[0])), sd = V(h[17]).sub(V(h[5]));
     const M = this._basis(f, sd), M0 = this._basis(R.handF, R.handS);
-    const handW = new THREE.Quaternion().setFromRotationMatrix(M.multiply(M0.invert()));
+    let handW = new THREE.Quaternion().setFromRotationMatrix(M.multiply(M0.invert()));
+    // ---- 아래팔 방향 차이 나눠 갖기: 아바타 아래팔이 데이터 아래팔과 다른 방향이면(팔꿈치 자리·손 높이 맞추기 때문)
+    //  손이 데이터의 절대 방향만 따르면 그 차이를 손목이 모두 꺾어서 메움 ('받다'·'근로자'의 손목 꺾임).
+    //  손 방향을 '데이터 절대 방향'과 '데이터 손목 각도를 아바타 아래팔에 붙인 방향'의 중간으로 (config.wristFollow, 기본 0.5)
+    {
+      const bd = fr.body, k = (this.config && this.config.wristFollow) ?? 0.5;
+      if (k > 0 && bd && bd[s.elb] && bd[s.wri]) {
+        const dfa = V(bd[s.wri]).sub(V(bd[s.elb])).normalize();
+        const afa = R.lower.clone().applyQuaternion(lowerW).normalize();
+        if (dfa.lengthSq() > 0.5) {
+          const q = new THREE.Quaternion().setFromUnitVectors(dfa, afa);
+          handW = handW.clone().slerp(q.multiply(handW), k);
+        }
+      }
+    }
     // ---- 손목 비틀림 나누기: 손목 회전 중 아래팔 축 둘레 비틀림의 45% 를 아래팔에 (CC4 비틀림 뼈가 있으면 그 뼈에)
     let local = lowerW.clone().invert().multiply(handW);
     const axis = R.lower.clone();
