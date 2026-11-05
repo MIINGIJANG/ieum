@@ -21,11 +21,11 @@
   :root {
     /* 색은 세 가지만: 검정 · 흰색 · 회색 (회색 #767676 은 흰 바탕·검정 바탕 모두 글자 대비 4.5:1 이상). 듣는 중 마이크 주황색만 예외 */
     --concrete: #ffffff;       /* 페이지 배경 */
-    --surface: #ffffff;        /* 박스 배경 */
+    --surface: #e8e8e8;        /* 박스 배경 (배경과 색으로 구분, 테두리 없음) */
     --ink: #000000;            /* 글자·아이콘·강조 */
     --on-ink: #ffffff;         /* 진한 바탕 위 글자 */
     --muted: #767676;          /* 보조 글자 */
-    --line: #000000;           /* 모든 테두리·선: 라이트 검정, 다크 흰색 */
+    --line: #000000;           /* 출처 표 선: 라이트 검정, 다크 흰색 */
     --block-gap: 20px;         /* 화면의 모든 박스·요소 사이 세로 간격 (하나로 통일) */
     --font: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
     color-scheme: light;
@@ -34,7 +34,7 @@
   @media (prefers-color-scheme: dark) {
     :root {
       --concrete: #000000;
-      --surface: #000000;
+      --surface: #262626;
       --ink: #ffffff;
       --on-ink: #000000;
       --line: #ffffff;
@@ -77,7 +77,7 @@
   form.query input {
     width: 100%;
     padding: 15px 94px 15px 20px;
-    border: 1px solid var(--line);   /* 모든 박스 테두리: 1px, 같은 색 */
+    border: 0;   /* 박스는 테두리 없이 배경과 다른 색으로 구분 */
     border-radius: 999px;
     background: var(--surface);
     font-size: 1rem;
@@ -103,10 +103,9 @@
   @media (min-width: 761px) { .examples { flex-direction: row; flex-wrap: wrap; justify-content: center; } }   /* PC: 한 줄에 2개 */
   .examples button {
     max-width: 100%; text-align: center;
-    border: 1px solid var(--line); background: var(--surface); border-radius: 999px;
+    border: 0; background: var(--surface); border-radius: 999px;
     padding: 4px 12px; font-size: 1rem; cursor: pointer; color: var(--ink); margin: 0;
   }
-  .examples button:hover { border-color: var(--ink); }   /* 마우스 올림: 단어 박스·버튼과 같은 색 (다크 모드 흰색) */
 
   /* 결과: 아래에서 올라옴 (그 사이 아바타는 미리 불러와 둠) */
   .results { display: grid; gap: var(--block-gap); grid-template-columns: minmax(0, 1fr); }
@@ -132,10 +131,9 @@
   .stage .loading.on { display: block; }
   .controls { display: flex; gap: 8px; align-items: center; }
   .controls button {   /* 단어 박스와 같은 크기·글자 */
-    padding: 4px 10px; border-radius: 8px; background: var(--surface); border: 1px solid var(--line);
+    padding: 4px 10px; border-radius: 8px; background: var(--surface); border: 0;
     font-weight: 500; line-height: inherit; cursor: pointer;
   }
-  .controls button:hover { border-color: var(--ink); }
   .controls label { font-size: 1rem; color: var(--muted); display: flex; gap: 6px; align-items: center; }
 
   /* 글로스 순서 */
@@ -144,17 +142,16 @@
     display: flex; flex-wrap: wrap; gap: 6px; justify-content: center;
   }
   ol.glosses li {
-    padding: .25em .62em; border-radius: 8px; background: var(--surface); border: 1px solid var(--line);
+    padding: .25em .62em; border-radius: 8px; background: var(--surface); border: 0;
     font-weight: 500; transition: background .15s, color .15s;
   }
   ol.glosses li.nomo { background: transparent; color: var(--muted); }   /* 동작 없는 단어: 재생 안 함 → 빈 칸처럼 흐리게 (라이트·다크 모두 구분되게) */
   ol.glosses li.play { cursor: pointer; }   /* 동작 있는 단어: 누르면 그 단어만 다시 보기 */
   ol.glosses li.fs::after { content: "지문자"; margin-left: 4px; font-size: 0.7em; opacity: 0.65; vertical-align: 0.15em; }
-  ol.glosses li.play:hover { border-color: var(--ink); }
-  ol.glosses li.active { background: var(--ink); color: var(--on-ink); border-color: var(--ink); }   /* 지금 표현 중 */
+  ol.glosses li.active { background: var(--ink); color: var(--on-ink); }   /* 지금 표현 중 */
 
   /* ---------- 답변 · 출처 ---------- */
-  .answer { background: var(--surface); border-radius: 14px; padding: 18px; border: 1px solid var(--line); }
+  .answer { background: var(--surface); border-radius: 14px; padding: 18px; border: 0; }
   .answer h2 { font-size: 1rem; margin: 0 0 6px; color: var(--muted); font-weight: 500; }
   .answer .text { font-size: 1rem; margin: 0 0 12px; }
   .answer .hint { color: var(--muted); font-size: 1rem; margin: -4px 0 0; }
@@ -169,7 +166,7 @@
   .src b .t2 { white-space: nowrap; }
   @media (max-width: 760px) { .src b .t1 { display: block; } }   /* 휴대폰: 제목 앞부분 / 마지막 단어 + 페이지 두 줄 */
   .src .tbl { overflow-x: auto; margin: 6px 0 8px; }
-  .src .pdf { overflow: hidden; margin: 8px 0 0; border: 1px solid var(--line); border-radius: 6px; background: #ffffff; }   /* 쪽 이미지(원본)가 뜨기 전 바탕: 흰색 */
+  .src .pdf { overflow: hidden; margin: 8px 0 0; border: 0; border-radius: 6px; background: #ffffff; }   /* 쪽 이미지(원본)가 뜨기 전 바탕: 흰색 */
   .src .pdf img { display: block; max-width: none; height: auto; }
   .src table { border-collapse: collapse; width: 100%; font-size: 1rem; color: var(--ink); background: var(--surface); }
   .src th, .src td { border: 1px solid var(--line); padding: 5px 8px; vertical-align: middle; line-height: 1.45; }
