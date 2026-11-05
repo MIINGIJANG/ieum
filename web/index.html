@@ -25,7 +25,7 @@
     --ink: #000000;            /* 글자·아이콘·강조 */
     --on-ink: #ffffff;         /* 진한 바탕 위 글자 */
     --muted: #767676;          /* 보조 글자 */
-    --line: #767676;           /* 모든 테두리·선 */
+    --line: #000000;           /* 모든 테두리·선: 라이트 검정, 다크 흰색 */
     --block-gap: 20px;         /* 화면의 모든 박스·요소 사이 세로 간격 (하나로 통일) */
     --font: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
     color-scheme: light;
@@ -37,6 +37,7 @@
       --surface: #000000;
       --ink: #ffffff;
       --on-ink: #000000;
+      --line: #ffffff;
       color-scheme: dark;
     }
   }
@@ -182,7 +183,7 @@
   .boot .in { visibility: hidden; position: absolute; left: 0; right: 0; top: 40%; display: flex; flex-direction: column; align-items: center; gap: var(--block-gap); }
   .boot .in.placed { visibility: visible; }   /* 첫 화면 제목 위치를 잰 뒤에만 보임 (가운데에 떴다가 튀어오르지 않게) */
   .boot h1 { margin: 0; font-size: clamp(2.4rem, 8vw, 3.2rem); font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
-  .boot .bar { width: min(240px, 60vw); height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+  .boot .bar { width: min(240px, 60vw); height: 6px; border-radius: 3px; background: var(--muted); overflow: hidden; }   /* 채워지는 막대(글자색)와 구분되게 회색 */
   .boot .bar i { display: block; height: 100%; width: 0; background: var(--ink); border-radius: 3px; transition: width .3s ease; }
   .boot p { margin: 0; color: var(--muted); font-size: 1rem; min-height: 1.6em; }
   @media (prefers-reduced-motion: reduce) { .boot .bar i { transition: none; } }
