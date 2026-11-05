@@ -1,7 +1,7 @@
 #!/bin/zsh
 # 이음 공개 실행: 서버를 켜고, 누구나 접속할 수 있는 임시 주소(https://….trycloudflare.com)를 만듭니다.
 # Mac 이 켜져 있고 이 창이 열려 있는 동안만 접속됩니다. 끌 때는 이 창을 닫으세요. (켤 때마다 주소가 바뀜)
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/../.."                         # 저장소 맨 위 폴더에서 실행
 source ~/.zshrc 2>/dev/null
 lsof -ti tcp:8000 | xargs kill 2>/dev/null
 python -c "import pdfplumber, pypdfium2, PIL, kiwipiepy" 2>/dev/null || python -m pip install -q -U pdfplumber pypdfium2 pillow kiwipiepy

@@ -163,7 +163,7 @@ def expand_query(q):
 
 # ---------------- 검색기 ----------------
 # 단어 BM25(절 제목 포함)를 글자 TF-IDF 에 더하는 비율, 같은 쪽 앞·뒤 chunk 점수를 더하는 비율.
-# 개발용·heldout·heldout2 에서 1.0~2.0 / 0.1~0.15 가 같은 성능이라 그 가운데 (heldout3 은 비교용, README 검색 성능)
+# 개발용·heldout·heldout2 에서 1.0~2.0 / 0.1~0.15 가 같은 성능이라 그 가운데 (heldout3 은 비교용, docs/retrieval.md)
 HYBRID_W = 1.2
 NEIGHBOR_W = 0.15
 _KIWI = None

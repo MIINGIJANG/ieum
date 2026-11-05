@@ -6,7 +6,7 @@ uvicorn api:app --port 8000
 
 브라우저: http://localhost:8000        (시연용 웹 화면)
           http://localhost:8000/docs   (API 테스트)
-명세: docs/API.md
+명세: docs/api.md
 """
 import os
 from contextlib import asynccontextmanager
