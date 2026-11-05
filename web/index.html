@@ -291,6 +291,10 @@ if (!window.avatar) window.dispatchEvent(new Event("avatar-failed"));
 </script>
 <script>
 const API = location.protocol.startsWith("http") ? "" : "http://localhost:8000";
+// 오프라인 모드: 받은 화면·답·동작을 저장해 두고 인터넷이 끊기면 그것으로 (web/sw.js, 화면 변화 없음)
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+  addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
+}
 
 // ---------- 첫 로딩: 처음 쓸 때 생기는 지연을 여기서 모두 미리 처리 ----------
 // 아바타(내려받기·옷 입히기), 출처 쪽 이미지, 서버(번역 모델·검색), 예시 질문, 글꼴
@@ -347,6 +351,8 @@ const bootAll = Promise.all([
 ]);
 // 너무 오래 걸리면(느린 망) 60초 뒤에는 그냥 시작 (남은 준비는 뒤에서 계속)
 Promise.race([bootAll, new Promise(r => setTimeout(r, 60000))]).then(() => {
+  // 오프라인 모드: 나머지 예시 질문 답도 뒤에서 천천히 받아 둠 → 인터넷이 끊겨도 예시 질문은 답이 나옴 (web/sw.js 가 저장)
+  examplesReady.then(list => list.forEach((e, i) => setTimeout(() => prefetchAnswer(e.question).catch(() => {}), 3000 + 800 * i)));
   const el = document.getElementById("boot");
   el.remove();                                 // 바로 사라짐 (페이드 없음)
   toTop();

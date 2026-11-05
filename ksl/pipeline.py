@@ -372,6 +372,7 @@ class SafetySignPipeline:
 
     def _expand_numbers(self, units):
         """'2미터'·'4시간' 같은 숫자 단어 → 숫자 수어(한국식 읽기: 342 → 삼 백 사 십 이) + 단위 수어.
+        소요 시간('4시간')은 전용 수어가 있으면 그것 하나 (SignBridge timegloss).
         화면 블록은 하나 그대로('2미터'), 동작만 이어 붙임 (group 이 같으면 화면이 앞 블록에 묶음).
         숫자·단위 수어가 모두 있을 때만 (없으면 예전처럼 회색 블록)."""
         out = []
@@ -379,6 +380,8 @@ class SafetySignPipeline:
             m = re.fullmatch(r"(\d+)(\D*)", u["gloss"])
             unit = self.NUM_UNITS.get(m.group(2), False) if m else False
             gs = number_glosses(m.group(1)) + ([unit] if unit else []) if unit is not False else None
+            if m and m.group(2) == "시간" and self.motion and self.motion.get(f"시간:{int(m.group(1))}시간"):
+                gs = [f"시간:{int(m.group(1))}시간"]                         # 소요 시간 전용 수어 ('4시간' 한 동작)
             if gs and self.motion and all(self.motion.get(g) for g in gs):
                 for k, g in enumerate(gs):
                     out.append({**u, "gloss": g, "word": u["word"] if k == 0 else "", "nms": u.get("nms") if k == 0 else None,
