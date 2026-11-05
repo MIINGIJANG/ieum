@@ -41,6 +41,16 @@
       color-scheme: dark;
     }
   }
+  /* 다크 모드: 라이트 모드와 같은 배치 (글자 모두 흰색, 표현 중 블록 #0d0d0e + 흰 글씨, 마우스 올림 #48494a) */
+  @media (prefers-color-scheme: dark) {
+    :root { --muted: #ffffff; }
+    form.query input::placeholder { color: #ffffff; opacity: 1; }
+    :root ol.glosses li.fs::after { opacity: 1; }
+    :root ol.glosses li.active { background: #0d0d0e; color: #ffffff; }
+    :root .examples button:hover, :root .controls button:hover, :root ol.glosses li.play:not(.active):hover { background: #48494a; }
+    :root .boot .bar { background: #3e3f40; }   /* 로딩 막대 바탕 = 박스색 */
+    :root ol.glosses li.nomo { background: #3e3f40; color: #0d0d0e; }   /* 표현할 수 없는 블록: 박스는 다른 블록과 같고 글자는 표현 중 박스색 */
+  }
   /* 라이트 모드: 글자는 예외 없이 모두 검정, 표현 중 수어 블록만 흰 글씨 + #5f5f5f 박스 */
   @media (prefers-color-scheme: light) {
     :root { --muted: #000000; }
