@@ -199,3 +199,14 @@ def test_sign_pauses_and_compose_hold():
     extra = round((hold + SENT_PAUSE) * fps) - round(hold * fps)          # 단어 끝 멈춤 프레임이 늘어난 만큼
     assert len(b["frames"]) - len(a["frames"]) == extra
     assert b["segments"][1]["start"] - a["segments"][1]["start"] == extra
+
+
+def test_team_3d_words_20261105():
+    """2026-11-05 추가 전달본(자료목록.json): 점검을 통과한 단어는 동작이 있고, 뺀 단어(짧은 조각·이상 자세·동음이의)는 없음."""
+    from ksl.motion import MotionDict
+    md = MotionDict(ROOT / "data/sign/motions")
+    for g in ["환기1", "해체0", "청소1", "화상1", "재료0", "중요1"]:
+        c = md.get(g)
+        assert c and len(c["frames"]) >= 8, g
+    for g in ["밀폐0", "진동", "양1", "구멍0", "동시1"]:
+        assert md.get(g) is None, g
