@@ -799,13 +799,10 @@ export class SignAvatar {
     // 위: 씌운 안전모 끝, 없으면 모델 맨 위(모델에 있는 안전모·머리) / 아래: 골반 위 (config.frameBottom 로 조절)
     const top = this._hat ? new THREE.Box3().setFromObject(this._hat).max.y : (this._modelTop ?? this.headY + 0.2);
     const bottom = this._hipsY + ((this.config && this.config.frameBottom) ?? 0.04);
-    // config.frameMargin (화면 높이 비율): 머리 위 여백 = 아래 여백. 아래는 몸이 이어지므로 그만큼 흐리게 사라지게 함
+    // config.frameMargin (화면 높이 비율): 머리 위 여백 = 아래 여백
     const fm = this.config && this.config.frameMargin;
     const pad = fm ? (top - bottom) * fm / (1 - fm) : 0.05, span = top - bottom + pad;
-    if (fm) {
-      const g = `linear-gradient(to bottom, #000 ${((1 - fm * 1.6) * 100).toFixed(1)}%, transparent 100%)`;
-      this.canvas.style.maskImage = g; this.canvas.style.webkitMaskImage = g;
-    } else { this.canvas.style.maskImage = ""; this.canvas.style.webkitMaskImage = ""; }
+    this.canvas.style.maskImage = ""; this.canvas.style.webkitMaskImage = "";   // 아래쪽 흐림 효과 없음 (몸은 화면 끝에서 그대로 잘림)
     const half = D(this.camera.fov / 2);
     const dist = span / 2 / Math.tan(half);
     const cy = bottom + span / 2;
