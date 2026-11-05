@@ -1,9 +1,11 @@
 """팀원 '데이터_전달자료_3D처리본' 폴더 → 동작사전 (이미 있는 단어는 그대로 두고 새 단어만 더함).
 
 python scripts/data/import_team_3d.py ~/Downloads/데이터_전달자료_3D처리본_20261103
+python scripts/data/import_team_3d.py ~/Downloads/KOSHA_추가수어자료_3D형식      (자료목록.json 이 있는 전달본, 2026-11-05)
 
 폴더 구조 (README.md 참고)
   처리현황.csv                 단어마다 파일·출처·service_use_policy (review_only 는 가져오지 않음)
+    또는 자료목록.json          {"items": [{word, file, playback_state, source_mode, source_id, gloss_raw, service_use_policy}]}
   좌표/<단어>.json             {"gloss","fps","landmarks": {pose_keypoints_3d, face_keypoints_3d, hand_*_keypoints_3d}} 평탄 x,y,z
   재생상태/<단어>.json         point_status(0 = 관측 안 됨, 채운 값), hand_rest_weight, face_enabled_frames
 좌표: 클립 어깨 중점 원점, 어깨너비 단위, +X 화면 오른쪽, +Y 위, +Z 카메라 쪽 → 이 저장소 기준(+Y 아래, +Z 카메라에서 멀어짐)으로 뒤집음
@@ -40,7 +42,27 @@ SKIP = {
     "작업_근무": "'작업'은 이미 일하다1 수어로 보여줌",
     "발생": "'발생'은 이미 일어나다0 수어로 보여줌",
     "주의": "'주의'는 이미 조심1 수어로 보여줌",
+    # 2026-11-05 추가 전달본 (자료목록.json): 값으로 점검해서 뺌
+    "다리": "손이 어깨너비 1.9배 옆으로 벌어짐 (보통 0.9 이하)",
+    "모두": "손이 코보다 어깨너비 1.6배 위로 올라감 (손목 연결 이상치 프레임)",
+    "수거": "손이 어깨너비 1.7배 옆으로 벌어짐 (손목 연결 이상치 프레임)",
+    "양": "손이 코보다 0.55 위 (기존 동작은 거의 코 높이 이하), '양(분량)'과 '양(동물)' 구분 필요",
+    "진동": "손이 머리 위·옆으로 크게 벌어짐, 출처 문장의 '진동'은 지명(진동지점)",
+    "잠수": "출처 문장의 '잠수'는 다리 이름(잠수교) → 뜻 검수 필요",
+    "위": "'위(위쪽)'와 '위(배 속)' 구분 필요, 출처 문장에 '위' 가 없음",
+    "돌": "'돌(바위)'과 '돌(첫돌)' 구분 필요, 출처 문장에 '돌' 이 없음",
+    "코": "'코(신체)' 와 검사 문장의 다른 뜻 구분 필요",
+    "밀폐": "아바타로 재생해 보니 팔이 머리 위로 크게 벌어짐 (다른 문장에서 잘라 온 교체 자료, 뜻·동작 검수 필요)",
+    "덮다": "아바타로 재생해 보니 두 팔을 벌린 채 굳어 있음 (다른 문장에서 잘라 온 교체 자료, 뜻·동작 검수 필요)",
+    "보다": "아바타로 재생해 보니 한 손이 이마를 덮고 다른 손이 위로 올라감 (다른 문장에서 잘라 온 교체 자료, 뜻·동작 검수 필요)",
+    "동시": "아바타로 재생해 보니 두 팔이 머리 위로 올라감 (다른 문장에서 잘라 온 교체 자료, 뜻·동작 검수 필요)",
+    "바닥": "아바타로 재생해 보니 끝에서 팔이 머리 위로 올라감 ('바닥'은 낮은 곳) (다른 문장에서 잘라 온 교체 자료, 뜻·동작 검수 필요)",
+    "박스": "아바타로 재생해 보니 손이 머리 위로 올라감 (다른 문장에서 잘라 온 교체 자료, 뜻·동작 검수 필요)",
+    "암모니아": "아바타로 재생해 보니 손이 머리 위로 올라감 (다른 문장에서 잘라 온 교체 자료, 뜻·동작 검수 필요)",
+    "대기": "아바타로 재생해 보니 한 손이 얼굴을 덮고 다른 손이 위로 올라감 (다른 문장에서 잘라 온 교체 자료, 뜻·동작 검수 필요)",
+    "포함": "아바타로 재생해 보니 손이 머리 위로 올라감 (다른 문장에서 잘라 온 교체 자료, 뜻·동작 검수 필요)",
 }
+MIN_FRAMES = 8          # 앞뒤를 자른 뒤 이보다 짧으면 문장에서 잘라 온 조각으로 보고 가져오지 않음 (0.27초)
 MP_SOURCES = ("mediapipe_relative3d_estimate", "supplied_relative3d")      # 어깨가 좁게 잡힌 자료 (코 높이로 크기 맞춤)
 REF_NOSE = 0.524                                                             # AI Hub 3D 목→코 높이 중앙값 (어깨너비 단위)
 
@@ -61,10 +83,12 @@ def fit_z(pairs):
 
 
 def load(folder, row, L):
-    d = json.loads((folder / nfc(row["file"])).read_text(encoding="utf-8"))
-    st = json.loads((folder / nfc(row["playback_state"])).read_text(encoding="utf-8"))
+    d = json.loads(find(folder, row["file"]).read_text(encoding="utf-8"))
+    st = json.loads(find(folder, row["playback_state"]).read_text(encoding="utf-8"))
     lm, ps = d["landmarks"], st["point_status"]
     rest = st.get("hand_rest_weight") or {}
+    skip = st.get("wrist_link_skipped_frames") or {}       # 몸·손 손목이 크게 어긋난 프레임 (이상치) → 그 손은 없음
+    skip = {k: set(v) for k, v in skip.items()} if isinstance(skip, dict) else {}
     face_ok = set(st.get("face_enabled_frames") or [])
     T = len(lm["pose_keypoints_3d"])
 
@@ -83,8 +107,8 @@ def load(folder, row, L):
     for t in range(T):
         pose = pts("pose_keypoints_3d", t, 25)
         f = {"body": pose[:8] if pose else None,
-             "rh": None if (rest.get("Right") or [0] * T)[t] >= 0.5 else pts("hand_right_keypoints_3d", t, 21),
-             "lh": None if (rest.get("Left") or [0] * T)[t] >= 0.5 else pts("hand_left_keypoints_3d", t, 21),
+             "rh": None if (rest.get("Right") or [0] * T)[t] >= 0.5 or t in skip.get("Right", ()) else pts("hand_right_keypoints_3d", t, 21),
+             "lh": None if (rest.get("Left") or [0] * T)[t] >= 0.5 or t in skip.get("Left", ()) else pts("hand_left_keypoints_3d", t, 21),
              "face": pts("face_keypoints_3d", t, 70) if t in face_ok else None}
         if pose and pose[0] and pose[15] and pose[16]:
             f["fk"] = [pose[0], pose[16], pose[15]]          # 코, 왼눈, 오른눈 → 얼굴 근처 손 위치 맞추기 (아바타)
@@ -179,6 +203,25 @@ def trim_rise(frames, keep=0.5, pad=3):
     return frames[max(0, a - pad): min(len(frames), b + pad + 1)]
 
 
+def find(folder, rel):
+    """한글 파일 이름이 NFD(맥)·NFC 어느 쪽이어도 찾기."""
+    p = Path(folder)
+    for part in Path(rel).parts:
+        hit = p / part
+        if not hit.exists():
+            hit = next((x for x in p.iterdir() if nfc(x.name) == nfc(part)), hit)
+        p = hit
+    return p
+
+
+def read_rows(folder):
+    """처리현황.csv 또는 자료목록.json → 단어별 행 (word, file, playback_state, source_mode, source_id, service_use_policy, gloss_raw)."""
+    csv_p, json_p = find(folder, "처리현황.csv"), find(folder, "자료목록.json")
+    if csv_p.exists():
+        return list(csv.DictReader(open(csv_p, encoding="utf-8-sig")))
+    return [{k: (str(v) if not isinstance(v, str) else v) for k, v in it.items()} for it in json.loads(json_p.read_text(encoding="utf-8"))["items"]]
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("folder")
@@ -190,13 +233,13 @@ def main():
     md = MotionDict(a.out)
     L = bone_lengths([md.get(g)["frames"] for g in md.index if "2D" not in (md.get(g).get("source") or "")])
     removed = {_strip_num(g) for g in REMOVED}
-    rows = list(csv.DictReader(open(folder / "처리현황.csv", encoding="utf-8-sig")))
+    rows = read_rows(folder)
     clips, report = {}, []
     for row in rows:
         word = nfc(row["word"])
         if a.only and word not in a.only:
             continue
-        g = NAMES.get(word, word + "1")
+        g = NAMES.get(word) or nfc(row.get("gloss_raw") or "") or word + "1"
         if word in SKIP and not a.only:
             report.append(f"  {word:<8} 가져오지 않음: {SKIP[word]}")
             continue
@@ -218,13 +261,16 @@ def main():
         fr = trim_rest(fr)
         if row["source_mode"] in MP_SOURCES:             # 사전 영상: 앞뒤 손 올리기·내리기도 자름
             fr = trim_rise(fr)
+        if len(fr) < MIN_FRAMES:
+            report.append(f"  {nfc(row['word']):<8} 가져오지 않음: {len(fr)}프레임 (너무 짧은 조각)")
+            continue
         src = (f"팀원 3D처리본 {row['source_mode']} {row['source_id']} ({n0}→{len(fr)}프레임, "
                f"깊이배율 몸 {info['sb']:.2f}·손 {info['sh']['rh']:.2f}/{info['sh']['lh']:.2f}, 크기 {info['ks']:.2f}) (3D)")
         report.append(f"  {nfc(row['word']):<8} → {g:<6} {len(fr):>3}프레임 ({len(fr) / fps:.1f}초)  {row['source_mode']}"
                       f"  깊이 {info['sb']:.2f}/{info['sh']['rh']:.2f}/{info['sh']['lh']:.2f} 크기 {info['ks']:.2f}")
         if not a.dry:
             MotionDict.save_clip(a.out, g, fr, round(fps), source=src)
-    print(f"새 동작 {len(clips)}개" + (" (저장 안 함)" if a.dry else f" → {a.out}"))
+    print(f"새 동작 {sum(1 for r in report if '→' in r and '프레임 (' in r)}개" + (" (저장 안 함)" if a.dry else f" → {a.out}"))
     print("\n".join(report))
 
 
