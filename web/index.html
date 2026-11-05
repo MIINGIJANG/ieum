@@ -174,7 +174,6 @@
   .answer { background: var(--surface); border-radius: 14px; padding: 18px; border: 0; }
   .answer h2 { font-size: 1rem; margin: 0 0 6px; color: var(--muted); font-weight: 500; }
   .answer .text { font-size: 1rem; margin: 0 0 12px; }
-  .answer .cite { font-size: .8em; white-space: nowrap; }   /* 답변 문장 뒤 근거 쪽 (글자색은 같은 색) */
   .answer .hint { color: var(--muted); font-size: 1rem; margin: -4px 0 0; }
   .answer > :last-child { margin-bottom: 0; }
   .info { display: grid; gap: var(--block-gap); }
@@ -685,9 +684,7 @@ function render() {
         .map(b => b.type === "table" ? tableHTML(b.rows) : `<p>${esc(b.text)}</p>`).join("")}</div></li>`).join("");
     a.innerHTML = `
       <h2>답변</h2>
-      <p class="text">${data.answer_cites && data.answer_cites.length
-        ? data.answer_cites.map(c => esc(c.text) + (c.page ? ` <span class="cite">${c.page}쪽</span>` : "")).join(" ")
-        : esc(data.answer_text || "개인보호구의 사용 및 관리에 관한 기술지원규정에서 관련 내용을 찾지 못했습니다.")}</p>
+      <p class="text">${esc(data.answer_text || "개인보호구의 사용 및 관리에 관한 기술지원규정에서 관련 내용을 찾지 못했습니다.")}</p>
 `;
     $("sources").innerHTML = src ? `<h2>출처</h2><ul>${src}</ul>` : "";
     $("sources").hidden = !src;

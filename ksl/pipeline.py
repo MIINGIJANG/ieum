@@ -96,21 +96,6 @@ def merge_sources(hits, titles, order=None, tables=None, images=None):
 
 
 
-def cite_sentences(answer_text, hits):
-    """답변 문장마다 가장 비슷한 검색 결과의 쪽 → [{"text": 문장, "page": 쪽}]. 문장이 근거 쪽과 거의 안 맞으면 page=None."""
-    sents = split_sentences(answer_text or "") or ([answer_text] if answer_text else [])
-    if not sents or not hits:
-        return [{"text": t, "page": None} for t in sents]
-    from sklearn.feature_extraction.text import TfidfVectorizer
-    docs = [strip_marks(h["text"]) for h in hits]
-    v = TfidfVectorizer(analyzer="char_wb", ngram_range=(2, 4)).fit(docs + sents)
-    sim = (v.transform(sents) @ v.transform(docs).T).toarray()
-    out = []
-    for t, row in zip(sents, sim):
-        j = int(row.argmax())
-        out.append({"text": t, "page": hits[j]["page"] if row[j] >= 0.2 else None})
-    return out
-
 SENT_PAUSE, CLAUSE_PAUSE = 0.35, 0.2      # 문장 끝·절 끝 뒤 쉼 (초)
 
 
@@ -562,7 +547,6 @@ class SafetySignPipeline:
             "question": question,
             "answer_mode": mode,                       # demo | llm | extractive
             "answer_text": answer_text,                # 화면에 보여줄 답변 (문서 근거)
-            "answer_cites": cite_sentences(answer_text, hits),   # 답변 문장마다 근거 쪽 (화면: 문장 뒤 'N쪽')
             "sign_text": " ".join(s["korean"] for s in sents),   # 수어로 보여주는 문장 (짧게 줄인 것)
             "sign_debug": sign_debug,                  # 점검용: Claude 수어 문장, 실제로 쓴 방식, 쓰지 않은 이유
             "sentences": sents,                        # 문장별 글로스 + 타임라인
