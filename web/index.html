@@ -19,31 +19,24 @@
 </script>
 <style>
   :root {
-    --concrete: #eceee9;
-    --surface: #ffffff;
-    --ink: #17202b;
-    --muted: #5d6874;
-    --line: #d5d9d2;
-    --caution: #f2b705;        /* 경고 표지 노랑 */
+    /* 색은 세 가지만: 검정 · 흰색 · 회색 (회색 #767676 은 흰 바탕·검정 바탕 모두 글자 대비 4.5:1 이상). 듣는 중 마이크 주황색만 예외 */
+    --concrete: #ffffff;       /* 페이지 배경 */
+    --surface: #ffffff;        /* 박스 배경 */
+    --ink: #000000;            /* 글자·아이콘·강조 */
+    --on-ink: #ffffff;         /* 진한 바탕 위 글자 */
+    --muted: #767676;          /* 보조 글자 */
+    --line: #767676;           /* 모든 테두리·선 */
     --block-gap: 20px;         /* 화면의 모든 박스·요소 사이 세로 간격 (하나로 통일) */
     --font: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
-    --on-ink: #ffffff;         /* 진한 바탕 위 글자 */
-    --th-bg: #f1f2ef;
-    --cell-line: #9aa1a8;
-    --pdf-bg: #f2f2f2;
     color-scheme: light;
   }
-  /* 기기 설정이 다크 모드면 자동으로 어두운 화면 */
+  /* 기기 설정이 다크 모드면 자동으로 어두운 화면 (검정·흰색만 서로 바뀜, 회색은 같음) */
   @media (prefers-color-scheme: dark) {
     :root {
-      --concrete: #1c1c1c;
-      --surface: #262626;
-      --ink: #ececec;
-      --muted: #a3a3a3;
-      --line: #3a3a3a;
-      --on-ink: #1c1c1c;
-      --th-bg: #2b2b2b;
-      --cell-line: #555555;
+      --concrete: #000000;
+      --surface: #000000;
+      --ink: #ffffff;
+      --on-ink: #000000;
       color-scheme: dark;
     }
   }
@@ -59,7 +52,7 @@
     -webkit-font-smoothing: antialiased;
   }
   button, input { font: inherit; color: inherit; }
-  :focus-visible { outline: 3px solid var(--caution); outline-offset: 2px; }
+  :focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 
   .app {
     max-width: 1080px;
@@ -175,11 +168,11 @@
   .src b .t2 { white-space: nowrap; }
   @media (max-width: 760px) { .src b .t1 { display: block; } }   /* 휴대폰: 제목 앞부분 / 마지막 단어 + 페이지 두 줄 */
   .src .tbl { overflow-x: auto; margin: 6px 0 8px; }
-  .src .pdf { overflow: hidden; margin: 8px 0 0; border: 1px solid var(--line); border-radius: 6px; background: var(--pdf-bg); }   /* 쪽 이미지 바탕과 같은 회색 */
+  .src .pdf { overflow: hidden; margin: 8px 0 0; border: 1px solid var(--line); border-radius: 6px; background: #ffffff; }   /* 쪽 이미지(원본)가 뜨기 전 바탕: 흰색 */
   .src .pdf img { display: block; max-width: none; height: auto; }
   .src table { border-collapse: collapse; width: 100%; font-size: 1rem; color: var(--ink); background: var(--surface); }
-  .src th, .src td { border: 1px solid var(--cell-line); padding: 5px 8px; vertical-align: middle; line-height: 1.45; }
-  .src th { background: var(--th-bg); font-weight: 500; text-align: center; }
+  .src th, .src td { border: 1px solid var(--line); padding: 5px 8px; vertical-align: middle; line-height: 1.45; }
+  .src th { background: var(--surface); font-weight: 500; text-align: center; }
   .src td:first-child { text-align: center; }
   .empty { color: var(--muted); }
 
