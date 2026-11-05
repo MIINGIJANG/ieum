@@ -646,7 +646,8 @@ function render() {
       // 대체 표현의 두 번째 수어부터(안전화 → 보호 + 신발)는 블록을 따로 만들지 않고 앞 블록('안전화는')에 묶음
       //  → 블록만 읽어도 문장이 끊기지 않게. 재생 중에는 그 블록이 계속 표시됨
       const subOf = s.sub_of && s.sub_of[i];
-      if (subOf && i > 0 && s.sub_of[i - 1] === subOf && !(s.words && s.words[i]) && items.length) {
+      const grp = s.group && s.group[i];          // 숫자 + 단위('2미터' → 2 + 미터)도 한 블록으로 묶음
+      if (((subOf && i > 0 && s.sub_of[i - 1] === subOf) || (grp && i > 0 && s.group[i - 1] === grp)) && !(s.words && s.words[i]) && items.length) {
         const prev = items[items.length - 1];
         items.push({ gloss: g, li: prev.li, seg: motion ? motion.segments[k] : null, nms: (s.nms && s.nms[i]) || null, cont: true });
         k++;

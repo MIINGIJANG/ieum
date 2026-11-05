@@ -96,6 +96,27 @@ def merge_sources(hits, titles, order=None, tables=None, images=None):
 
 
 
+
+_DIGIT = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+_PLACE = ["", "십", "백", "천", "만"]
+
+
+def number_glosses(num):
+    """숫자 → 숫자 수어 글로스 ('수:3' 꼴, scripts/data/import_signbridge.py). 한국식 읽기 (SignBridge numberGlosses 와 같음):
+    342 → 수:3 수:백 수:4 수:십 수:2, 10 → 수:십 (십·백·천 앞의 1 은 생략), 0 으로 시작하거나 다섯 자리를 넘으면 자릿수대로."""
+    out = []
+    if num.startswith("0") or len(num) > 5:
+        return [f"수:{c}" for c in num]
+    for i, c in enumerate(num):
+        d, place = int(c), len(num) - 1 - i
+        if d == 0:
+            continue
+        if not (d == 1 and 1 <= place <= 3):
+            out.append(f"수:{_DIGIT[d]}")
+        if place >= 1:
+            out.append(f"수:{_PLACE[place]}")
+    return out or ["수:0"]
+
 SENT_PAUSE, CLAUSE_PAUSE = 0.35, 0.2      # 문장 끝·절 끝 뒤 쉼 (초)
 
 
@@ -201,7 +222,9 @@ class SignWords:
             elif t.tag == "MAG" and t.form in self.ADV:
                 lemma = t.form
             if lemma and i + 1 < len(toks) and toks[i + 1].tag == "XSN" and eoj(toks[i + 1].start) == k:
-                lemma += toks[i + 1].form; i += 1                          # 제조 + 자 → 제조자
+                if toks[i + 1].form != "들":                               # 방법 + 들 → 방법 (복수 표지는 수어로 따로 안 함)
+                    lemma += toks[i + 1].form
+                i += 1                                                     # 제조 + 자 → 제조자
             i += 1
             if not lemma or k is None or lemma in self.STOP_N or lemma in self.STOP_V:
                 continue
@@ -345,6 +368,25 @@ class SafetySignPipeline:
                 "method": "memory",                              # 검수된 확정 글로스 사용
                 "complete": hit.get("complete", True)}           # False: 일부 단어 동작만 확보
 
+    NUM_UNITS = {"": None, "미터": "미터0", "m": "미터0", "시간": "시간1"}   # 숫자 뒤 단위 → 수어 (수어가 있는 단위만)
+
+    def _expand_numbers(self, units):
+        """'2미터'·'4시간' 같은 숫자 단어 → 숫자 수어(한국식 읽기: 342 → 삼 백 사 십 이) + 단위 수어.
+        화면 블록은 하나 그대로('2미터'), 동작만 이어 붙임 (group 이 같으면 화면이 앞 블록에 묶음).
+        숫자·단위 수어가 모두 있을 때만 (없으면 예전처럼 회색 블록)."""
+        out = []
+        for n, u in enumerate(units):
+            m = re.fullmatch(r"(\d+)(\D*)", u["gloss"])
+            unit = self.NUM_UNITS.get(m.group(2), False) if m else False
+            gs = number_glosses(m.group(1)) + ([unit] if unit else []) if unit is not False else None
+            if gs and self.motion and all(self.motion.get(g) for g in gs):
+                for k, g in enumerate(gs):
+                    out.append({**u, "gloss": g, "word": u["word"] if k == 0 else "", "nms": u.get("nms") if k == 0 else None,
+                                "group": f"n{n}"})
+            else:
+                out.append(u)
+        return out
+
     def _substitute(self, units, text):
         """동작이 없는 단어 중 대체 표현이 있는 것은 그 수어들로 바꿈 (예: 안전모 → 머리 보호). 바꾼 것은 기록."""
         out = []
@@ -367,7 +409,7 @@ class SafetySignPipeline:
     def _units_sentence(self, units, text, method="extract"):
         """수어 단어 목록(analyze 결과) → 문장 결과 (대체 표현 적용·기록, 재생 시간)."""
         units = [dict(u, nms=u.get("nms")) for u in units]
-        units = self._substitute(units, text)
+        units = self._substitute(self._expand_numbers(units), text)
         glosses = [u["gloss"] for u in units]
         tl, t = [], 0.0
         for u in units:
@@ -377,6 +419,7 @@ class SafetySignPipeline:
             t += d
         return {"korean": text, "gloss": glosses, "words": [u["word"] for u in units], "nms": [u["nms"] for u in units],
                 "sub_of": [u.get("sub_of") for u in units],                  # 대체 표현이면 원래 말 (화면에 표시)
+                "group": [u.get("group") for u in units],                     # 같은 값이면 한 블록 (숫자 + 단위)
                 "timeline": tl, "lexicon_terms": [], "dropped_terms": [],
                 "unverified_terms": [], "has_unk": False, "method": method,   # extract: 답변 문장에서 단어 추출, keypoints_*: 핵심 추출
                 "complete": all(self.motion and self.motion.get(g) for g in glosses)}
