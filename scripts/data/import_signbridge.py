@@ -26,7 +26,9 @@ DIGITS = {"영": "0", "일": "1", "이": "2", "삼": "3", "사": "4", "오": "5"
 PICK = {"종류0": "종류0", "고려": "고려", "영향0": "영향0", "미터0": "미터0", "이하0": "이하0",
         "안전1": "안전1", "피부0": "피부0", "공간0": "공간0", "자전거0": "자전거0", "동일": "동일", "이유0": "이유0",
         "정기0": "정기0",
-        **{k: f"수:{v}" for k, v in DIGITS.items()}}
+        **{k: f"수:{v}" for k, v in DIGITS.items()},
+        # 소요 시간 전용 수어 (SignBridge timegloss.json 의 dur: 'N시간' 을 한 동작으로) — '4시간' 은 숫자+시간 대신 이것
+        **{f"시간:{h}시간": f"시간:{h}시간" for h in range(1, 13)}, "시간:24시간": "시간:24시간"}
 # 아바타로 재생해 보고 뺀 것 (2D 에서 깊이를 추정한 탓인지 손이 머리 위로 올라가거나 두 팔을 크게 벌림)
 SKIP = {"물체2": "팔이 머리 위로 올라가며 엇갈림", "평가": "처음에 손이 머리 위", "환자": "끝에서 두 손이 머리 위",
         "렌즈0": "두 손을 머리 높이로 벌림", "얼굴": "손이 머리 위로", "탱크": "손이 머리 위로", "기존0": "손이 머리 위로",
@@ -62,7 +64,7 @@ def main():
         if src not in bank:
             print(f"  {src:<6} SignBridge 사전에 없음")
             continue
-        if _strip_num(dst) in removed or (not dst.startswith("수:") and md.resolve(dst)) or dst in md.index:
+        if _strip_num(dst) in removed or (":" not in dst and md.resolve(dst)) or dst in md.index:
             print(f"  {src:<6} 이미 있거나 검수에서 뺀 글로스 → 그대로")
             continue
         frames, fps = load(a.folder, src, bank[src])
