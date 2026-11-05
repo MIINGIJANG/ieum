@@ -960,6 +960,22 @@ def neutral_frame():
     return {"body": body, "lh": None, "rh": None}
 
 
+_CLEAN = {}     # 동작 클립 → 정리한 프레임 (같은 낱말은 질문이 달라도 결과가 같아서 한 번만 계산. 정리가 이어붙이기 시간의 95% 이상)
+
+
+def _clean_clip(clip, cf):
+    """클립 정리 (손 방향 뒤집힘 → 튀는 점 → 손 회전 → 손가락 안정화 → One Euro → 낮은 손 힘 빼기). 결과는 저장해 두고 다시 씀.
+    MotionDict 가 클립을 한 번만 읽어 같은 객체를 주므로 객체 id 로 찾음 (객체를 같이 들고 있어 id 가 재사용되지 않음)."""
+    hit = _CLEAN.get(id(clip))
+    if hit is not None and hit[0] is clip and hit[1] == cf:
+        return hit[2]
+    src = _relax_low_hands(_one_euro(_stabilize_fingers(_smooth_hand_rot(_despike(_filter_face(_fix_hands(clip["frames"]))), cf)), cf))
+    if len(_CLEAN) > 2000:
+        _CLEAN.clear()
+    _CLEAN[id(clip)] = (clip, cf, src)
+    return src
+
+
 def compose(glosses, mdict: MotionDict, fps=FPS, transition=0.25, missing_sec=0.6, speed=0.8, skip_missing=True,
             lead=0.45, lead_out=0.8, hold=0.07, fingerspell=None, fs_words=None, dur_range=(0.6, 1.4), dur_keep=0.25,
             pauses=None, end_hold=0.4):
@@ -1012,7 +1028,7 @@ def compose(glosses, mdict: MotionDict, fps=FPS, transition=0.25, missing_sec=0.
             seg, has = fsf, True                                         # 지문자 (이미 깨끗한 손 점이라 떨림 거르기 안 함)
         elif clip and clip["frames"]:
             cf = clip.get("fps", fps)
-            src = _relax_low_hands(_one_euro(_stabilize_fingers(_smooth_hand_rot(_despike(_filter_face(_fix_hands(clip["frames"]))), cf)), cf))
+            src = _clean_clip(clip, cf)
             dur = len(src) / cf / speed
             lo, hi = dur_range or (0, 1e9)
             if dur > hi:
