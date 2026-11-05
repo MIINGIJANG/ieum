@@ -28,11 +28,9 @@
     --block-gap: 20px;         /* 화면의 모든 박스·요소 사이 세로 간격 (하나로 통일) */
     --font: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
     --on-ink: #ffffff;         /* 진한 바탕 위 글자 */
-    --warn-bg: #fffaea;
     --th-bg: #f1f2ef;
     --cell-line: #9aa1a8;
     --pdf-bg: #f2f2f2;
-    --error: #9b1c1c;
     color-scheme: light;
   }
   /* 기기 설정이 다크 모드면 자동으로 어두운 화면 */
@@ -44,10 +42,8 @@
       --muted: #a3a3a3;
       --line: #3a3a3a;
       --on-ink: #1c1c1c;
-      --warn-bg: #2e2810;
       --th-bg: #2b2b2b;
       --cell-line: #555555;
-      --error: #ff8a80;
       color-scheme: dark;
     }
   }
@@ -169,10 +165,6 @@
   .answer .text { font-size: 1rem; margin: 0 0 12px; }
   .answer .hint { color: var(--muted); font-size: 1rem; margin: -4px 0 0; }
   .answer > :last-child { margin-bottom: 0; }
-  .warn {
-    border-left: 4px solid var(--caution); background: var(--warn-bg); padding: 8px 12px; border-radius: 0 8px 8px 0;
-    font-size: 1rem; margin: 0 0 12px;
-  }
   .info { display: grid; gap: var(--block-gap); }
   .info > * { min-width: 0; }
   .src ul { list-style: none; margin: 0; padding: 0; font-size: 1rem; color: var(--muted); }
@@ -190,7 +182,6 @@
   .src th { background: var(--th-bg); font-weight: 500; text-align: center; }
   .src td:first-child { text-align: center; }
   .empty { color: var(--muted); }
-  .error { color: var(--error); }
 
   /* 첫 로딩 화면: 아바타·출처 이미지·번역 모델을 모두 준비한 뒤 사라짐 (사용 중에는 기다림 없음) */
   .boot { position: fixed; inset: 0; z-index: 1000; background: var(--concrete); }
@@ -531,9 +522,7 @@ async function run() {
     showResults();
     render();
   } catch (err) {
-    showResults();
-    $("sources").hidden = true;
-    $("answer").innerHTML = `<p class="error">서버에 연결하지 못했습니다. 터미널에서 api 서버가 켜져 있는지 확인하세요. (${err.message})</p>`;
+    console.error("질문 처리 실패", err);   // 화면에는 오류 문구를 띄우지 않음 (지금 화면 그대로, 다시 보내면 됨)
   } finally {
     $("go").disabled = false;
   }
