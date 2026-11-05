@@ -210,3 +210,16 @@ def test_team_3d_words_20261105():
         assert c and len(c["frames"]) >= 8, g
     for g in ["밀폐0", "진동", "양1", "구멍0", "동시1"]:
         assert md.get(g) is None, g
+
+
+def test_number_glosses_and_signbridge_words():
+    """숫자 수어: 한국식 읽기 + '2미터' 는 블록 하나에 숫자·단위 동작 (group), '방법들' 은 방법 수어."""
+    from ksl.motion import MotionDict
+    from ksl.pipeline import SignWords, number_glosses
+    assert number_glosses("342") == ["수:3", "수:백", "수:4", "수:십", "수:2"]
+    assert number_glosses("10") == ["수:십"] and number_glosses("0302") == ["수:0", "수:3", "수:0", "수:2"]
+    md = MotionDict(ROOT / "data/sign/motions")
+    for g in ["수:0", "수:9", "수:십", "미터0", "종류0", "고려", "안전1"]:
+        assert md.get(g), g
+    units = SignWords().analyze("다른 방법들을 고려한다.")
+    assert any(u["gloss"] == "방법" and u["word"].startswith("방법들") for u in units)
