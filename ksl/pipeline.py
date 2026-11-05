@@ -94,6 +94,46 @@ def merge_sources(hits, titles, order=None, tables=None, images=None):
     return sorted(res, key=lambda o: (o["doc"], o["page"]))     # 출처는 쪽 번호 순
 
 
+
+
+def cite_sentences(answer_text, hits):
+    """답변 문장마다 가장 비슷한 검색 결과의 쪽 → [{"text": 문장, "page": 쪽}]. 문장이 근거 쪽과 거의 안 맞으면 page=None."""
+    sents = split_sentences(answer_text or "") or ([answer_text] if answer_text else [])
+    if not sents or not hits:
+        return [{"text": t, "page": None} for t in sents]
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    docs = [strip_marks(h["text"]) for h in hits]
+    v = TfidfVectorizer(analyzer="char_wb", ngram_range=(2, 4)).fit(docs + sents)
+    sim = (v.transform(sents) @ v.transform(docs).T).toarray()
+    out = []
+    for t, row in zip(sents, sim):
+        j = int(row.argmax())
+        out.append({"text": t, "page": hits[j]["page"] if row[j] >= 0.2 else None})
+    return out
+
+SENT_PAUSE, CLAUSE_PAUSE = 0.35, 0.2      # 문장 끝·절 끝 뒤 쉼 (초)
+
+
+def _gloss_words(s):
+    """문장 s 의 글로스마다 문장 속 말 (없으면 글로스)."""
+    w = s.get("words") or []
+    return [w[i] if i < len(w) else g for i, g in enumerate(s["gloss"])]
+
+
+def sign_pauses(texts, words, n):
+    """글로스마다 그 단어 뒤 쉼 (초): 문장이 바뀌는 곳(마지막 단어 제외) SENT_PAUSE,
+    '-면'·'-고'·'-때'·'-서'로 끝나는 절 끝 CLAUSE_PAUSE. 정보가 없으면 None."""
+    if not texts and not words:
+        return None
+    out = [0.0] * n
+    for i in range(n):
+        w = (words[i] if words and i < len(words) else "") or ""
+        if w.strip() != "그리고" and re.search(r"(면|고|때|서)[,.]?$", w.strip()):
+            out[i] = CLAUSE_PAUSE
+        if texts and i + 1 < n and i + 1 < len(texts) and texts[i + 1] != texts[i]:
+            out[i] = SENT_PAUSE
+    return out
+
 class SignWords:
     """답변 문장 → 수어로 표현할 단어(글로스) 목록. 문장에 실제로 있는 말만 뽑으므로 없는 내용이 생기지 않음."""
 
@@ -277,13 +317,15 @@ class SafetySignPipeline:
             self._dv = TfidfVectorizer(analyzer="char_wb", ngram_range=(2, 3)).fit([d["korean"] for d in self.demo])
             self._dm = self._dv.transform([d["korean"] for d in self.demo])
 
-    def motion_for(self, glosses, nms=None, texts=None, log=True):
+    def motion_for(self, glosses, nms=None, texts=None, log=True, words=None):
         """글로스 리스트 → 이어붙인 동작. 동작사전이 없으면 None.
         nms: 글로스마다 문법 표정·고개 (ksl/order.py) → segment 의 'nms' 로 (아바타가 그 단어 동안 표정·고개).
-        texts: 글로스마다 나온 문장 → 동작이 없는 단어 기록(ksl/missing.py)의 예시로. log=False 면 기록 안 함 (단어 다시 보기 등)."""
+        texts: 글로스마다 나온 문장 → 동작이 없는 단어 기록(ksl/missing.py)의 예시로. log=False 면 기록 안 함 (단어 다시 보기 등).
+        words: 글로스마다 문장 속 말 → 문장 끝·절 끝('-면', '-고', '-때') 뒤에 잠깐 쉼 (sign_pauses)."""
         if not self.motion:
             return None
-        m = compose(glosses, self.motion, fingerspell=self.fingerspell, fs_words=self._fs_pick(glosses) if log else None)
+        m = compose(glosses, self.motion, fingerspell=self.fingerspell, fs_words=self._fs_pick(glosses) if log else None,
+                    pauses=sign_pauses(texts, words, len(glosses)))
         for seg, n in zip(m["segments"], nms or []):
             seg["nms"] = n
         miss = [(i, s["gloss"]) for i, s in enumerate(m["segments"]) if not s["has_motion"] or s.get("fingerspell")]
@@ -357,7 +399,8 @@ class SafetySignPipeline:
     def translate_text(self, text, beam=4):
         sents = [self.translate_one(s, beam) for s in split_sentences(text) or [text]]
         return {"sentences": sents, "motion": self.motion_for([g for s in sents for g in s["gloss"]],
-                                                              texts=[s["korean"] for s in sents for _ in s["gloss"]])}
+                                                              texts=[s["korean"] for s in sents for _ in s["gloss"]],
+                                                              words=[w for s in sents for w in _gloss_words(s)])}
 
     def best_demo(self, question):
         if not self.demo:
@@ -519,11 +562,13 @@ class SafetySignPipeline:
             "question": question,
             "answer_mode": mode,                       # demo | llm | extractive
             "answer_text": answer_text,                # 화면에 보여줄 답변 (문서 근거)
+            "answer_cites": cite_sentences(answer_text, hits),   # 답변 문장마다 근거 쪽 (화면: 문장 뒤 'N쪽')
             "sign_text": " ".join(s["korean"] for s in sents),   # 수어로 보여주는 문장 (짧게 줄인 것)
             "sign_debug": sign_debug,                  # 점검용: Claude 수어 문장, 실제로 쓴 방식, 쓰지 않은 이유
             "sentences": sents,                        # 문장별 글로스 + 타임라인
             "motion": self.motion_for([g for s in sents for g in s["gloss"]],     # 전체 문장 이어붙인 동작
                                       [n for s in sents for n in (s.get("nms") or [None] * len(s["gloss"]))],
-                                      [s["korean"] for s in sents for _ in s["gloss"]]),
+                                      [s["korean"] for s in sents for _ in s["gloss"]],
+                                      words=[w for s in sents for w in _gloss_words(s)]),
             "sources": merge_sources(hits, self.titles, self._order, self.tables, self.images),   # 출처: 문서 제목·쪽·전체 문장
         }
