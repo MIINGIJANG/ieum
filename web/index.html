@@ -460,10 +460,14 @@ const wave = (() => {
       g.beginPath(); g.roundRect(x, (h - bh) / 2, 2.5, bh, 1.25); g.fill();
     });
   }
-  async function start() {
+  function start() {
     levels.fill(0); speaking = false;
     cancelAnimationFrame(raf); raf = requestAnimationFrame(draw);
-    if (touch || !navigator.mediaDevices) return;
+  }
+  // PC: 소리 크기 측정용 마이크는 음성 인식이 마이크를 먼저 잡은 뒤(onaudiostart)에 엶
+  //   → 둘이 동시에 마이크를 열다가 인식 시작이 늦어지거나 첫 말이 잘리지 않게
+  async function openMic() {
+    if (touch || !navigator.mediaDevices || stream) return;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       if (!listening) return stop();
@@ -478,15 +482,24 @@ const wave = (() => {
     if (ctx) ctx.close().catch(() => {});
     stream = ctx = an = null;
   }
-  return { start, stop, speak: (v) => { speaking = v; } };
+  return { start, openMic, stop, speak: (v) => { speaking = v; } };
 })();
+// 듣기 끝내기: 브라우저가 끝을 알릴 때까지 기다리지 않고 바로 (지금까지 들린 글자는 입력창에 그대로)
+function endListening(r = rec) {
+  if (r) { r.onresult = r.onend = r.onerror = r.onaudiostart = r.onspeechstart = r.onspeechend = null; try { r.abort(); } catch { /* 이미 끝남 */ } }
+  if (r === rec) rec = null;
+  listening = false; wave.stop(); updateGo();
+}
 function listen() {
-  if (listening) { rec && rec.stop(); return; }
+  if (listening) { endListening(); return; }        // 멈추기: 서버의 마지막 결과를 기다리지 않음
   rec = new SR();
+  const me = rec;
   rec.lang = "ko-KR"; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
   rec.onresult = (e) => {
     $("q").value = [...e.results].map((r) => r[0].transcript).join("").trim();
+    if (e.results.length && e.results[e.results.length - 1].isFinal) endListening(me);   // 확정되면 바로 끝 (조용한 시간 안 기다림)
   };
+  rec.onaudiostart = () => wave.openMic();
   rec.onspeechstart = () => wave.speak(true);
   rec.onspeechend = () => wave.speak(false);
   rec.onerror = (e) => {
@@ -496,7 +509,7 @@ function listen() {
     $("q").placeholder = msg;
     setTimeout(() => { $("q").placeholder = PH; }, 3000);
   };
-  rec.onend = () => { listening = false; wave.stop(); updateGo(); };
+  rec.onend = () => { if (rec === me) endListening(me); };
   try { rec.start(); } catch { return; }
   listening = true;
   $("q").value = "";
@@ -504,7 +517,7 @@ function listen() {
   wave.start();
 }
 $("mic").onclick = listen;
-$("go").onclick = () => { if (listening) rec && rec.stop(); run(); };
+$("go").onclick = () => { if (listening) endListening(); run(); };
 
 async function run() {
   const q = $("q").value.trim();
