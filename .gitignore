@@ -2,32 +2,29 @@
 __pycache__/
 *.pyc
 .DS_Store
+.pytest_cache/
 
-# 학습 결과·인덱스 (각자 다시 만들 수 있음, 용량 큼)
+# 학습 결과·검색 인덱스 (다시 만들 수 있고 용량이 큼)
 checkpoints/
 /models/
 
-# 원본 데이터 (AI Hub 데이터는 재배포 제한 → 저장소에 올리지 않음)
+# 원본 데이터 (AI Hub 데이터는 재배포가 제한되어 저장소에 올리지 않음)
 data/raw/
 data/processed/
 *.zip
 
-# 루트에 받아둔 원본 PDF (data/kosha/ 에 사본 있음)
+# 맨 위 폴더에 받아 둔 원본 PDF (사본은 data/kosha/)
 /A-G-12-2026*.pdf
-
-# 같은 PDF 사본 (data/kosha/ 에 있음)
 /기술지원규정.pdf
-# 샘플용 가짜 동작 (make_sample_motion.py 로 다시 생성)
+
+# 샘플용 가짜 동작 (scripts/data/make_sample_motion.py 로 다시 만듦)
 data/sample/motions/
 
-# Hugging Face 배포용 폴더 (scripts/make_space.py 로 다시 생성)
+# Hugging Face 업로드 폴더 (scripts/deploy/make_space.py 로 다시 만듦)
 /dist/
 
-# 공개 실행용 터널 프로그램·로그
-.cloudflared/
-
-# 테스트 부산물
-.pytest_cache/
-
-# 동작 없는 단어 기록 (서버가 만듦, GET /missing)
+# 서버가 쓰는 '동작 없는 단어' 기록 (GET /missing)
 data/logs/
+
+# scripts/run/start_public.command 의 터널 프로그램·로그
+.cloudflared/

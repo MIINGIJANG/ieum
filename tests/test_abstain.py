@@ -1,4 +1,4 @@
-"""환각 방지: 문서 밖 입력은 답하지 않고, 문서 안 질문은 답함 (docs/환각방지.md, 기준값 0.11)."""
+"""환각 방지: 문서 밖 입력은 답하지 않고, 문서 안 질문은 답함 (docs/hallucination_guard.md, 기준값 0.11)."""
 from ksl.evaluation import _rows
 
 
