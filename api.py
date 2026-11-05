@@ -227,6 +227,19 @@ def _warm_on_start():
                 cached_query(e["question"], log=False)
             except Exception as err:
                 print("[이음] 예시 답 미리 만들기 실패:", err)
+        # 그다음 모든 낱말 동작을 미리 정리해 둠 (ksl/motion.py _clean_clip) → 처음 나오는 낱말도 바로.
+        # 사이사이 잠깐 쉬어서 그동안 들어온 질문이 먼저 처리되게
+        import time
+        from ksl.motion import _clean_clip
+        if pipe.motion:
+            for g in list(pipe.motion.index):
+                try:
+                    clip = pipe.motion.get(g)
+                    if clip and clip.get("frames"):
+                        _clean_clip(clip, clip.get("fps", 30))
+                except Exception as err:
+                    print("[이음] 동작 미리 정리 실패:", g, err)
+                time.sleep(0.05)
     threading.Thread(target=prefetch, daemon=True).start()
 
 

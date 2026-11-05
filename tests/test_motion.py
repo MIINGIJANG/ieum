@@ -223,3 +223,16 @@ def test_number_glosses_and_signbridge_words():
         assert md.get(g), g
     units = SignWords().analyze("다른 방법들을 고려한다.")
     assert any(u["gloss"] == "방법" and u["word"].startswith("방법들") for u in units)
+
+
+def test_clean_clip_cache():
+    """동작 정리 결과 저장(_clean_clip): 두 번째부터는 저장한 것을 그대로, 결과는 매번 새로 계산한 것과 같음."""
+    import json
+    from ksl import motion as M
+    md = M.MotionDict(ROOT / "data/sign/motions")
+    clip = md.get("소음1")
+    a = M._clean_clip(clip, clip.get("fps", 30))
+    assert M._clean_clip(clip, clip.get("fps", 30)) is a
+    fresh = M._relax_low_hands(M._one_euro(M._stabilize_fingers(M._smooth_hand_rot(M._despike(M._filter_face(
+        M._fix_hands(clip["frames"]))), 30)), 30))
+    assert json.dumps(a, sort_keys=True) == json.dumps(fresh, sort_keys=True)
