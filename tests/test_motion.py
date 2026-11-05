@@ -183,3 +183,19 @@ def test_team_3d_words():
         f = next(x for x in c["frames"] if x.get("body") and x["body"][0] and x["body"][1])
         assert f["body"][0][1] < f["body"][1][1] - 0.2, g                     # 코가 목보다 위 (뒤집히지 않음)
     assert md.get("문서1") is None and md.get("안전모1") is None and md.get("근로자1") is None and md.get("받다1") is None and md.get("물건1") is None              # 어색해서 뺀 단어, 검수에서 뺀 단어
+
+
+def test_sign_pauses_and_compose_hold():
+    """문장 끝·절 끝 뒤 쉼: sign_pauses 가 위치를 고르고, compose 가 그만큼 프레임을 늘림."""
+    from ksl.motion import MotionDict, compose
+    from ksl.pipeline import sign_pauses, SENT_PAUSE, CLAUSE_PAUSE
+    p = sign_pauses(["가", "가", "가", "나"], ["위험이", "있으면", "착용합니다", "그리고"], 4)
+    assert p == [0.0, CLAUSE_PAUSE, SENT_PAUSE, 0.0]
+    md = MotionDict(ROOT / "data/sign/motions")
+    gs = ["소음1", "추락1"]
+    a = compose(gs, md)
+    b = compose(gs, md, pauses=[SENT_PAUSE, 0.0])
+    fps, hold = a["fps"], 0.07
+    extra = round((hold + SENT_PAUSE) * fps) - round(hold * fps)          # 단어 끝 멈춤 프레임이 늘어난 만큼
+    assert len(b["frames"]) - len(a["frames"]) == extra
+    assert b["segments"][1]["start"] - a["segments"][1]["start"] == extra

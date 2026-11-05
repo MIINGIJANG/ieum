@@ -961,7 +961,8 @@ def neutral_frame():
 
 
 def compose(glosses, mdict: MotionDict, fps=FPS, transition=0.25, missing_sec=0.6, speed=0.8, skip_missing=True,
-            lead=0.45, lead_out=0.8, hold=0.07, fingerspell=None, fs_words=None, dur_range=(0.6, 1.4), dur_keep=0.25):
+            lead=0.45, lead_out=0.8, hold=0.07, fingerspell=None, fs_words=None, dur_range=(0.6, 1.4), dur_keep=0.25,
+            pauses=None, end_hold=0.4):
     """글로스 순서대로 동작 클립을 이어붙임.
 
     - speed: 재생 속도 (조원 자료는 문장 수어에서 단어만 잘라 0.4~0.8초로 짧음 → 0.8배로 조금 천천히)
@@ -971,6 +972,8 @@ def compose(glosses, mdict: MotionDict, fps=FPS, transition=0.25, missing_sec=0.
       연결 프레임에는 tr={"a": 앞 단어 마지막 프레임, "b": 뒤 단어 첫 프레임, "t": 0~1} → 아바타는 두 자세의 '회전'을 섞음
       (관절 좌표를 직선으로 섞으면 팔이 짧아졌다 길어지고 손목이 꺾임)
     - 단어 끝에서 hold 초 동안 멈춤 (수어의 '멈춤-움직임-멈춤' 리듬: 단어 경계가 보임)
+    - pauses: 글로스마다 그 단어 뒤에 더 멈출 초 (문장 끝·'-면'/'-고' 절 끝). 쉼과 리듬이 이해도를 올림 (Huenerfauth 2009)
+    - end_hold: 마지막 단어의 마지막 손 모양을 유지하는 초 (문장 끝 강조)
     - 처음·끝: 손을 내린 기본 자세에서 lead 초 동안 올라오고, 끝나면 lead_out 초 동안 천천히 내려감 (갑자기 튀지 않게)
     - 관절 좌표 떨림은 One Euro 필터로 줄임
     skip_missing=True: 동작이 없는 글로스는 건너뜀 (프레임 없음, segment 의 start/end = None)
@@ -992,7 +995,7 @@ def compose(glosses, mdict: MotionDict, fps=FPS, transition=0.25, missing_sec=0.
             out["head"] = [round(v * (1 - t), 1) for v in f["head"]]
         return out
 
-    for g in glosses:
+    for gi, g in enumerate(glosses):
         clip = mdict.get(g) if mdict else None
         if clip and str(clip.get("source", "")).endswith("(2D)"):
             clip = None        # 깊이 추정을 하지 않은 2D 자료는 손가락·팔 방향이 뒤틀려 보여서 쓰지 않음 ('2D→3D' 로 저장된 것은 사용)
@@ -1042,9 +1045,10 @@ def compose(glosses, mdict: MotionDict, fps=FPS, transition=0.25, missing_sec=0.
         frames += seg
         segments.append({"gloss": g, "start": start, "end": len(frames) - 1, "has_motion": has, **(fs or {})})
         if has and hold > 0:
-            frames += [dict(seg[-1])] * max(1, round(hold * fps))                       # 단어 끝 멈춤
+            extra = (pauses[gi] if pauses and gi < len(pauses) else 0) or 0
+            frames += [dict(seg[-1])] * max(1, round((hold + extra) * fps))             # 단어 끝 멈춤 (+ 문장·절 끝 쉼)
     if frames:
         last = frames[-1]
-        frames += [last] * round(0.15 * fps)                                                     # 마지막 손 모양 잠깐 유지
+        frames += [last] * round(end_hold * fps)                                                 # 마지막 손 모양 유지 (문장 끝)
         frames += [toward_rest(last, _ease((i + 1) / n_out)) for i in range(n_out)]             # 마지막 동작 → 기본 자세 (천천히)
     return {"fps": fps, "frames": frames, "segments": segments}
