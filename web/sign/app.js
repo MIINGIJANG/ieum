@@ -245,32 +245,57 @@ function textWidth(t) {
   measureCtx.font = getComputedStyle($("suggest")).font;
   return measureCtx.measureText(t).width;
 }
-// 질문 블럭이 생기거나 바뀔 때: 롤러블 화면처럼 아래로 늘어나며(줄어들며) 드러남. 움직이는 중에 또 바뀌면 지금 높이에서 이어감
-let rollAnim = null;
+// 질문 블럭이 생기거나 바뀔 때 (롤러블처럼). 순서대로:
+//  ① 없어질 블럭이 먼저 제자리에서 사라짐 → ② 남는 블럭이 새 자리로 미끄러지며 빈자리를 채우거나 새 블럭 자리를 비움
+//     (칸 높이도 함께 늘거나 줄음) → ③ 비워 둔 자리에 새 블럭이 나타남. 도중에 또 바뀌면 지금 모습에서 새로 시작
+let rollAnim = null, rollSeq = 0;
 const ROLL = { duration: 500, easing: "cubic-bezier(.3,.7,.2,1)" };
-function rollTo(el, html) {
+const FADE = { duration: 200, easing: "ease-out" };
+const animDone = (a) => a.finished.catch(() => null);
+async function rollTo(el, html) {
   if (el.dataset.html === html) return;
   el.dataset.html = html;
-  const from = el.getBoundingClientRect().height;
-  const before = new Map([...el.querySelectorAll("[data-k]")].map((c) => [c.dataset.k, c.getBoundingClientRect().top]));
-  if (rollAnim) { rollAnim.onfinish = null; rollAnim.cancel(); }
+  const seq = ++rollSeq;
+  for (const a of el.getAnimations({ subtree: true })) a.cancel();
+  if (rollAnim) { rollAnim.onfinish = null; rollAnim.cancel(); rollAnim = null; }
   el.style.overflow = "hidden";
   if (!html) {   // 다 풀면: 질문 블럭을 그대로 둔 채 위로 말려 들어간 뒤 비움
+    const from = el.getBoundingClientRect().height;
     rollAnim = el.animate([{ height: `${from}px` }, { height: "0px" }], { ...ROLL, fill: "forwards" });
     rollAnim.onfinish = () => { el.innerHTML = ""; el.style.overflow = ""; rollAnim.cancel(); rollAnim = null; };
     return;
   }
+  const keys = (root) => new Set([...root.querySelectorAll("[data-k]")].map((c) => c.dataset.k));
+  const tpl = document.createElement("template"); tpl.innerHTML = html;
+  const nextKeys = keys(tpl.content), first = !el.querySelector("[data-k]");
+  // ① 없어질 블럭 먼저 사라짐
+  const leaving = [...el.querySelectorAll("[data-k]")].filter((c) => !nextKeys.has(c.dataset.k));
+  if (leaving.length) {
+    await Promise.all(leaving.map((c) => animDone(c.animate([{ opacity: 1 }, { opacity: 0 }], { ...FADE, fill: "forwards" }))));
+    if (seq !== rollSeq) return;
+  }
+  // ② 남는 블럭이 새 자리로 (칸 높이도 함께)
+  const from = el.getBoundingClientRect().height;
+  const before = new Map([...el.querySelectorAll("[data-k]")].map((c) => [c.dataset.k, c.getBoundingClientRect().top]));
   el.innerHTML = html;
   const to = el.getBoundingClientRect().height;
+  const entering = [...el.querySelectorAll("[data-k]")].filter((c) => !before.has(c.dataset.k));
+  const moves = [];
   rollAnim = el.animate([{ height: `${from}px` }, { height: `${to}px` }], ROLL);
-  rollAnim.onfinish = () => { el.style.overflow = ""; rollAnim = null; };
-  // 남는 블럭은 예전 자리에서 새 자리로 미끄러지고, 새로 생긴 블럭은 서서히 나타남 (갑자기 튀지 않게)
-  for (const c of el.querySelectorAll("[data-k]")) {
-    const t0 = before.get(c.dataset.k);
-    if (t0 == null) { if (before.size) c.animate([{ opacity: 0 }, { opacity: 1 }], ROLL); continue; }
-    const dy = t0 - c.getBoundingClientRect().top;
-    if (Math.abs(dy) >= 1) c.animate([{ transform: `translateY(${dy}px)` }, { transform: "none" }], ROLL);
+  moves.push(animDone(rollAnim));
+  if (!first) {
+    for (const c of entering) c.style.opacity = "0";     // 새 블럭은 자리가 비워진 뒤에
+    for (const c of el.querySelectorAll("[data-k]")) {
+      const t0 = before.get(c.dataset.k); if (t0 == null) continue;
+      const dy = t0 - c.getBoundingClientRect().top;
+      if (Math.abs(dy) >= 1) moves.push(animDone(c.animate([{ transform: `translateY(${dy}px)` }, { transform: "none" }], ROLL)));
+    }
   }
+  await Promise.all(moves);
+  if (seq !== rollSeq) return;
+  el.style.overflow = ""; rollAnim = null;
+  // ③ 비워 둔 자리에 새 블럭이 나타남
+  if (!first) for (const c of entering) { c.style.opacity = ""; c.animate([{ opacity: 0 }, { opacity: 1 }], FADE); }
 }
 // 질문 블럭을 누르면 팝업이 닫히고 입력창에 들어감 (보내기는 사용자가)
 $("suggest").onclick = (e) => {
