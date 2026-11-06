@@ -164,10 +164,9 @@ function addItem(r) {
   if (navigator.vibrate) navigator.vibrate(30);
 }
 
-// 손 21점 잇는 선 (엄지·검지·중지·약지·소지 + 손바닥), 몸은 어깨·팔·엉덩이
+// 손 21점 잇는 선 (엄지·검지·중지·약지·소지 + 손바닥)
 const HAND_LINES = [[0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [5, 9], [9, 10], [10, 11], [11, 12],
   [9, 13], [13, 14], [14, 15], [15, 16], [13, 17], [0, 17], [17, 18], [18, 19], [19, 20]];
-const POSE_LINES = [[11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 24], [23, 24]];
 /** 화면에는 **정리 전 관절 점**을 그림 (떨림 줄이기는 인식에만 씀 → 점이 손을 늦게 따라가지 않게) */
 function draw(frame) {
   const v = $("video"), cv = $("overlay"), w = v.videoWidth || 640, h = v.videoHeight || 480;
@@ -182,8 +181,8 @@ function draw(frame) {
   };
   const dots = (pts, idx, r, color) => { g.fillStyle = color; for (const i of idx) if (pts[i]) { g.beginPath(); g.arc(pts[i].x * w, pts[i].y * h, r, 0, 7); g.fill(); } };
   const all = [...Array(21).keys()];
-  if (frame.pose.length) { lines(frame.pose, POSE_LINES, "rgba(243,154,69,.8)", 3); dots(frame.pose, [0, 11, 12, 13, 14, 15, 16, 23, 24], 4, "#f39a45"); }
-  for (const [hand, color] of [[frame.leftHand, "#4aa3ff"], [frame.rightHand, "#44d17a"]]) {
+  // 화면에는 손만 (몸 점은 인식에는 쓰지만 그리지 않음 — 화면이 덜 복잡하게), 왼손·오른손 모두 흰색
+  for (const [hand, color] of [[frame.leftHand, "#ffffff"], [frame.rightHand, "#ffffff"]]) {
     if (hand.length !== 21) continue;
     lines(hand, HAND_LINES, color, 2.5);
     dots(hand, all, 2.5, color);
