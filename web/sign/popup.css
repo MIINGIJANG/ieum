@@ -30,7 +30,7 @@
 
 /* 카메라 칸: 정사각형, 꺼져도 크기 그대로. 크기는 팝업이 화면 안에 다 들어오게 app.js 가 정함(--cam), 팝업 가운데 */
 #panel .cam { position: relative; width: var(--cam, 100%); max-width: 100%; justify-self: center; aspect-ratio: 1 / 1; border-radius: 12px; overflow: hidden; background: #000; }
-#panel .cam video, #panel .cam canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }   /* 거울처럼 */
+#panel .cam video, #panel .cam canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; transform: scaleX(-1); }   /* 거울처럼. 자르지 않고 영상 전체가 보이게 축소 (손 선 캔버스도 같은 방식이라 자리가 맞음) */
 #panel .cam .off { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 10px; padding: 16px; text-align: center; color: #fff; }
 
 /* 단어 칸·질문 칸: 흰색 (다크 모드는 배경색). 칸 안 위·아래·블럭 사이 간격 모두 8px */
