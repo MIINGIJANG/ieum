@@ -38,7 +38,9 @@
 #panel .chip { display: inline-flex; border-radius: 8px; overflow: hidden; }
 #panel .chip .w { border-radius: 0; font-weight: 500; padding: 4px 10px; }
 #panel #words { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; }
-#panel #words .chip.sel { position: relative; z-index: 1; }   /* 앞으로 옮겨 갈 때 다른 낱말 위로 지나감 */
+#panel #words .chip.sel { position: relative; z-index: 1; }
+#panel #words.rows { flex-direction: column; flex-wrap: nowrap; }   /* 두 줄 이상: 줄마다 개수를 고르게 (app.js) */
+#panel #words .wrow { display: flex; flex-wrap: nowrap; gap: 8px; justify-content: center; width: 100%; }   /* 앞으로 옮겨 갈 때 다른 낱말 위로 지나감 */
 #panel #suggest .box { gap: 8px; justify-items: center; }   /* 질문 가운데 정렬, 박스는 글자 길이만큼 */
 #panel #suggest .q { text-align: center; max-width: 100%; }
 /* 낱말·질문 블럭: 박스 색 → 마우스 올리면 마우스 올림 색 → 고르거나 누르면 표현 중 수어 블럭 색 + 흰 글씨 */

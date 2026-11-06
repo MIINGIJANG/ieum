@@ -201,11 +201,12 @@ function renderWords() {
   // 고른 낱말(고른 순서) → 한 번도 안 고른 낱말(알아들은 순서) → 풀린 낱말(푼 순서, 항상 맨 뒤)
   const key = (i) => { const it = items[i]; return it.sel ? [0, it.sel] : [1, it.tail || 0, i]; };
   const order = items.map((it, i) => i).sort((a, b) => { const x = key(a), y = key(b); for (let j = 0; j < 3; j++) if ((x[j] ?? 0) !== (y[j] ?? 0)) return (x[j] ?? 0) - (y[j] ?? 0); return 0; });
-  box.innerHTML = order.map((i) => {
+  const chips = order.map((i) => {
     const it = items[i];
     it.k ??= ++chipSeq;
     return `<span class="chip${it.sel ? " sel" : ""}" data-k="${it.k}"><button class="w" data-i="${i}">${esc(word(ch[i]))}</button></span>`;   // 확실하지 않은 낱말도 따로 표시하지 않음
-  }).join("");
+  });
+  layoutRows(box, chips);
   if (items.length) showWords();   // 알아들은 낱말이 생기면 단어 칸이 내려옴
   for (const c of box.querySelectorAll(".chip")) {   // 예전 자리에서 새 자리로 (FLIP)
     const r0 = before.get(c.dataset.k); if (!r0) continue;
@@ -214,6 +215,22 @@ function renderWords() {
     c.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "none" }], { duration: 450, easing: "cubic-bezier(.3,.7,.2,1)" });
   }
   suggest(ch);
+}
+/** 낱말 줄 나누기: 한 줄에 다 들어가면 한 줄. 넘치면 줄마다 개수를 고르게 나누고, 홀수면 위 줄이 하나 적게
+ *  (예: 9개 → 4·5). 그래서 하나 늘면 아랫줄 끝에 붙고, 개수가 맞춰질 때는 아랫줄 첫 낱말이 윗줄로 올라감 (움직임은 낱말 이동 그대로) */
+function layoutRows(box, chips) {
+  box.classList.remove("rows");
+  box.innerHTML = chips.join("");
+  const lines = new Set([...box.children].map((c) => c.offsetTop)).size;
+  if (lines < 2) return;
+  box.classList.add("rows");
+  for (let r = lines; r <= chips.length; r++) {
+    const base = Math.floor(chips.length / r), extra = chips.length % r;   // 아래쪽 extra 줄이 하나씩 더
+    const rows = []; let at = 0;
+    for (let i = 0; i < r; i++) { const n = base + (i >= r - extra ? 1 : 0); rows.push(chips.slice(at, at + n)); at += n; }
+    box.innerHTML = rows.map((row) => `<div class="wrow">${row.join("")}</div>`).join("");
+    if ([...box.children].every((row) => row.scrollWidth <= row.clientWidth + 1)) return;   // 줄마다 넘치지 않으면 끝
+  }
 }
 // 낱말을 누르면 고르기/풀기 (고른 순서대로 질문을 찾음)
 let selOrder = 0;
