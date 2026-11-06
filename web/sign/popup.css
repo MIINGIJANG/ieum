@@ -9,7 +9,7 @@
 /* 팝업: 입력창 바로 아래, 입력창과 같은 가로 길이 */
 #panel {
   position: absolute; z-index: 30;   /* 가로 길이·자리는 app.js 가 입력창과 똑같이 맞춤 */
-  background: var(--box); color: var(--ink); border-radius: 14px; padding: 12px; display: grid;
+  background: var(--hover); color: var(--ink); border-radius: 14px; padding: 12px; display: grid;   /* 팝업 배경 = 블럭에 마우스 올렸을 때 색 */
   font-size: 14px; line-height: 1.5; text-align: left;
 }
 #panel[hidden] { display: none !important; }
