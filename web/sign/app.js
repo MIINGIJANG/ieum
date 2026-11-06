@@ -364,14 +364,15 @@ const SPRING = { response: 0.35, damping: 1 };
 const POP_SCALE = { from: 0.5, to: 0.2 };   // 나타날 때 50%에서 시작, 사라질 때는 20%까지 더 작아지며 버튼으로 들어감
 // 크기·투명도를 각각 스프링으로 (도중에 방향이 바뀌어도 둘 다 지금 값·속도에서 이어짐)
 let panelOpen = false, pop = { s: 1, sv: 0, o: 1, ov: 0, ts: 1, to: 1, raf: 0, last: 0 };
-// 팝업 자리·크기: 입력창 아래 12px, 가로 길이와 왼쪽·오른쪽 끝을 입력창과 똑같이
+// 팝업 자리·크기: 입력창 아래 12px, 가운데. 가로 길이는 카메라 칸에 맞춰 (입력창보다 넓지 않게)
 function placePanel() {
   const p = $("panel"), f = $("form");
   const par = p.offsetParent || document.body, pr = par.getBoundingClientRect(), fr = f.getBoundingClientRect();
-  p.style.width = `${fr.width}px`;
   p.style.top = `${fr.bottom - pr.top + 12}px`;
-  p.style.left = `${fr.left - pr.left}px`;
-  fitCam(fr);
+  const cam = fitCam(fr);
+  const w = Math.min(fr.width, cam + 24);                                // 팝업도 카메라·단어·질문 칸에 맞춰 같이 줄임 (양옆 여백 12px)
+  p.style.width = `${w}px`;
+  p.style.left = `${fr.left + (fr.width - w) / 2 - pr.left}px`;          // 입력창 아래 가운데
 }
 // 카메라 칸 크기: 팝업이 화면 아래로 넘치지 않게 (단어 두 줄(휴대폰은 세 줄)·질문 4개까지 나온 모습 기준으로 남는 높이만큼), 팝업 가운데에
 function fitCam(fr) {
@@ -395,6 +396,7 @@ function fitCam(fr) {
   while (hi - lo > 2) { const mid = (lo + hi) / 2; if (height(mid) <= avail) lo = mid; else hi = mid; }
   const cam = Math.round(height(hi) <= avail ? hi : lo);
   p.style.setProperty("--cam", `${cam}px`);
+  return cam;
 }
 addEventListener("resize", () => { if (!$("panel").hidden) placePanel(); });
 // 나오고 들어가는 점: 카메라 버튼 바로 아래, 입력창 아랫면 (팝업이 입력창 안으로 겹쳐 들어가지 않게)
