@@ -464,6 +464,7 @@ function openPanel() {
   const fresh = $("panel").hidden;
   if (fresh) resetWords();
   panelOpen = true; $("camBtn").classList.add("on");
+  dispatchEvent(new Event("sign-open"));      // 본 화면: 마이크로 듣는 중이면 팝업이 뜨기 시작하는 순간 같이 끔
   document.body.classList.add("sign-open");   // 본 화면 첫 화면은 스크롤을 막아 두므로, 팝업이 떠 있는 동안은 풀어 줌
   popTo(true);
   // 팝업 전체(카메라~질문)가 한 화면에 보이게: 입력창이 화면 위쪽(16px)에 오도록 부드럽게 내림
