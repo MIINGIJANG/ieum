@@ -368,6 +368,19 @@ function placePanel() {
   p.style.width = `${fr.width}px`;
   p.style.top = `${fr.bottom - pr.top + 12}px`;
   p.style.left = `${fr.left - pr.left}px`;
+  fitCam(fr);
+}
+// 카메라 칸 크기: 팝업이 화면 아래로 넘치지 않게 (단어 두 줄(휴대폰은 세 줄)·질문 4개까지 나온 모습 기준으로 남는 높이만큼), 팝업 가운데에
+function fitCam(fr) {
+  const p = $("panel"), pad = 12, gap = 12;
+  const probe = (html) => { const d = document.createElement("div"); d.style.cssText = "position:absolute;visibility:hidden"; d.innerHTML = html; p.appendChild(d); const h = d.firstElementChild.getBoundingClientRect().height; d.remove(); return h; };
+  const noteH = probe('<p class="notice">가</p>'), chipH = probe('<span class="chip"><button class="w">가</button></span>');
+  const rows = fr.width - 24 < 400 ? 3 : 2;                              // 좁은 화면(휴대폰)은 단어가 세 줄까지 나올 수 있음
+  const wordsBox = 8 + chipH * rows + 8 * (rows - 1) + 8, questBox = 8 + chipH * 4 + 8 * 3 + 8;
+  const others = pad * 2 + noteH * 3 + gap * 5 + wordsBox + questBox;
+  const avail = innerHeight - (16 + fr.height + 12) - 12;               // 팝업을 열면 입력창이 화면 위 16px 로 올라옴 → 그 아래 12px 부터 화면 아래 12px 까지
+  const full = fr.width - pad * 2;
+  p.style.setProperty("--cam", `${Math.round(Math.max(160, Math.min(full, avail - others)))}px`);
 }
 addEventListener("resize", () => { if (!$("panel").hidden) placePanel(); });
 // 나오고 들어가는 점: 카메라 버튼 바로 아래, 입력창 아랫면 (팝업이 입력창 안으로 겹쳐 들어가지 않게)
@@ -391,7 +404,7 @@ function popStep(t) {
   const done = Math.abs(pop.s - pop.ts) < 0.001 && Math.abs(pop.sv) < 0.01 && Math.abs(pop.o - pop.to) < 0.001 && Math.abs(pop.ov) < 0.01;
   if (done) {
     pop.s = pop.ts; pop.o = pop.to; pop.sv = pop.ov = 0; pop.raf = 0; popRender();
-    if (!pop.to) { $("panel").hidden = true; document.body.classList.remove("sign-open"); }
+    if (!pop.to) { $("panel").hidden = true; document.body.classList.remove("sign-open"); document.body.style.minHeight = ""; }
     return;
   }
   popRender();
@@ -404,6 +417,7 @@ function popTo(open) {
   el.style.transformOrigin = popOrigin();
   if (!pop.raf) { pop.last = performance.now(); pop.raf = requestAnimationFrame(popStep); }   // 움직이는 중이면 지금 값·속도 그대로 목표만 바꿈
 }
+let scrollBack = null;   // 팝업을 열 때 화면을 입력창이 위로 오게 내렸다면, 닫을 때 원래 자리로
 function openPanel() {
   // 팝업이 다 닫힌 뒤 다시 열면 처음 상태로 (닫히는 도중에 다시 누르면 하던 그대로)
   const fresh = $("panel").hidden;
@@ -411,6 +425,14 @@ function openPanel() {
   panelOpen = true; $("camBtn").classList.add("on");
   document.body.classList.add("sign-open");   // 본 화면 첫 화면은 스크롤을 막아 두므로, 팝업이 떠 있는 동안은 풀어 줌
   popTo(true);
+  // 팝업 전체(카메라~질문)가 한 화면에 보이게: 입력창이 화면 위쪽(16px)에 오도록 부드럽게 내림
+  //  팝업은 커지는 중이라 아직 페이지가 짧으므로, 내릴 수 있게 페이지 최소 높이를 잡아 둠 (닫히면 풂)
+  const top = $("form").getBoundingClientRect().top;
+  if (Math.abs(top - 16) > 2) {
+    scrollBack ??= scrollY;
+    document.body.style.minHeight = `${Math.ceil(scrollY + top - 16 + innerHeight)}px`;
+    requestAnimationFrame(() => { if (panelOpen) scrollTo({ top: scrollY + $("form").getBoundingClientRect().top - 16, behavior: "smooth" }); });
+  }
   if (fresh) measureNotice();
   startCamera();
   // 시험용: 카메라가 수어를 알아들었다고 치고 예시 단어를 넣음 (테스트가 끝나면 지움)
@@ -421,6 +443,7 @@ function closePanel() {
   if (!panelOpen) return;
   panelOpen = false; $("camBtn").classList.remove("on");
   popTo(false);
+  if (scrollBack != null) { scrollTo({ top: scrollBack, behavior: "smooth" }); scrollBack = null; }
 }
 $("camBtn").onclick = () => (panelOpen ? closePanel() : openPanel());
 
