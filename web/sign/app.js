@@ -453,6 +453,12 @@ function closePanel() {
   if (scrollBack != null) { scrollTo({ top: scrollBack, behavior: "smooth" }); scrollBack = null; }
 }
 $("camBtn").onclick = () => (panelOpen ? closePanel() : openPanel());
+// 팝업이 떠 있을 때 팝업 밖(뒷 배경)을 누르면 닫기만 함 (그 클릭으로 뒤의 버튼이 눌리지는 않게)
+document.addEventListener("click", (e) => {
+  if (!panelOpen || $("panel").contains(e.target) || $("camBtn").contains(e.target)) return;
+  e.preventDefault(); e.stopPropagation();
+  closePanel();
+}, true);
 
 // 단어 칸(안내 문구 포함): 처음 나타날 때 질문 칸처럼 아래로 늘어나며 내려옴
 let wordsAnim = null;
