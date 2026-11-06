@@ -475,8 +475,6 @@ function openPanel() {
   }
   if (fresh) measureNotice();
   startCamera();
-  // 시험용: 카메라가 수어를 알아들었다고 치고 예시 단어를 넣음 (테스트가 끝나면 지움)
-  if (fresh) setTimeout(() => { if (panelOpen && !items.length) { seedExample(); renderWords(); } }, 600);
 }
 function closePanel() {
   if (stream) stopCamera();
@@ -526,11 +524,6 @@ function resetWords() {
   $("wordsWrap").hidden = true;   // 팝업이 열리기 전(안 보일 때)에만 비우므로 움직임 없이 숨김
   renderWords();
 }
-// 시험용 예시 단어 (테스트가 끝나면 지움)
-function seedExample() {
-  for (const l of ["보호1", "입다1", "위험1", "높다1", "언제1", "확인1"])
-    items.push({ label: l, cands: [{ label: l, p: 1 }], confident: true, locked: true });
-}
 renderWords();
 // 안내 문구 글자 위·아래 빈칸 재기: 줄 높이 안에서 실제 글자(잉크)가 차지하지 않는 위·아래 높이 → CSS --nt·--nb
 //  기준선 위치는 화면에서 직접 재고(높이 0 칸을 글자 줄에 붙여 봄), 글자 높이는 같은 글꼴로 그려서 잼
@@ -549,5 +542,5 @@ function measureNotice() {
 }
 document.fonts?.ready.then(measureNotice);
 prepare().catch(() => {});   // 페이지를 열면 바로 모델 준비 (카메라 권한은 팝업을 열 때 물음)
-window.__sign = { opts, items, renderWords, seedExample, draw, docWords: (ws) => docWords(ws, domain), rec, addItem,
+window.__sign = { opts, items, renderWords, draw, docWords: (ws) => docWords(ws, domain), rec, addItem,
   classify: (f) => classify(rec, f, opts, domainIdx, protos) };
