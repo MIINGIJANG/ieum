@@ -19,12 +19,13 @@ function loadKakao(key) {
     document.head.append(s);
   });
 }
-function getPos(timeout = 10000) {
+// 위치: 빠른 위치(와이파이·기지국)로 먼저. 정밀 GPS 는 몇~수십 초 걸려서 쓰지 않음 (응급실 찾기에는 충분)
+function getPos(timeout = 8000) {
   return new Promise((res, rej) => {
     if (!navigator.geolocation) return rej(new Error("no geolocation"));
     navigator.geolocation.getCurrentPosition((p) => {
       pos = { lat: p.coords.latitude, lng: p.coords.longitude }; posAt = Date.now(); res(pos);
-    }, rej, { enableHighAccuracy: true, timeout, maximumAge: 60000 });
+    }, rej, { enableHighAccuracy: false, timeout, maximumAge: 300000 });
   });
 }
 async function fetchNearest(p) {
@@ -97,6 +98,7 @@ function showInfo(d, err) {
   box.hidden = false;
 }
 async function refresh(p) {
+  if (!p) return;                              // 위치가 아직이면 지도·정보는 위치가 나오면 그림
   drawMap(p, result && resultFor === `${p.lat.toFixed(3)},${p.lng.toFixed(3)}` ? result : null);
   try { const d = await fetchNearest(p); if (open) { showInfo(d); drawMap(p, d); } }
   catch { if (open) showInfo(null, true); }
@@ -163,8 +165,12 @@ $("sosBtn").onclick = async () => {
   if (asking) return;
   if (pos && Date.now() - posAt < 120000) { openPanel(pos); getPos().catch(() => {}); return; }   // 방금 받은 위치가 있으면 바로
   asking = true;
-  try { openPanel(await getPos()); }          // 위치 권한을 묻고, 허락하면 팝업 (거절하면 열지 않음)
-  catch { /* 거절·실패: 열지 않음 */ }
+  // 위치 권한을 묻고, 허락하는 순간 팝업을 엶 (위치가 나오기를 기다리지 않음). 거절하면 열지 않음
+  const st = await navigator.permissions?.query({ name: "geolocation" }).catch(() => null);
+  if (st && st.state === "granted") openPanel(null);
+  else if (st) st.onchange = () => { if (st.state === "granted" && !open) openPanel(null); st.onchange = null; };
+  try { const p = await getPos(); if (!open) openPanel(p); else refresh(p); }
+  catch { if (open && !pos) showInfo(null, true); }
   finally { asking = false; }
 };
 // 팝업 밖을 누르면 그 순간 닫힘. 누른 곳이 버튼이면 그 버튼도 그대로 눌림 (카메라·마이크·예시 질문 등)
