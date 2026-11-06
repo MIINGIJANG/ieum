@@ -76,12 +76,6 @@ function drawMap(p, d) {
   } else map.setCenter(here);
 }
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-function ago(t) {   // '20261106163000' → 'n분 전'
-  if (!t || t.length < 12) return "";
-  const d = new Date(+t.slice(0, 4), +t.slice(4, 6) - 1, +t.slice(6, 8), +t.slice(8, 10), +t.slice(10, 12));
-  const m = Math.max(0, Math.round((Date.now() - d) / 60000));
-  return m < 1 ? "방금 갱신" : m < 60 ? `${m}분 전 갱신` : `${Math.floor(m / 60)}시간 전 갱신`;
-}
 function showInfo(d, err) {
   const box = $("sosInfo");
   const er = d && d.er;
@@ -90,13 +84,11 @@ function showInfo(d, err) {
   const km = ((rt && rt.distance != null ? rt.distance / 1000 : er.km) || 0).toFixed(1);
   const bed = er.beds == null ? "" : er.beds > 0 ? `응급실 남은 병상 ${er.beds}` : "응급실 병상 없음";
   const tel = er.er_tel || er.tel;
-  // 병원 이름 / [자동차 n분] [n km] / [응급실 남은 병상 n] [전화번호] / [n분 전 갱신] — 이름 말고는 모두 블럭
+  // 병원 이름 아래 블럭 4개를 2×2 로: 같은 폭의 두 칸이라 블럭 사이 빈 여백이 한가운데에서 십자가 모양
   const chip = (t) => `<span class="chip">${esc(t)}</span>`;
-  const row = (xs) => (xs.filter(Boolean).length ? `<div class="row">${xs.filter(Boolean).join("")}</div>` : "");
-  box.innerHTML = `<p class="name">${esc(er.name)}</p>`
-    + row([rt && rt.duration != null ? chip(`자동차 ${Math.max(1, Math.round(rt.duration / 60))}분`) : "", chip(`${km}km`)])
-    + row([bed ? chip(bed) : "", tel ? `<a class="chip" href="tel:${esc(tel.replace(/[^0-9+]/g, ""))}">${esc(tel)}</a>` : ""])
-    + row([er.updated ? chip(ago(er.updated)) : ""]);
+  const chips = [rt && rt.duration != null ? chip(`자동차 ${Math.max(1, Math.round(rt.duration / 60))}분`) : "", chip(`${km}km`),
+    bed ? chip(bed) : "", tel ? `<a class="chip" href="tel:${esc(tel.replace(/[^0-9+]/g, ""))}">${esc(tel)}</a>` : ""].filter(Boolean);
+  box.innerHTML = `<p class="name">${esc(er.name)}</p><div class="grid">${chips.join("")}</div>`;
   box.hidden = false;
 }
 async function refresh(p) {
