@@ -155,6 +155,7 @@ function draw(frame) {
     const wrist = hand.length === 21 ? hand[0] : seen(pose[wr]) ? pose[wr] : null;
     const arm = [wrist, seen(pose[el]) ? pose[el] : null, seen(pose[sh]) ? pose[sh] : null];
     lines(arm, [[0, 1], [1, 2]], "#ffffff", 2.5);
+    dots(arm, hand.length === 21 ? [1, 2] : [0, 1, 2], 2.5, "#ffffff");   // 팔꿈치·어깨 점 (손이 잡히면 손목 점은 손 쪽에서 그림)
   }
   // 손: 왼손·오른손 모두 흰색 (몸의 다른 점은 인식에는 쓰지만 그리지 않음 — 화면이 덜 복잡하게)
   for (const [hand, color] of [[frame.leftHand, "#ffffff"], [frame.rightHand, "#ffffff"]]) {
