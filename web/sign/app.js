@@ -364,13 +364,18 @@ const POP_SCALE = { from: 0.5, to: 0.2 };   // 나타날 때 50%에서 시작, �
 // 크기·투명도를 각각 스프링으로 (도중에 방향이 바뀌어도 둘 다 지금 값·속도에서 이어짐)
 let panelOpen = false, pop = { s: 1, sv: 0, o: 1, ov: 0, ts: 1, to: 1, raf: 0, last: 0, after: null };
 // 팝업 자리·크기: 입력창 아래 12px, 가운데. 가로 길이는 카메라 칸에 맞춰 (입력창보다 넓지 않게)
+let panelGap = null;   // 입력창 아랫면 ~ 팝업 윗면
 function placePanel() {
   const p = $("panel"), f = $("form");
   const par = p.offsetParent || document.body, pr = par.getBoundingClientRect(), fr = f.getBoundingClientRect();
-  // 위쪽: 입력창 아래 예시 질문 블럭의 윗면과 맞춤 (예시 질문이 없으면 입력창 아래 12px)
-  const ex = [...document.querySelectorAll("#examples button")].find(b => b.offsetParent);
-  const top = ex ? ex.getBoundingClientRect().top : fr.bottom + 12;
-  p.style.top = `${top - pr.top}px`;
+  // 위쪽: 예시 질문 블럭 아래, 겹치지 않게. 예시 질문~팝업 간격 = 입력창~예시 질문 간격.
+  //  입력창 아랫면에서 얼마나 떨어지는지 기억해 두어, 나중에 예시 질문이 모두 사라져도 자리는 그대로
+  const ex = [...document.querySelectorAll("#examples button")].filter(b => b.offsetParent).map(b => b.getBoundingClientRect());
+  if (ex.length) {
+    const t = Math.min(...ex.map(r => r.top)), b = Math.max(...ex.map(r => r.bottom)), gap = t - fr.bottom;
+    panelGap = b + gap - fr.bottom;
+  }
+  p.style.top = `${fr.bottom + (panelGap ?? 12) - pr.top}px`;
   const cam = fitCam(fr);
   const w = Math.min(fr.width, cam + 24);                                // 팝업도 카메라·단어·질문 칸에 맞춰 같이 줄임 (양옆 여백 12px)
   p.style.width = `${w}px`;
