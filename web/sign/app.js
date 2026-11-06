@@ -235,6 +235,9 @@ $("camBtn").onclick = () => (panelOpen ? closePanel() : openPanel());
 
 $("start").onclick = startCamera;
 $("stop").onclick = stopCamera;
+// 시험용: 카메라로 낱말 몇 개를 이미 알아들은 상태로 시작 (본 화면에 붙일 때는 지움)
+for (const l of ["보호1", "입다1", "위험1", "높다1", "언제1", "확인1"])
+  items.push({ label: l, cands: [{ label: l, p: 1 }], confident: true, locked: true });
 renderWords();
 window.__sign = { opts, items, renderWords, draw, docWords: (ws) => docWords(ws, domain), rec, addItem,
   classify: (f) => classify(rec, f, opts, domainIdx, protos) };
