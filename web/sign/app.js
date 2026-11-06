@@ -149,7 +149,14 @@ function draw(frame) {
   };
   const dots = (pts, idx, r, color) => { g.fillStyle = color; for (const i of idx) if (pts[i]) { g.beginPath(); g.arc(pts[i].x * w, pts[i].y * h, r, 0, 7); g.fill(); } };
   const all = [...Array(21).keys()].filter((i) => i !== 1);   // 엄지 맨 아래 점(1)은 그리지 않음
-  // 화면에는 손만 (몸 점은 인식에는 쓰지만 그리지 않음 — 화면이 덜 복잡하게), 왼손·오른손 모두 흰색
+  // 팔: 손목(손 점 0, 손이 안 잡히면 몸의 손목) → 팔꿈치 → 어깨. 화면 밖이라 잘 안 보이는 몸 점은 잇지 않음
+  const pose = frame.pose || [], seen = (q) => q && (q.visibility == null || q.visibility >= 0.5);
+  for (const [hand, wr, el, sh] of [[frame.leftHand, 15, 13, 11], [frame.rightHand, 16, 14, 12]]) {
+    const wrist = hand.length === 21 ? hand[0] : seen(pose[wr]) ? pose[wr] : null;
+    const arm = [wrist, seen(pose[el]) ? pose[el] : null, seen(pose[sh]) ? pose[sh] : null];
+    lines(arm, [[0, 1], [1, 2]], "#ffffff", 2.5);
+  }
+  // 손: 왼손·오른손 모두 흰색 (몸의 다른 점은 인식에는 쓰지만 그리지 않음 — 화면이 덜 복잡하게)
   for (const [hand, color] of [[frame.leftHand, "#ffffff"], [frame.rightHand, "#ffffff"]]) {
     if (hand.length !== 21) continue;
     lines(hand, HAND_LINES, color, 2.5);
