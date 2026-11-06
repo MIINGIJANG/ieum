@@ -11,6 +11,7 @@ import time
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor
 
 ERMCT = "https://apis.data.go.kr/B552657/ErmctInfoInqireService"
 KAKAO_ROUTE = "https://apis-navi.kakaomobility.com/v1/directions"
@@ -114,18 +115,26 @@ def nearest(lat, lng):
     cands = nearby(lat, lng)
     if not cands:
         return {"er": None, "route": None}
-    best, best_route = cands[0], None
-    for c in cands[:3]:                        # 가까운 3곳은 차로 걸리는 시간으로 비교
+    top = cands[:3]                           # 가까운 3곳은 차로 걸리는 시간으로 비교
+    reg = lambda a: " ".join((a or "").split()[:2])          # 병상은 지역(시·도 + 시·군·구)마다 한 번에 받음
+    regions = list(dict.fromkeys(reg(c["addr"]) for c in top))
+
+    def safe(f, *a):
         try:
-            rt = route(lat, lng, c["lat"], c["lng"])
+            return f(*a)
         except Exception:
-            rt = None
+            return None
+    # 경로 3개·병상 지역별 요청을 한꺼번에 (차례로 하면 몇 초씩 더 걸림)
+    with ThreadPoolExecutor(max_workers=len(top) + len(regions)) as ex:
+        routes = [ex.submit(safe, route, lat, lng, c["lat"], c["lng"]) for c in top]
+        bedf = {r: ex.submit(safe, beds, r) for r in regions}
+        routes = [f.result() for f in routes]
+        bedmap = {r: (f.result() or {}) for r, f in bedf.items()}
+    best, best_route = cands[0], None
+    for c, rt in zip(top, routes):
         if rt and rt.get("duration") is not None and (best_route is None or rt["duration"] < best_route["duration"]):
             best, best_route = c, rt
-    try:
-        best = {**best, **beds(best["addr"]).get(best["hpid"], {})}
-    except Exception:
-        pass
+    best = {**best, **bedmap.get(reg(best["addr"]), {}).get(best["hpid"], {})}
     out = {"er": best, "route": best_route}
     _CACHE[key] = (time.time(), out)
     if len(_CACHE) > 500:
