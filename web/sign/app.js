@@ -174,22 +174,20 @@ function chosen() {
 }
 function renderWords() {
   const ch = chosen();
-  $("words").innerHTML = items.map((it, i) => `<span class="chip${it.confident ? "" : " unsure"}${it.sel ? " sel" : ""}"><button class="w" data-i="${i}">${esc(word(ch[i]))}${it.confident ? "" : "?"}</button><button class="x" data-x="${i}" aria-label="지우기">✕</button></span>`).join("")
+  $("words").innerHTML = items.map((it, i) => `<span class="chip${it.confident ? "" : " unsure"}${it.sel ? " sel" : ""}"><button class="w" data-i="${i}">${esc(word(ch[i]))}${it.confident ? "" : "?"}</button></span>`).join("")
     || `<span class="empty">수어를 하면 여기에 낱말이 쌓입니다</span>`;
   suggest(ch);
 }
 // 낱말을 누르면 고르기/풀기 (고른 순서대로 질문을 찾음)
 let selOrder = 0;
 $("words").onclick = (e) => {
-  const x = e.target.closest("[data-x]"), w = e.target.closest("[data-i]");
-  if (x) { items.splice(+x.dataset.x, 1); win.lastCommitted = ""; renderWords(); return; }
+  const w = e.target.closest("[data-i]");
   if (w) {
     const i = +w.dataset.i, it = items[i];
     if (!it.sel) { it.label = chosen()[i]; it.locked = true; }   // 고른 낱말은 뒤에 낱말이 더 들어와도 바뀌지 않게
     it.sel = it.sel ? 0 : ++selOrder; renderWords();
   }
 };
-$("clear").onclick = () => { items.length = 0; win.lastCommitted = ""; renderWords(); };
 
 fetch(API + "examples").then((r) => r.json()).then((x) => { examples = [...new Set([...x.map((e) => e.question), ...examples])]; renderWords(); }).catch(() => {});
 domainReady.then(() => { examples = [...new Set([...examples, ...((domain && domain.questions) || [])])]; renderWords(); });
