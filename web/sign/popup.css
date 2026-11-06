@@ -53,6 +53,6 @@
 #sosPanel .info { gap: 8px; text-align: center; justify-items: center; margin-top: 12px; }   /* 지도 칸과 12px (.box 의 margin: 0 auto 보다 나중에) */
 #sosPanel .info .name { font-size: 1rem; font-weight: 700; }
 /* 응급실 정보 블럭: 낱말 블럭과 같은 모양·색 (박스 색 → 마우스 올리면 마우스 올림 색) */
-#sosPanel .info .row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
-#sosPanel .info .chip { background: var(--box); color: var(--ink); border-radius: 8px; padding: 4px 10px; font-weight: 500; text-decoration: none; }
+#sosPanel .info .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; }   /* 2×2, 블럭 사이 여백이 한가운데 십자가 */
+#sosPanel .info .chip { text-align: center; background: var(--box); color: var(--ink); border-radius: 8px; padding: 4px 10px; font-weight: 500; text-decoration: none; }
 #sosPanel .info .chip:hover { background: var(--hover); }
