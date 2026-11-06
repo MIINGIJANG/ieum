@@ -16,10 +16,8 @@ const opts = { ...DEFAULTS };
 const rec = new Recognizer();
 let domain = null, domainIdx = null, engine = null, worker = null, workerBusy = false, stream = null, raf = 0;
 const cleaner = new FrameCleaner(), seg = new Segmenter(), win = new WindowCommitter();
-const recent = [];                                      // 미리 보기용 최근 1.5초 특징
 const items = [];                                       // 알아들은 낱말 [{label, cands, confident, locked, custom}]
-let classifying = false, lastPreview = 0;
-const fpsTimes = [];
+let classifying = false;
 
 // 새 낱말 (web/sign/custom_words.json + 예전에 이 기기에서 가르친 것)
 let protos = [];
@@ -91,26 +89,15 @@ function onFrame(raw, t) {
   draw(raw);
   const frame = opts.smooth ? cleaner.clean(raw, t) : raw;
   const feat = frameToFeatures(frame, opts.useZ);
-  fpsTimes.push(t); while (fpsTimes.length && t - fpsTimes[0] > 1000) fpsTimes.shift();
-  $("fps").textContent = `${fpsTimes.length}fps · 몸 ${frame.pose.length ? "✓" : "✗"} · 왼손 ${frame.leftHand.length ? "✓" : "✗"} · 오른손 ${frame.rightHand.length ? "✓" : "✗"}`;
   $("handHint").hidden = !!(frame.leftHand.length || frame.rightHand.length);
-  if (feat) { recent.push({ t, feat }); while (recent.length && t - recent[0].t > 1500) recent.shift(); }
   if (!rec.session) return;
 
   if (opts.segment === "motion") {
     const s = seg.push(frame, feat, t);
-    $("segState").textContent = seg.cur ? "낱말 하는 중…" : seg.waitMove ? "다음 낱말을 하세요" : "손을 올려 시작";
     if (s) onSegment(s.frames);
   } else if (!classifying) {
     classifying = true;
     win.push(feat, t, (fs) => classify(rec, fs, opts, domainIdx, protos)).then((r) => r && addItem(r)).finally(() => { classifying = false; });
-    $("segState").textContent = "예전 방식 (최근 48프레임)";
-  }
-  if (t - lastPreview > 300 && recent.length >= 8 && !classifying) {   // 미리 보기 (확정 아님)
-    lastPreview = t; classifying = true;
-    classify(rec, recent.map((r) => r.feat), opts, domainIdx, protos)
-      .then((r) => { $("live").innerHTML = r.cands.slice(0, 3).map((c) => `${esc(word(c.label))} <small>${Math.round(c.p * 100)}%</small>`).join(" · "); })
-      .finally(() => { classifying = false; });
   }
 }
 
@@ -158,7 +145,7 @@ async function startCamera() {
     const v = $("video");
     v.srcObject = stream;
     await v.play();
-    $("loadBox").hidden = true; $("stop").hidden = false; $("fps").textContent = "카메라 켜짐";
+    $("loadBox").hidden = true; $("stop").hidden = false;
     cleaner.reset(); seg.reset(); win.reset();
     raf = requestAnimationFrame(loop);
   } catch (e) {
@@ -174,7 +161,6 @@ function stopCamera() {
   const cv = $("overlay"); cv.getContext("2d").clearRect(0, 0, cv.width, cv.height);   // 꺼지면 손 선도 지움
   $("handHint").hidden = true;
   $("stop").hidden = true; $("loadBox").hidden = false; $("start").disabled = false; setLoad("카메라가 꺼져 있습니다", null);
-  $("fps").textContent = "카메라 꺼짐"; $("segState").textContent = "손을 올려 시작"; $("live").textContent = "—";
 }
 
 // ---------------- 낱말 · 질문 ----------------
