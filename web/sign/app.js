@@ -157,11 +157,11 @@ function draw(frame) {
   }
 }
 
-// 카메라 켜기: 팝업을 열면 바로 (켜기 버튼 없이). 권한을 거절했거나 실패하면 그때만 '카메라 켜기' 버튼
+// 카메라 켜기: 팝업을 열면 바로. 권한을 거절했거나 실패하면 팝업을 닫음 (카메라 없이 팝업만 떠 있지 않게)
 let starting = false;
 async function startCamera() {
   if (stream || starting) return;
-  starting = true; $("loadBox").hidden = true; $("start").disabled = true;
+  starting = true;
   clearOverlay();   // 다시 켤 때도 처음처럼 빈 화면에서
   try {
     // 카메라 화면은 받는 즉시 보여 줌 (인식 모델 준비를 기다리지 않음). 손 인식은 모델이 준비되면 시작
@@ -177,8 +177,8 @@ async function startCamera() {
     raf = requestAnimationFrame(loop);
   } catch (e) {
     console.error(e);
-    if (panelOpen) $("loadBox").hidden = false;
-  } finally { starting = false; $("start").disabled = false; }
+    if (panelOpen) closePanel();
+  } finally { starting = false; }
 }
 function clearOverlay() { const cv = $("overlay"); cv.getContext("2d").clearRect(0, 0, cv.width, cv.height); }
 function stopCamera() {
@@ -186,7 +186,6 @@ function stopCamera() {
   if (stream) stream.getTracks().forEach((t) => t.stop());
   stream = null; $("video").srcObject = null;
   clearOverlay(); workerBusy = false;   // 꺼지면 손 선도 지움
-  $("loadBox").hidden = false; $("start").disabled = false;
 }
 
 // ---------------- 낱말 · 질문 ----------------
@@ -363,7 +362,7 @@ $("suggest").onclick = (e) => {
 const SPRING = { response: 0.35, damping: 1 };
 const POP_SCALE = { from: 0.5, to: 0.2 };   // 나타날 때 50%에서 시작, 사라질 때는 20%까지 더 작아지며 버튼으로 들어감
 // 크기·투명도를 각각 스프링으로 (도중에 방향이 바뀌어도 둘 다 지금 값·속도에서 이어짐)
-let panelOpen = false, pop = { s: 1, sv: 0, o: 1, ov: 0, ts: 1, to: 1, raf: 0, last: 0 };
+let panelOpen = false, pop = { s: 1, sv: 0, o: 1, ov: 0, ts: 1, to: 1, raf: 0, last: 0, after: null };
 // 팝업 자리·크기: 입력창 아래 12px, 가운데. 가로 길이는 카메라 칸에 맞춰 (입력창보다 넓지 않게)
 function placePanel() {
   const p = $("panel"), f = $("form");
@@ -411,7 +410,10 @@ function popStep(t) {
   const done = Math.abs(pop.s - pop.ts) < 0.001 && Math.abs(pop.sv) < 0.01 && Math.abs(pop.o - pop.to) < 0.001 && Math.abs(pop.ov) < 0.01;
   if (done) {
     pop.s = pop.ts; pop.o = pop.to; pop.sv = pop.ov = 0; pop.raf = 0; popRender();
-    if (!pop.to) { $("panel").hidden = true; document.body.classList.remove("sign-open"); document.body.style.minHeight = ""; }
+    if (!pop.to) {
+      $("panel").hidden = true; document.body.classList.remove("sign-open"); document.body.style.minHeight = "";
+      const next = pop.after; pop.after = null; if (next) next();   // 다 닫힌 뒤 할 일 (뒤의 질문 누르기 등)
+    }
     return;
   }
   popRender();
@@ -421,6 +423,7 @@ function popTo(open) {
   const el = $("panel");
   if (open && el.hidden) { el.hidden = false; placePanel(); pop.s = POP_SCALE.from; pop.o = 0; pop.sv = pop.ov = 0; }   // 완전히 사라진 뒤 다시 열 때만 50%에서 시작
   pop.ts = open ? 1 : POP_SCALE.to; pop.to = open ? 1 : 0;
+  if (open) pop.after = null;                                     // 닫히는 도중에 다시 열면 닫힌 뒤 할 일은 취소
   el.style.transformOrigin = popOrigin();
   if (!pop.raf) { pop.last = performance.now(); pop.raf = requestAnimationFrame(popStep); }   // 움직이는 중이면 지금 값·속도 그대로 목표만 바꿈
 }
@@ -452,12 +455,30 @@ function closePanel() {
   popTo(false);
   if (scrollBack != null) { scrollTo({ top: scrollBack, behavior: "smooth" }); scrollBack = null; }
 }
-$("camBtn").onclick = () => (panelOpen ? closePanel() : openPanel());
-// 팝업이 떠 있을 때 팝업 밖(뒷 배경)을 누르면 닫기만 함 (그 클릭으로 뒤의 버튼이 눌리지는 않게)
+// 카메라를 쓸 수 없는 게 미리 보이면(카메라 없음·권한 거절) 팝업을 열지 않음. 모르면 열고, 켜기에 실패하면 바로 닫음
+async function cameraUsable() {
+  if (!navigator.mediaDevices?.getUserMedia) return false;
+  try { if ((await navigator.permissions?.query({ name: "camera" }))?.state === "denied") return false; } catch {}
+  try {
+    const ds = await navigator.mediaDevices.enumerateDevices();
+    if (ds.length && !ds.some((d) => d.kind === "videoinput")) return false;
+  } catch {}
+  return true;
+}
+$("camBtn").onclick = async () => {
+  if (panelOpen) return closePanel();
+  if (await cameraUsable()) openPanel();
+};
+// 팝업이 떠 있을 때 팝업 밖(뒷 배경)을 누르면 먼저 팝업을 닫음. 누른 곳이 버튼(예시 질문 등)이면 다 닫힌 뒤 그 버튼을 누름
 document.addEventListener("click", (e) => {
   if (!panelOpen || $("panel").contains(e.target) || $("camBtn").contains(e.target)) return;
   e.preventDefault(); e.stopPropagation();
+  const btn = e.target.closest?.("button, a, [role=button]");
   closePanel();
+  if (!btn) return;
+  const go = () => { if (pop.after !== go) return; pop.after = null; btn.click(); };
+  pop.after = go;
+  setTimeout(go, 700);   // 닫히는 움직임이 늦어져도(탭이 느릴 때 등) 0.7초 뒤에는 넘어감
 }, true);
 
 // 단어 칸(안내 문구 포함): 처음 나타날 때 질문 칸처럼 아래로 늘어나며 내려옴
@@ -471,7 +492,6 @@ function showWords() {
   wordsAnim = el.animate([{ height: "0px" }, { height: `${h}px` }], ROLL);
   wordsAnim.onfinish = () => { el.style.overflow = ""; wordsAnim = null; };
 }
-$("start").onclick = startCamera;   // 권한을 거절했거나 실패했을 때만 보이는 다시 켜기
 /** 처음 상태로: 알아들은 낱말·고른 낱말·질문 블럭을 모두 비움 (카메라 칸만 남음) */
 function resetWords() {
   items.length = 0; selOrder = 0; win.lastCommitted = "";
