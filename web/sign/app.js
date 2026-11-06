@@ -156,7 +156,7 @@ async function startCamera() {
     const v = $("video");
     v.srcObject = stream;
     await v.play();
-    $("loadBox").hidden = true; $("run").hidden = false;
+    $("loadBox").hidden = true; $("stop").hidden = false; $("fps").textContent = "카메라 켜짐";
     cleaner.reset(); seg.reset(); win.reset();
     raf = requestAnimationFrame(loop);
   } catch (e) {
@@ -169,7 +169,10 @@ function stopCamera() {
   cancelAnimationFrame(raf);
   if (stream) stream.getTracks().forEach((t) => t.stop());
   stream = null; $("video").srcObject = null;
-  $("run").hidden = true; $("loadBox").hidden = false; $("start").disabled = false; $("start").textContent = "카메라 다시 켜기";
+  const cv = $("overlay"); cv.getContext("2d").clearRect(0, 0, cv.width, cv.height);   // 꺼지면 손 선도 지움
+  $("handHint").hidden = true;
+  $("stop").hidden = true; $("loadBox").hidden = false; $("start").disabled = false; setLoad("카메라가 꺼져 있습니다", null);
+  $("fps").textContent = "카메라 꺼짐"; $("segState").textContent = "손을 올려 시작"; $("live").textContent = "—";
 }
 
 // ---------------- 낱말 · 질문 ----------------
