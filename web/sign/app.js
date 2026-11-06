@@ -429,7 +429,7 @@ function popStep(t) {
     pop.s = pop.ts; pop.o = pop.to; pop.sv = pop.ov = 0; pop.raf = 0; popRender();
     if (!pop.to) {
       $("panel").hidden = true; document.body.classList.remove("sign-open"); document.body.style.minHeight = "";
-      const next = pop.after; pop.after = null; if (next) next();   // 다 닫힌 뒤 할 일 (뒤의 질문 누르기 등)
+      if (pop.after) pop.after();   // 다 닫힌 뒤 할 일 (뒤의 질문 누르기 등). 할 일이 스스로 pop.after 를 비움
     }
     return;
   }
