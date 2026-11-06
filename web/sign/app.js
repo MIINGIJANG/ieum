@@ -215,43 +215,46 @@ $("suggest").onclick = (e) => {
 //  - 튕김 없는 스프링 (damping 1.0, response 0.35초), 열기·닫기 같은 곡선
 //  - 움직이는 도중 다시 누르면 지금 위치·속도에서 그대로 되돌아감 (처음으로 튀지 않음)
 const SPRING = { response: 0.35, damping: 1 };
-let panelOpen = true, pop = { x: 1, v: 0, target: 1, raf: 0, last: 0 };
+const POP_SCALE = { from: 0.5, to: 0.2 };   // 나타날 때 50%에서 시작, 사라질 때는 20%까지 더 작아지며 버튼으로 들어감
+// 크기·투명도를 각각 스프링으로 (도중에 방향이 바뀌어도 둘 다 지금 값·속도에서 이어짐)
+let panelOpen = true, pop = { s: 1, sv: 0, o: 1, ov: 0, ts: 1, to: 1, raf: 0, last: 0 };
 function popOrigin() {   // 크기가 바뀌는 중에도 맞게: 화면 위치(getBoundingClientRect) 대신 배치 위치(offset)로
   const p = $("panel"), f = $("form"), b = $("camBtn");
   return `${f.offsetLeft + b.offsetLeft + b.offsetWidth / 2 - p.offsetLeft}px ${f.offsetTop + f.offsetHeight / 2 - p.offsetTop}px`;
 }
 function popRender() {
-  const el = $("panel"), x = Math.min(1, Math.max(0, pop.x));
-  el.style.opacity = String(Math.min(1, x * 1.4));
-  el.style.transform = pop.x >= 0.999 ? "" : `scale(${0.5 + 0.5 * pop.x})`;
-  el.style.pointerEvents = pop.target ? "" : "none";
+  const el = $("panel");
+  el.style.opacity = String(Math.min(1, Math.max(0, pop.o)));
+  el.style.transform = Math.abs(pop.s - 1) < 0.001 ? "" : `scale(${pop.s})`;
+  el.style.pointerEvents = pop.to ? "" : "none";
 }
 function popStep(t) {
   const dt = Math.min(0.032, (t - pop.last) / 1000 || 0.016); pop.last = t;
-  const w = (2 * Math.PI) / SPRING.response;                 // 애플의 response → 고유 진동수
-  const a = -w * w * (pop.x - pop.target) - 2 * SPRING.damping * w * pop.v;
-  pop.v += a * dt; pop.x += pop.v * dt;
-  if (Math.abs(pop.x - pop.target) < 0.001 && Math.abs(pop.v) < 0.01) {
-    pop.x = pop.target; pop.v = 0; pop.raf = 0; popRender();
-    if (!pop.target) $("panel").hidden = true;
+  const w = (2 * Math.PI) / SPRING.response, k = 2 * SPRING.damping * w;   // 애플의 response → 고유 진동수
+  pop.sv += (-w * w * (pop.s - pop.ts) - k * pop.sv) * dt; pop.s += pop.sv * dt;
+  pop.ov += (-w * w * (pop.o - pop.to) - k * pop.ov) * dt; pop.o += pop.ov * dt;
+  const done = Math.abs(pop.s - pop.ts) < 0.001 && Math.abs(pop.sv) < 0.01 && Math.abs(pop.o - pop.to) < 0.001 && Math.abs(pop.ov) < 0.01;
+  if (done) {
+    pop.s = pop.ts; pop.o = pop.to; pop.sv = pop.ov = 0; pop.raf = 0; popRender();
+    if (!pop.to) $("panel").hidden = true;
     return;
   }
   popRender();
   pop.raf = requestAnimationFrame(popStep);
 }
-function popTo(target) {
+function popTo(open) {
   const el = $("panel");
-  pop.target = target;
-  if (target) { el.hidden = false; }
+  if (open && el.hidden) { el.hidden = false; pop.s = POP_SCALE.from; pop.o = 0; pop.sv = pop.ov = 0; }   // 완전히 사라진 뒤 다시 열 때만 50%에서 시작
+  pop.ts = open ? 1 : POP_SCALE.to; pop.to = open ? 1 : 0;
   el.style.transformOrigin = popOrigin();
   if (!pop.raf) { pop.last = performance.now(); pop.raf = requestAnimationFrame(popStep); }   // 움직이는 중이면 지금 값·속도 그대로 목표만 바꿈
 }
-function openPanel() { panelOpen = true; $("camBtn").classList.add("on"); popTo(1); }
+function openPanel() { panelOpen = true; $("camBtn").classList.add("on"); popTo(true); }
 function closePanel() {
   if (stream) stopCamera();
   if (!panelOpen) return;
   panelOpen = false; $("camBtn").classList.remove("on");
-  popTo(0);
+  popTo(false);
 }
 $("camBtn").onclick = () => (panelOpen ? closePanel() : openPanel());
 
