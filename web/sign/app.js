@@ -1,4 +1,5 @@
-// 카메라 수어 입력 화면 (시험판, 본 화면과 따로). 공통 부분은 core.js, 관절 점 엔진은 engines.js.
+// 카메라 수어 입력 팝업 (본 화면 web/index.html 과 시험 페이지 web/sign/index.html 이 같이 씀). 모양은 popup.css,
+// 공통 부분은 core.js, 관절 점 엔진은 engines.js. 모델은 페이지를 열 때 미리 준비 (본 화면은 첫 로딩 화면에서) → 카메라 버튼을 누르면 바로 켜짐.
 // 영상은 기기 밖으로 나가지 않음 (서버에는 고른 질문 글자만).
 import { DEFAULTS, FrameCleaner, Recognizer, Segmenter, WindowCommitter, base, classify, docWords, fromB64,
   frameToFeatures, mentionAt, mentions, rankQuestions, rerank } from "./core.js";
@@ -6,8 +7,8 @@ import { createEngine } from "./engines.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const API = new URL("../", location.href).href;
-const BASE = "./";
+const API = new URL("../", import.meta.url).href;   // 어느 페이지에서 불러도 같은 곳 (이 파일 기준)
+const BASE = new URL("./", import.meta.url).href;
 
 // ---------------- 설정 (기본값 고정, 평가 페이지 eval.html 에서만 바꿔 비교) ----------------
 const opts = { ...DEFAULTS };
@@ -35,6 +36,13 @@ const word = (l) => (domain && domain.words[l]) || base(l);
 
 // ---------------- 불러오기 ----------------
 function setLoad() {}   // 카메라 칸에는 안내 문구·불러오기 막대를 두지 않음 (불러오는 동안은 켜기 버튼만 눌리지 않게)
+// 미리 준비: 모델 받기·인식 엔진 시작 (한 번만). 끝나면 'sign-ready' 알림 (본 화면 첫 로딩 화면이 기다림)
+let readyP = null;
+function prepare() {
+  return (readyP ??= loadModels().then(
+    () => dispatchEvent(new Event("sign-ready")),
+    (e) => { console.error("카메라 수어 입력 준비 실패", e); readyP = null; dispatchEvent(new Event("sign-failed")); throw e; }));
+}
 async function loadModels() {
   await domainReady;
   setLoad("수어 단어 인식 모델 불러오는 중…", 5);
@@ -136,21 +144,27 @@ function draw(frame) {
   }
 }
 
+// 카메라 켜기: 팝업을 열면 바로 (켜기 버튼 없이). 권한을 거절했거나 실패하면 그때만 '카메라 켜기' 버튼
+let starting = false;
 async function startCamera() {
-  $("start").disabled = true;
+  if (stream || starting) return;
+  starting = true; $("loadBox").hidden = true; $("start").disabled = true;
   try {
-    if (!rec.session) await loadModels();
-    stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: "user" }, audio: false });
+    const cam = navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: "user" }, audio: false });
+    await prepare();
+    const s = await cam;
+    if (!panelOpen) { s.getTracks().forEach((t) => t.stop()); return; }   // 켜지는 동안 팝업을 닫았으면 끔
+    stream = s;
     const v = $("video");
     v.srcObject = stream;
     await v.play();
-    $("loadBox").hidden = true; $("stop").hidden = false;
+    $("stop").hidden = false;
     cleaner.reset(); seg.reset(); win.reset();
     raf = requestAnimationFrame(loop);
   } catch (e) {
     console.error(e);
-    $("start").disabled = false;
-  }
+    if (panelOpen) $("loadBox").hidden = false;
+  } finally { starting = false; $("start").disabled = false; }
 }
 function stopCamera() {
   cancelAnimationFrame(raf);
@@ -313,11 +327,21 @@ $("suggest").onclick = (e) => {
 const SPRING = { response: 0.35, damping: 1 };
 const POP_SCALE = { from: 0.5, to: 0.2 };   // 나타날 때 50%에서 시작, 사라질 때는 20%까지 더 작아지며 버튼으로 들어감
 // 크기·투명도를 각각 스프링으로 (도중에 방향이 바뀌어도 둘 다 지금 값·속도에서 이어짐)
-let panelOpen = true, pop = { s: 1, sv: 0, o: 1, ov: 0, ts: 1, to: 1, raf: 0, last: 0 };
+let panelOpen = false, pop = { s: 1, sv: 0, o: 1, ov: 0, ts: 1, to: 1, raf: 0, last: 0 };
+// 팝업 자리: 입력창 아래 12px, 오른쪽 끝을 입력창 오른쪽 끝에 맞춤 (카메라 버튼 쪽)
+function placePanel() {
+  const p = $("panel"), f = $("form");
+  const par = p.offsetParent || document.body, pr = par.getBoundingClientRect(), fr = f.getBoundingClientRect();
+  p.style.top = `${fr.bottom - pr.top + 12}px`;
+  p.style.left = `${Math.max(fr.left, fr.right - p.offsetWidth) - pr.left}px`;
+}
+addEventListener("resize", () => { if (!$("panel").hidden) placePanel(); });
 // 나오고 들어가는 점: 카메라 버튼 바로 아래, 입력창 아랫면 (팝업이 입력창 안으로 겹쳐 들어가지 않게)
-function popOrigin() {   // 크기가 바뀌는 중에도 맞게: 화면 위치(getBoundingClientRect) 대신 배치 위치(offset)로
-  const p = $("panel"), f = $("form"), b = $("camBtn");
-  return `${f.offsetLeft + b.offsetLeft + b.offsetWidth / 2 - p.offsetLeft}px ${f.offsetTop + f.offsetHeight - p.offsetTop}px`;
+function popOrigin() {
+  const p = $("panel"), f = $("form").getBoundingClientRect(), b = $("camBtn").getBoundingClientRect();
+  const t = p.style.transform; p.style.transform = "";            // 크기가 바뀌는 중이어도 원래 크기로 재기
+  const r = p.getBoundingClientRect(); p.style.transform = t;
+  return `${b.left + b.width / 2 - r.left}px ${f.bottom - r.top}px`;
 }
 function popRender() {
   const el = $("panel");
@@ -333,7 +357,7 @@ function popStep(t) {
   const done = Math.abs(pop.s - pop.ts) < 0.001 && Math.abs(pop.sv) < 0.01 && Math.abs(pop.o - pop.to) < 0.001 && Math.abs(pop.ov) < 0.01;
   if (done) {
     pop.s = pop.ts; pop.o = pop.to; pop.sv = pop.ov = 0; pop.raf = 0; popRender();
-    if (!pop.to) $("panel").hidden = true;
+    if (!pop.to) { $("panel").hidden = true; document.body.classList.remove("sign-open"); }
     return;
   }
   popRender();
@@ -341,15 +365,22 @@ function popStep(t) {
 }
 function popTo(open) {
   const el = $("panel");
-  if (open && el.hidden) { el.hidden = false; pop.s = POP_SCALE.from; pop.o = 0; pop.sv = pop.ov = 0; }   // 완전히 사라진 뒤 다시 열 때만 50%에서 시작
+  if (open && el.hidden) { el.hidden = false; placePanel(); pop.s = POP_SCALE.from; pop.o = 0; pop.sv = pop.ov = 0; }   // 완전히 사라진 뒤 다시 열 때만 50%에서 시작
   pop.ts = open ? 1 : POP_SCALE.to; pop.to = open ? 1 : 0;
   el.style.transformOrigin = popOrigin();
   if (!pop.raf) { pop.last = performance.now(); pop.raf = requestAnimationFrame(popStep); }   // 움직이는 중이면 지금 값·속도 그대로 목표만 바꿈
 }
 function openPanel() {
   // 팝업이 다 닫힌 뒤 다시 열면 처음 상태로 (닫히는 도중에 다시 누르면 하던 그대로)
-  if ($("panel").hidden) resetWords();
-  panelOpen = true; $("camBtn").classList.add("on"); popTo(true);
+  const fresh = $("panel").hidden;
+  if (fresh) resetWords();
+  panelOpen = true; $("camBtn").classList.add("on");
+  document.body.classList.add("sign-open");   // 본 화면 첫 화면은 스크롤을 막아 두므로, 팝업이 떠 있는 동안은 풀어 줌
+  popTo(true);
+  if (fresh) measureNotice();
+  startCamera();
+  // 시험용: 카메라가 수어를 알아들었다고 치고 예시 단어를 넣음 (테스트가 끝나면 지움)
+  if (fresh) setTimeout(() => { if (panelOpen && !items.length) { seedExample(); renderWords(); } }, 600);
 }
 function closePanel() {
   if (stream) stopCamera();
@@ -370,11 +401,7 @@ function showWords() {
   wordsAnim = el.animate([{ height: "0px" }, { height: `${h}px` }], ROLL);
   wordsAnim.onfinish = () => { el.style.overflow = ""; wordsAnim = null; };
 }
-$("start").onclick = () => {
-  // 시험용: 카메라 켜기를 누르면 수어를 알아들었다고 치고 예시 단어를 넣음 (본 화면에 붙일 때는 지움)
-  if (!items.length) setTimeout(() => { if (!items.length) { seedExample(); renderWords(); } }, 600);
-  startCamera();
-};
+$("start").onclick = startCamera;   // 권한을 거절했거나 실패했을 때만 보이는 다시 켜기
 $("stop").onclick = stopCamera;
 /** 처음 상태로: 알아들은 낱말·고른 낱말·질문 블럭을 모두 비움 (카메라 칸만 남음) */
 function resetWords() {
@@ -384,7 +411,7 @@ function resetWords() {
   $("wordsWrap").hidden = true;   // 팝업이 열리기 전(안 보일 때)에만 비우므로 움직임 없이 숨김
   renderWords();
 }
-// 시험용 예시 단어 (본 화면에 붙일 때는 지움)
+// 시험용 예시 단어 (테스트가 끝나면 지움)
 function seedExample() {
   for (const l of ["보호1", "입다1", "위험1", "높다1", "언제1", "확인1"])
     items.push({ label: l, cands: [{ label: l, p: 1 }], confident: true, locked: true });
@@ -393,7 +420,7 @@ renderWords();
 // 안내 문구 글자 위·아래 빈칸 재기: 줄 높이 안에서 실제 글자(잉크)가 차지하지 않는 위·아래 높이 → CSS --nt·--nb
 //  기준선 위치는 화면에서 직접 재고(높이 0 칸을 글자 줄에 붙여 봄), 글자 높이는 같은 글꼴로 그려서 잼
 function measureNotice() {
-  const el = document.querySelector(".notice"); if (!el) return;
+  const el = document.querySelector("#panel .notice"); if (!el || !el.getClientRects().length) return;
   const cs = getComputedStyle(el), fs = parseFloat(cs.fontSize);
   const probe = document.createElement("span"); probe.style.cssText = "display:inline-block;width:0;height:0;vertical-align:baseline";
   el.appendChild(probe);
@@ -405,7 +432,7 @@ function measureNotice() {
   document.documentElement.style.setProperty("--nt", `${top.toFixed(2)}px`);
   document.documentElement.style.setProperty("--nb", `${bottom.toFixed(2)}px`);
 }
-measureNotice();
 document.fonts?.ready.then(measureNotice);
+prepare().catch(() => {});   // 페이지를 열면 바로 모델 준비 (카메라 권한은 팝업을 열 때 물음)
 window.__sign = { opts, items, renderWords, seedExample, draw, docWords: (ws) => docWords(ws, domain), rec, addItem,
   classify: (f) => classify(rec, f, opts, domainIdx, protos) };

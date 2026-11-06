@@ -5,72 +5,35 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <title>이음 · 수어로 묻기 (시험판)</title>
+<link rel="stylesheet" href="./popup.css">
 <style>
-  /* 본 화면(web/index.html)과 같은 색 */
-  :root { --bg: #ffffff; --box: #e8e8e8; --hover: #dcdcdc; --strong: #5f5f5f; --ink: #000000; --on: #ffffff; }
-  @media (prefers-color-scheme: dark) { :root { --bg: #242526; --box: #3e3f40; --hover: #48494a; --strong: #0d0d0e; --ink: #ffffff; --on: #ffffff; } }
+  /* 시험 페이지: 본 화면처럼 입력창 하나와 카메라 버튼만 (팝업 모양·동작은 popup.css·app.js, 본 화면과 같음) */
+  :root { --bg: #ffffff; --box: #e8e8e8; --ink: #000000; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #242526; --box: #3e3f40; --ink: #ffffff; } }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif; }
-  main { max-width: 420px; margin: 0 auto; padding: 16px 16px 32px; display: grid; gap: 12px; }   /* 팝업 크기 */
-  h2 { margin: 0; font-size: 1rem; }
-  p { margin: 0; }
-  small { opacity: .7; }
-  a { color: inherit; }
-  .box { background: var(--box); border-radius: 12px; padding: 12px; display: grid; gap: 8px; }
-  /* 본 화면에서 카메라 버튼을 누르면 뜰 큰 박스 (기존 박스 색), 안쪽 박스는 마우스 올림 색 */
-  .panel { background: var(--box); border-radius: 14px; padding: 12px; display: grid; }
-  .panel > :not(:first-child) { margin-top: 12px; }   /* 칸 사이 12px (질문 칸은 비었을 때 간격이 남지 않게 안쪽에서 띄움) */
-  .panel .box { background: var(--bg); gap: 0; padding: 8px; }   /* 팝업 안 낱말 칸·질문 칸: 흰색 (다크 모드는 배경색). 칸 안 위·아래·블럭 사이 간격 모두 8px */
-  /* 낱말 칸 안내 문구: 위(칸 여백 12px)·아래 12px, 위쪽 안내 문구와 같은 간격 */
-  /* 질문 안내 문구 + 질문 칸: 카메라 칸처럼 안내 문구는 칸 밖 위. 없을 때 빈 간격이 남지 않게 위 간격을 안쪽에 둠 */
-  .panel > #suggest, .panel > #wordsWrap { margin-top: 0; }
-  #suggest > .notice, #wordsWrap > .notice { margin-top: calc(12px - var(--nt, 0px)); margin-bottom: calc(12px - var(--nb, 0px)); }   /* 단어 칸도 질문 칸처럼 안내 문구와 함께 내려옴 */
-  button { font: inherit; color: var(--ink); background: var(--bg); border: 0; border-radius: 8px; padding: 4px 10px; }
-  button { cursor: pointer; }
-  button:hover { background: var(--hover); }
-  button:disabled { opacity: .5; cursor: default; }
-  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-  .cam { position: relative; width: 100%; aspect-ratio: 1 / 1; border-radius: 12px; overflow: hidden; background: #000; }   /* 정사각형, 꺼져도 크기 그대로 */
-  .cam .off { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 10px; padding: 16px; text-align: center; color: #fff; }
-  /* 안내 문구: 본 화면과 같은 모양. 줄 높이 안에서 글자 위·아래에 남는 빈칸(--nt·--nb, app.js 가 쓰는 글꼴로 재서 넣음)을
-     여백에서 빼서, 글꼴과 상관없이 글자 위·아래 간격이 박스 사이 간격(12px)과 똑같게 */
-  .notice { margin: calc(0px - var(--nt, 0px)) 0 calc(0px - var(--nb, 0px)); font-size: .88rem; line-height: 1; text-align: center; color: var(--ink); }
-  .panel > .notice:not(:first-child) { margin-top: calc(12px - var(--nt, 0px)); }
-  #stop { position: absolute; right: 10px; bottom: 10px; }
-  .cam video, .cam canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }   /* 거울처럼 보이게 */
-  .chip { display: inline-flex; border-radius: 8px; overflow: hidden; }
-  .chip .w { border-radius: 0; font-weight: 500; padding: 4px 10px; }
-  #words { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; }   /* 낱말 가운데 정렬 */
-  #suggest .box { gap: 8px; justify-items: center; }   /* 질문 가운데 정렬, 박스는 글자 길이만큼 */
-  #suggest .q { text-align: center; max-width: 100%; }
-  /* 시험용: 본 화면 입력창 흉내 (질문 블럭을 누르면 팝업이 닫히고 여기에 들어감, 보내기는 사용자가) */
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif; }
+  main { position: relative; max-width: 452px; margin: 0 auto; padding: 16px 16px 32px; }
   form.query { position: relative; }
   form.query input { width: 100%; padding: 15px 56px 15px 20px; border: 0; border-radius: 999px; background: var(--box); color: var(--ink); font: inherit; font-size: 1rem; }
   form.query input::placeholder { color: var(--ink); opacity: 1; }
   form.query input:focus { outline: none; }
-  form.query #camBtn { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); width: 32px; height: 40px; padding: 0; background: transparent; display: grid; place-items: center; }
+  form.query #camBtn { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); width: 32px; height: 40px; padding: 0; border: 0; background: transparent; color: var(--ink); cursor: pointer; display: grid; place-items: center; }
   form.query #camBtn svg { width: 22px; height: 22px; }
-  form.query #camBtn.on { color: #34c759; }   /* 팝업이 떠 있는 동안 카메라 버튼 초록 (마이크 듣는 중 주황처럼 배경 없이 그림만) */
-  #words .chip.sel { position: relative; z-index: 1; }   /* 앞으로 옮겨 갈 때 다른 낱말 위로 지나감 */
-  /* 낱말·질문 블럭: 기존 박스 색 → 마우스 올리면 마우스 올림 색 → 고르거나 누르면 표현 중 수어 블럭 색 + 흰 글씨 (본 화면과 같은 색) */
-  #words .w, #suggest .q { background: var(--box); }
-  #words .w:hover, #suggest .q:hover { background: var(--hover); }
-  #words .chip.sel .w, #suggest .q:active { background: var(--strong); color: var(--on); }
 </style>
 </head>
 <body>
 <main>
 <form class="query" id="form" onsubmit="return false">
   <input id="q" autocomplete="off" placeholder="어떤 도움을 드릴까요?" aria-label="질문">
-  <button id="camBtn" class="on" type="button" aria-label="카메라로 수어 입력"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5a2 2 0 0 1 2-2h2l1.5-2h6l1.5 2h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.6"/></svg></button>
+  <button id="camBtn" type="button" aria-label="카메라로 수어 입력"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5a2 2 0 0 1 2-2h2l1.5-2h6l1.5 2h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.6"/></svg></button>
 </form>
-<div class="panel" id="panel">
+<div class="panel" id="panel" hidden>
   <p class="notice">두 손으로 수어를 표현해 주세요.</p>
   <section class="cam">
     <video id="video" playsinline muted></video>
     <canvas id="overlay"></canvas>
-    <div class="off" id="loadBox">
+    <div class="off" id="loadBox" hidden>
       <button id="start">카메라 켜기</button>
     </div>
     <button id="stop" hidden>카메라 끄기</button>

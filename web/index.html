@@ -88,6 +88,7 @@
 
   /* ---------- 첫 화면: 가운데 입력창 → 결과 화면: 위로 ---------- */
   body.landing { overflow: hidden; }
+  body.landing.sign-open { overflow: auto; }   /* 카메라 팝업이 떠 있는 동안은 아래로 내려 볼 수 있게 */
   .hero { display: grid; gap: var(--block-gap); align-content: center; justify-items: center; }
   body.landing .hero { min-height: calc(100svh - 68px); }
   .hero h1 { margin: 0; font-size: clamp(2.4rem, 8vw, 3.2rem); font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
@@ -97,7 +98,7 @@
   form.query { position: relative; width: min(100%, 640px); }
   form.query input {
     width: 100%;
-    padding: 15px 94px 15px 20px;
+    padding: 15px 126px 15px 20px;   /* 오른쪽 아이콘 3개 (보내기·마이크·카메라) */
     border: 0;   /* 박스는 테두리 없이 배경과 다른 색으로 구분 */
     border-radius: 999px;
     background: var(--surface);
@@ -117,7 +118,7 @@
   form.query.listening #mic { color: #f39a45; }   /* 듣는 동안: 배경 없이 마이크만 주황색 */
   form.query #wave { display: none; width: 48px; height: 40px; margin-right: 10px; color: var(--ink); }
   form.query.listening #wave { display: block; }
-  form.query.listening input { padding-right: 152px; }
+  form.query.listening input { padding-right: 184px; }
   /* 예시 질문 2개: 휴대폰은 한 줄에 1개씩 2줄, PC 는 한 줄에 2개. 버튼 폭은 질문 길이에 맞춤 */
   .examples { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; }
   @media (min-width: 761px) { .examples { flex-direction: row; flex-wrap: wrap; justify-content: center; } }   /* PC: 한 줄에 2개 */
@@ -208,6 +209,7 @@
   /* 화면이 넓어도 위아래 배치 (입력창 폭에 맞춤) */
   .results { width: min(100%, 640px); margin: 0 auto; }
 </style>
+<link rel="stylesheet" href="./sign/popup.css">   <!-- 카메라 수어 입력 팝업 -->
 </head>
 <body class="landing">
 <div class="boot" id="boot" role="status" aria-live="polite">
@@ -231,8 +233,26 @@
         <button id="mic" type="button" aria-label="음성으로 질문하기" hidden>
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8.6" y="2.4" width="6.8" height="12" rx="3.4" fill="currentColor"/><path d="M5.6 11.4a6.4 6.4 0 0 0 12.8 0M12 17.9v3.3M8.8 21.2h6.4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
         </button>
+        <button id="camBtn" type="button" aria-label="카메라로 수어 입력">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5a2 2 0 0 1 2-2h2l1.5-2h6l1.5 2h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.6"/></svg>
+        </button>
       </div>
     </form>
+    <!-- 카메라 수어 입력 팝업 (모양 sign/popup.css, 동작 sign/app.js) -->
+    <div class="panel" id="panel" hidden>
+      <p class="notice">두 손으로 수어를 표현해 주세요.</p>
+      <section class="cam">
+        <video id="video" playsinline muted></video>
+        <canvas id="overlay"></canvas>
+        <div class="off" id="loadBox" hidden><button id="start" type="button">카메라 켜기</button></div>
+        <button id="stop" type="button" hidden>카메라 끄기</button>
+      </section>
+      <div id="wordsWrap" hidden>
+        <p class="notice">표현하신 단어를 클릭해 주세요.</p>
+        <section class="box"><div id="words"></div></section>
+      </div>
+      <div id="suggest"></div>
+    </div>
     <div class="examples" id="examples"></div>
   </section>
 
@@ -289,6 +309,7 @@ outer: for (const url of order) {
 }
 if (!window.avatar) window.dispatchEvent(new Event("avatar-failed"));
 </script>
+<script type="module" src="./sign/app.js"></script>   <!-- 카메라 수어 입력: 모델은 첫 로딩 화면에서 미리 준비 -->
 <script>
 const API = location.protocol.startsWith("http") ? "" : "http://localhost:8000";
 // 오프라인 모드: 받은 화면·답·동작을 저장해 두고 인터넷이 끊기면 그것으로 (web/sw.js, 화면 변화 없음)
@@ -330,6 +351,11 @@ const preloadPages = fetch(`${API}/pages`).then(r => r.ok ? r.json() : []).then(
   Promise.all(list.map(u => new Promise((res) => { const i = new Image(); i.onload = i.onerror = res; i.src = u; }))));
 const warmServer = fetch(`${API}/warmup`, { method: "POST" });
 const examplesReady = fetch(`${API}/examples`).then(r => r.ok ? r.json() : []);
+// 카메라 수어 입력 모델(인식 모델·관절 점 엔진)도 여기서 미리 → 카메라 버튼을 누르면 바로 켜짐 (sign/app.js 가 끝나면 알림)
+const cameraReady = new Promise((res) => {
+  addEventListener("sign-ready", res, { once: true });
+  addEventListener("sign-failed", res, { once: true });
+});
 // 예시 질문의 답을 미리 받아 둠 → 예시를 골라 보내면 기다림 없이 바로 답 (보이는 예시는 로딩 중에, 새로 보이는 예시는 그때그때)
 const answers = new Map();
 function prefetchAnswer(q) {
@@ -348,6 +374,7 @@ const bootAll = Promise.all([
   boot.add("examples", examplesReady),
   boot.add("fonts", Promise.race([document.fonts ? document.fonts.ready : null, new Promise(r => setTimeout(r, 3000))])),  // 글꼴은 3초까지만 기다림
   boot.add("answers", Promise.race([answersReady, new Promise(r => setTimeout(r, 20000))])),   // 예시 질문 답은 20초까지만 기다림
+  boot.add("camera", Promise.race([cameraReady, new Promise(r => setTimeout(r, 45000))])),   // 카메라 모델은 45초까지만 기다림 (처음 한 번 약 60MB)
 ]);
 // 너무 오래 걸리면(느린 망) 60초 뒤에는 그냥 시작 (남은 준비는 뒤에서 계속)
 Promise.race([bootAll, new Promise(r => setTimeout(r, 60000))]).then(() => {

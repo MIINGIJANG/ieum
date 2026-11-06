@@ -1,0 +1,48 @@
+/* 카메라 수어 입력 팝업 (본 화면 web/index.html 과 시험 페이지 web/sign/index.html 이 같이 씀).
+   본 화면 다른 요소에 영향이 없도록 모두 #panel·#camBtn 안에서만 정함. 색은 본 화면과 같음 */
+#panel, #camBtn { --bg: #ffffff; --box: #e8e8e8; --hover: #dcdcdc; --strong: #5f5f5f; --ink: #000000; --on: #ffffff; }
+@media (prefers-color-scheme: dark) { #panel, #camBtn { --bg: #242526; --box: #3e3f40; --hover: #48494a; --strong: #0d0d0e; --ink: #ffffff; --on: #ffffff; } }
+
+/* 입력창의 카메라 버튼: 팝업이 떠 있는 동안 초록 (마이크 듣는 중 주황처럼 배경 없이 그림만) */
+#camBtn.on { color: #34c759 !important; }
+
+/* 팝업: 입력창 아래 카메라 버튼 쪽에 떠 있음 (자리는 app.js 가 입력창 위치로 맞춤) */
+#panel {
+  position: absolute; z-index: 30; width: min(420px, calc(100vw - 32px));
+  background: var(--box); color: var(--ink); border-radius: 14px; padding: 12px; display: grid;
+  font-size: 14px; line-height: 1.5; text-align: left;
+}
+#panel[hidden] { display: none !important; }
+#panel [hidden] { display: none !important; }
+#panel * { box-sizing: border-box; }
+#panel > :not(:first-child) { margin-top: 12px; }   /* 칸 사이 12px (질문 칸은 비었을 때 간격이 남지 않게 안쪽에서 띄움) */
+#panel > #suggest, #panel > #wordsWrap { margin-top: 0; }
+#panel p { margin: 0; }
+#panel button { font: inherit; color: var(--ink); background: var(--bg); border: 0; border-radius: 8px; padding: 4px 10px; cursor: pointer; }
+#panel button:hover { background: var(--hover); }
+#panel button:disabled { opacity: .5; cursor: default; }
+
+/* 안내 문구: 본 화면 안내 문구와 같은 모양. 줄 높이 안에서 글자 위·아래에 남는 빈칸(--nt·--nb, app.js 가 화면 글꼴로 잼)을
+   여백에서 빼서, 글꼴과 상관없이 글자 위·아래 간격이 박스 사이 간격(12px)과 똑같게 */
+#panel .notice { display: block; margin: calc(0px - var(--nt, 0px)) 0 calc(0px - var(--nb, 0px)); font-size: .88rem; line-height: 1; text-align: center; color: var(--ink); }
+#panel > .notice:not(:first-child) { margin-top: calc(12px - var(--nt, 0px)); }
+#panel #suggest > .notice, #panel #wordsWrap > .notice { margin-top: calc(12px - var(--nt, 0px)); margin-bottom: calc(12px - var(--nb, 0px)); }
+
+/* 카메라 칸: 정사각형, 꺼져도 크기 그대로 */
+#panel .cam { position: relative; width: 100%; aspect-ratio: 1 / 1; border-radius: 12px; overflow: hidden; background: #000; }
+#panel .cam video, #panel .cam canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }   /* 거울처럼 */
+#panel .cam .off { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 10px; padding: 16px; text-align: center; color: #fff; }
+#panel #stop { position: absolute; right: 10px; bottom: 10px; }
+
+/* 단어 칸·질문 칸: 흰색 (다크 모드는 배경색). 칸 안 위·아래·블럭 사이 간격 모두 8px */
+#panel .box { background: var(--bg); border-radius: 12px; padding: 8px; display: grid; }
+#panel .chip { display: inline-flex; border-radius: 8px; overflow: hidden; }
+#panel .chip .w { border-radius: 0; font-weight: 500; padding: 4px 10px; }
+#panel #words { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; }
+#panel #words .chip.sel { position: relative; z-index: 1; }   /* 앞으로 옮겨 갈 때 다른 낱말 위로 지나감 */
+#panel #suggest .box { gap: 8px; justify-items: center; }   /* 질문 가운데 정렬, 박스는 글자 길이만큼 */
+#panel #suggest .q { text-align: center; max-width: 100%; }
+/* 낱말·질문 블럭: 박스 색 → 마우스 올리면 마우스 올림 색 → 고르거나 누르면 표현 중 수어 블럭 색 + 흰 글씨 */
+#panel #words .w, #panel #suggest .q { background: var(--box); }
+#panel #words .w:hover, #panel #suggest .q:hover { background: var(--hover); }
+#panel #words .chip.sel .w, #panel #suggest .q:active { background: var(--strong); color: var(--on); }
