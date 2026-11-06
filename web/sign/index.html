@@ -12,6 +12,7 @@
   @media (prefers-color-scheme: dark) { :root { --bg: #242526; --box: #3e3f40; --ink: #ffffff; } }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
+  html { scrollbar-gutter: stable; }   /* 스크롤 막대 자리를 늘 비워 둠 (본 화면과 같음) */
   body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif; }
   main { position: relative; max-width: 452px; margin: 0 auto; padding: 16px 16px 32px; }
   form.query { position: relative; }
