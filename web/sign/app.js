@@ -164,8 +164,8 @@ function addItem(r) {
   if (navigator.vibrate) navigator.vibrate(30);
 }
 
-// 손 21점 잇는 선 (엄지·검지·중지·약지·소지 + 손바닥 둘레: 손목–엄지–검지 뿌리–…–소지 뿌리–손목)
-const HAND_LINES = [[0, 1], [1, 2], [2, 3], [3, 4], [2, 5], [5, 6], [6, 7], [7, 8], [5, 9], [9, 10], [10, 11], [11, 12],
+// 손 21점 잇는 선 (엄지·검지·중지·약지·소지 + 손바닥 둘레: 손목–엄지–검지 뿌리–…–소지 뿌리–손목). 엄지 맨 아래 점(1)은 그리지 않고 손목에서 바로 2로
+const HAND_LINES = [[0, 2], [2, 3], [3, 4], [2, 5], [5, 6], [6, 7], [7, 8], [5, 9], [9, 10], [10, 11], [11, 12],
   [9, 13], [13, 14], [14, 15], [15, 16], [13, 17], [0, 17], [17, 18], [18, 19], [19, 20]];
 /** 화면에는 **정리 전 관절 점**을 그림 (떨림 줄이기는 인식에만 씀 → 점이 손을 늦게 따라가지 않게) */
 function draw(frame) {
@@ -180,7 +180,7 @@ function draw(frame) {
     g.stroke();
   };
   const dots = (pts, idx, r, color) => { g.fillStyle = color; for (const i of idx) if (pts[i]) { g.beginPath(); g.arc(pts[i].x * w, pts[i].y * h, r, 0, 7); g.fill(); } };
-  const all = [...Array(21).keys()];
+  const all = [...Array(21).keys()].filter((i) => i !== 1);   // 엄지 맨 아래 점(1)은 그리지 않음
   // 화면에는 손만 (몸 점은 인식에는 쓰지만 그리지 않음 — 화면이 덜 복잡하게), 왼손·오른손 모두 흰색
   for (const [hand, color] of [[frame.leftHand, "#ffffff"], [frame.rightHand, "#ffffff"]]) {
     if (hand.length !== 21) continue;
