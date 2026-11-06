@@ -51,6 +51,7 @@
   form.query #camBtn { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); width: 32px; height: 40px; padding: 0; background: transparent; display: grid; place-items: center; }
   form.query #camBtn svg { width: 22px; height: 22px; }
   form.query #camBtn.on { color: #34c759; }   /* 팝업이 떠 있는 동안 카메라 버튼 초록 (마이크 듣는 중 주황처럼 배경 없이 그림만) */
+  #words .chip.sel { position: relative; z-index: 1; }   /* 앞으로 옮겨 갈 때 다른 낱말 위로 지나감 */
   #words .chip.sel .w { background: var(--strong); color: var(--on); }   /* 고른 낱말 */
 </style>
 </head>
