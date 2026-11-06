@@ -123,7 +123,9 @@ async function onSegment(feats) {
 }
 function addItem(r) {
   // 한 낱말을 하는 중에 잠깐 멈추면 여러 조각으로 끊겨 같은 낱말이 여러 번 나옴 → 이미 있는 낱말이면 다시 넣지 않음
-  if (items.some((it) => word(it.label) === word(r.label))) return;
+  // 화면에 보이는 낱말(질문 흐름으로 다른 후보로 바뀌어 보일 수 있음)과도 비교
+  const shown = new Set([...items.map((it) => word(it.label)), ...chosen().map(word)]);
+  if (shown.has(word(r.label))) return;
   items.push({ label: r.label, cands: r.cands.map((c) => ({ label: c.label, p: c.p })), confident: r.confident, locked: false, custom: r.custom });
   renderWords();
   if (navigator.vibrate) navigator.vibrate(30);
@@ -189,7 +191,10 @@ let examples = [];
 function chosen() {
   if (opts.rerank && items.length > 1) {
     const path = rerank(items, (domain && domain.questions) || examples, domain);
-    return items.map((it, i) => (it.locked ? it.label : path[i]));
+    const out = items.map((it, i) => (it.locked ? it.label : path[i]));
+    // 다른 후보로 바꿔 보이다가 같은 낱말이 두 번 보이게 되면, 뒤의 것은 원래 알아들은 낱말로
+    const seen = new Set();
+    return out.map((l, i) => { const w = word(l); if (seen.has(w)) { seen.add(word(items[i].label)); return items[i].label; } seen.add(w); return l; });
   }
   return items.map((it) => it.label);
 }
@@ -201,7 +206,8 @@ function renderWords() {
   // 고른 낱말(고른 순서) → 한 번도 안 고른 낱말(알아들은 순서) → 풀린 낱말(푼 순서, 항상 맨 뒤)
   const key = (i) => { const it = items[i]; return it.sel ? [0, it.sel] : [1, it.tail || 0, i]; };
   const order = items.map((it, i) => i).sort((a, b) => { const x = key(a), y = key(b); for (let j = 0; j < 3; j++) if ((x[j] ?? 0) !== (y[j] ?? 0)) return (x[j] ?? 0) - (y[j] ?? 0); return 0; });
-  const chips = order.map((i) => {
+  const seenW = new Set();
+  const chips = order.filter((i) => { const w = word(ch[i]); if (seenW.has(w)) return false; seenW.add(w); return true; }).map((i) => {   // 같은 낱말은 한 번만
     const it = items[i];
     it.k ??= ++chipSeq;
     return `<span class="chip${it.sel ? " sel" : ""}" data-k="${it.k}"><button class="w" data-i="${i}">${esc(word(ch[i]))}</button></span>`;   // 확실하지 않은 낱말도 따로 표시하지 않음
