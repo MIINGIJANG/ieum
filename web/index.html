@@ -135,9 +135,6 @@
   body.landing .results { visibility: hidden; opacity: 0; transform: translateY(100vh); position: absolute; left: 0; right: 0; top: 0; pointer-events: none; }
   body.result .results { animation: rise .6s cubic-bezier(.2,.8,.2,1) .12s both; }
   @keyframes rise { from { opacity: 0; transform: translateY(60vh); } to { opacity: 1; transform: none; } }
-  @media (prefers-reduced-motion: reduce) {
-    body.result .results { animation: none; }
-  }
 
   /* ---------- 수어 표지판 무대 ---------- */
   .stage-wrap { display: grid; justify-items: center; gap: var(--block-gap); width: 100%; }
@@ -205,7 +202,6 @@
   .boot .bar { width: min(240px, 60vw); height: 6px; border-radius: 3px; background: #767676; overflow: hidden; }   /* 채워지는 막대(글자색)와 구분되게 회색 */
   .boot .bar i { display: block; height: 100%; width: 0; background: var(--ink); border-radius: 3px; transition: width .3s ease; }
   .boot p { margin: 0; color: var(--muted); font-size: 1rem; min-height: 1.6em; }
-  @media (prefers-reduced-motion: reduce) { .boot .bar i { transition: none; } }
 
   /* 화면이 넓어도 위아래 배치 (입력창 폭에 맞춤) */
   .results { width: min(100%, 640px); margin: 0 auto; }
@@ -383,8 +379,7 @@ Promise.race([bootAll, new Promise(r => setTimeout(r, 180000))]).then(() => {
   el.remove();                                 // 바로 사라짐 (페이드 없음)
   toTop();
   // 로딩 화면이 사라지면 입력창(과 예시 질문)이 아래에서 올라옴. 제목 '이음'은 제자리
-  if (!matchMedia("(prefers-reduced-motion: reduce)").matches)
-    [document.getElementById("form"), document.getElementById("examples")].forEach((x, i) =>
+  [document.getElementById("form"), document.getElementById("examples")].forEach((x, i) =>
       x.animate([{ transform: "translateY(40px)", opacity: 0 }, { transform: "none", opacity: 1 }],
                 { duration: 550, delay: i * 80, easing: "cubic-bezier(.2,.8,.2,1)", fill: "backwards" }));
 });
@@ -587,14 +582,12 @@ async function run() {
 }
 
 // 첫 화면 → 결과 화면: 입력창은 제자리에서 위로 미끄러지고(FLIP), 결과는 아래에서 올라옴
-const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 function showResults() {
   if (document.body.classList.contains("result")) return;
   // 입력창과 예시 질문은 함께 제자리에서 위로 미끄러지고(FLIP), 입력창 위 안내는 서서히 나타남
   const moving = [$("form"), $("examples")];
   const y0 = moving.map(el => el.getBoundingClientRect().top);
   document.body.classList.replace("landing", "result");
-  if (reduce) return;
   const ease = { duration: 550, easing: "cubic-bezier(.2,.8,.2,1)" };
   moving.forEach((el, i) => {
     const dy = y0[i] - el.getBoundingClientRect().top;
@@ -738,7 +731,7 @@ function render() {
     $("sources").hidden = !src;
   }
   // 결과가 다 올라온 뒤 재생 (아바타가 아직이면 준비되는 대로)
-  const start = () => setTimeout(play, reduce ? 0 : 650);
+  const start = () => setTimeout(play, 650);
   if (window.avatar) start(); else addEventListener("avatar-ready", start, { once: true });
 }
 
