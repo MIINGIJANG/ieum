@@ -54,22 +54,27 @@ fitBtn();
 if (window.ResizeObserver) new ResizeObserver(fitBtn).observe($("form"));
 
 // ---------- 지도 · 응급실 정보 ----------
+// 내 위치·도착 위치 표시: 빨간 핀 (경로 선과 같은 색)
+const PIN = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="40" viewBox="0 0 28 40"><path d="M14 39C14 39 26 23.5 26 14A12 12 0 0 0 2 14C2 23.5 14 39 14 39Z" fill="#ff3b30" stroke="#ffffff" stroke-width="2"/><circle cx="14" cy="14" r="4.5" fill="#ffffff"/></svg>');
+let pinImg = null;
+const pin = (K) => (pinImg ??= new K.MarkerImage(PIN, new K.Size(28, 40), { offset: new K.Point(14, 39) }));
 function drawMap(p, d) {
   if (!kakaoReady || !window.kakao?.maps) return;
   const K = window.kakao.maps, here = new K.LatLng(p.lat, p.lng);
   if (!map) map = new K.Map($("sosMap"), { center: here, level: 4 });
   else map.relayout();
   layers.forEach((l) => l.setMap(null)); layers = [];
-  layers.push(new K.Marker({ position: here, map }));
+  layers.push(new K.Marker({ position: here, map, image: pin(K) }));
   const bounds = new K.LatLngBounds(); bounds.extend(here);
   const er = d && d.er;
   if (er) {
     const at = new K.LatLng(er.lat, er.lng);
-    layers.push(new K.Marker({ position: at, map, title: er.name }));
+    layers.push(new K.Marker({ position: at, map, title: er.name, image: pin(K) }));
     bounds.extend(at);
     const path = (d.route && d.route.path || []).map(([la, lo]) => new K.LatLng(la, lo));
     if (path.length) {
-      layers.push(new K.Polyline({ path, map, strokeWeight: 6, strokeColor: "#ff3b30", strokeOpacity: 0.9, strokeStyle: "solid" }));
+      layers.push(new K.Polyline({ path, map, strokeWeight: 6, strokeColor: "#ff3b30", strokeOpacity: 0.75, strokeStyle: "solid" }));
       path.forEach((x) => bounds.extend(x));
     }
     map.setBounds(bounds, 24, 24, 24, 24);
@@ -91,7 +96,7 @@ function erBox(x, i) {
 function showInfo(d, err) {
   const wrap = $("sosInfo");
   const list = d ? (d.ers && d.ers.length ? d.ers : d.er ? [{ er: d.er, route: d.route }] : []) : [];
-  if (err || !list.length) { wrap.innerHTML = `<section class="box info"><p>응급실 정보를 불러오지 못했습니다.</p></section>`; wrap.hidden = false; return; }
+  if (err || !list.length) { wrap.innerHTML = ""; wrap.hidden = true; return; }   // 못 불러오면 정보 칸 없이 지도만
   if (shown !== d) { shown = d; sel = 0; }
   wrap.innerHTML = list.map(erBox).join("");
   wrap.hidden = false;
