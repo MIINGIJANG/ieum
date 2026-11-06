@@ -59,6 +59,19 @@ const PIN = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="40" viewBox="0 0 28 40"><path d="M14 39C14 39 26 23.5 26 14A12 12 0 0 0 2 14C2 23.5 14 39 14 39Z" fill="#ff3b30" stroke="#ffffff" stroke-width="2"/><circle cx="14" cy="14" r="4.5" fill="#ffffff"/></svg>');
 let pinImg = null;
 const pin = (K) => (pinImg ??= new K.MarkerImage(PIN, new K.Size(28, 40), { offset: new K.Point(14, 39) }));
+let lastBounds = null;
+// 지도 칸 크기가 바뀌면(정보 칸이 내려오며 지도가 줄어듦·창 크기) 지도를 다시 맞춤
+if (window.ResizeObserver) new ResizeObserver(() => {
+  if (!map) return;
+  map.relayout();
+  if (lastBounds) map.setBounds(lastBounds, 24, 24, 24, 24);
+}).observe($("sosMap"));
+// 팝업 높이: 입력창이 화면 위쪽(16px)에 올라간 뒤 팝업 아래 끝이 화면 아래에서 16px 되도록 (지도 칸이 남는 높이를 채움)
+function fitHeight(el) {
+  const par = el.offsetParent || document.body, f = $("form").getBoundingClientRect();
+  const fromForm = parseFloat(el.style.top) - (f.top - par.getBoundingClientRect().top);
+  el.style.height = `${Math.max(320, Math.round(innerHeight - (16 + fromForm) - 16))}px`;
+}
 function drawMap(p, d) {
   if (!kakaoReady || !window.kakao?.maps) return;
   const K = window.kakao.maps, here = new K.LatLng(p.lat, p.lng);
@@ -77,8 +90,9 @@ function drawMap(p, d) {
       layers.push(new K.Polyline({ path, map, strokeWeight: 6, strokeColor: "#ff3b30", strokeOpacity: 1, strokeStyle: "solid" }));
       path.forEach((x) => bounds.extend(x));
     }
+    lastBounds = bounds;
     map.setBounds(bounds, 24, 24, 24, 24);
-  } else map.setCenter(here);
+  } else { lastBounds = null; map.setCenter(here); }
 }
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 let shown = null, sel = 0, lastPos = null;   // 지금 보이는 결과, 지도에 경로를 그린 병원(0: 1순위, 1: 2순위)
@@ -158,6 +172,7 @@ function popTo(show) {
   if (show && el.hidden) {
     el.hidden = false; $("sosInfo").hidden = true; shown = null;   // 다시 열면 1순위부터
     window.__sign?.place?.(el);
+    fitHeight(el);
     pop.s = POP_SCALE.from; pop.o = 0; pop.sv = pop.ov = 0;
   }
   pop.ts = show ? 1 : POP_SCALE.to; pop.to = show ? 1 : 0;
@@ -202,4 +217,4 @@ document.addEventListener("click", (e) => {
   closePanel();
   if (!e.target.closest?.("button, a, [role=button]")) { e.preventDefault(); e.stopPropagation(); }
 }, true);
-addEventListener("resize", () => { if (open) { window.__sign?.place?.($("sosPanel")); map?.relayout(); } });
+addEventListener("resize", () => { if (open) { window.__sign?.place?.($("sosPanel")); fitHeight($("sosPanel")); } });
