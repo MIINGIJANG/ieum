@@ -20,7 +20,7 @@
   .box { background: var(--box); border-radius: 12px; padding: 12px; display: grid; gap: 8px; }
   /* 본 화면에서 카메라 버튼을 누르면 뜰 큰 박스 (기존 박스 색), 안쪽 박스는 마우스 올림 색 */
   .panel { background: var(--box); border-radius: 14px; padding: 12px; display: grid; gap: 12px; }
-  .panel .box { background: var(--hover); }
+  .panel .box { background: var(--bg); }   /* 팝업 안 낱말 칸: 흰색 (다크 모드는 배경색) */
   button { font: inherit; color: var(--ink); background: var(--bg); border: 0; border-radius: 8px; padding: 4px 10px; }
   button { cursor: pointer; }
   button:hover { background: var(--hover); }
@@ -36,7 +36,7 @@
   #stop { position: absolute; right: 10px; bottom: 10px; }
   .cam video, .cam canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }   /* 거울처럼 보이게 */
   .hint { position: absolute; left: 0; right: 0; bottom: 12px; text-align: center; color: #fff; text-shadow: 0 1px 3px #000; }
-  .chip { display: inline-flex; background: var(--bg); border-radius: 8px; overflow: hidden; }
+  .chip { display: inline-flex; border-radius: 8px; overflow: hidden; }
   .chip .w { border-radius: 0; font-weight: 500; padding: 4px 10px; }
   .chip.unsure .w { opacity: .7; }
   #words { display: flex; flex-wrap: wrap; gap: 6px; min-height: 2.2em; align-items: center; justify-content: center; }   /* 낱말 가운데 정렬 */
@@ -52,7 +52,10 @@
   form.query #camBtn svg { width: 22px; height: 22px; }
   form.query #camBtn.on { color: #34c759; }   /* 팝업이 떠 있는 동안 카메라 버튼 초록 (마이크 듣는 중 주황처럼 배경 없이 그림만) */
   #words .chip.sel { position: relative; z-index: 1; }   /* 앞으로 옮겨 갈 때 다른 낱말 위로 지나감 */
-  #words .chip.sel .w { background: var(--strong); color: var(--on); }   /* 고른 낱말 */
+  /* 낱말·질문 블럭: 기존 박스 색 → 마우스 올리면 마우스 올림 색 → 고르거나 누르면 표현 중 수어 블럭 색 + 흰 글씨 (본 화면과 같은 색) */
+  #words .w, #suggest .q { background: var(--box); }
+  #words .w:hover, #suggest .q:hover { background: var(--hover); }
+  #words .chip.sel .w, #suggest .q:active { background: var(--strong); color: var(--on); }
 </style>
 </head>
 <body>
