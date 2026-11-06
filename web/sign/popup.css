@@ -50,7 +50,9 @@
 
 /* SOS 팝업: 지도 칸(카메라 칸과 같은 4:3·같은 폭) 위, 응급실 정보 칸 아래 */
 #sosPanel .map { position: relative; width: var(--cam, 100%); max-width: 100%; justify-self: center; aspect-ratio: 4 / 3; border-radius: 12px; overflow: hidden; background: var(--bg); }
-#sosPanel .info { gap: 4px; text-align: center; justify-items: center; margin-top: 12px; }   /* 지도 칸과 12px (.box 의 margin: 0 auto 보다 나중에) */
+#sosPanel .info { gap: 8px; text-align: center; justify-items: center; margin-top: 12px; }   /* 지도 칸과 12px (.box 의 margin: 0 auto 보다 나중에) */
 #sosPanel .info .name { font-size: 1rem; font-weight: 700; }
-#sosPanel .info .sub { opacity: .7; font-size: .85rem; }
-#sosPanel .info a { color: inherit; font-weight: 500; }
+/* 응급실 정보 블럭: 낱말 블럭과 같은 모양·색 (박스 색 → 마우스 올리면 마우스 올림 색) */
+#sosPanel .info .row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+#sosPanel .info .chip { background: var(--box); color: var(--ink); border-radius: 8px; padding: 4px 10px; font-weight: 500; text-decoration: none; }
+#sosPanel .info .chip:hover { background: var(--hover); }
