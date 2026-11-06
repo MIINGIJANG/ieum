@@ -20,16 +20,14 @@ const cleaner = new FrameCleaner(), seg = new Segmenter(), win = new WindowCommi
 const items = [];                                       // 알아들은 낱말 [{label, cands, confident, locked, custom}]
 let classifying = false;
 
-// 새 낱말 (web/sign/custom_words.json + 예전에 이 기기에서 가르친 것)
+// 새 낱말 (web/sign/custom_words.json 만. 기기에 저장해 둔 것은 읽지 않음)
 let protos = [];
 function loadProtosFrom(list) { return (list || []).map((p) => ({ word: p.word, samples: p.samples.map(fromB64) })); }
 
 const domainReady = fetch(BASE + "domain.json").then((r) => r.json()).then((d) => { domain = d; renderWords(); }).catch(() => null);
 fetch(BASE + "custom_words.json").then((r) => (r.ok ? r.json() : null)).catch(() => null).then((d) => {
-  let mine = [];
-  try { mine = JSON.parse(localStorage.getItem("ieum-sign-protos") || "[]"); } catch { /* 무시 */ }
   const map = new Map();
-  for (const p of [...loadProtosFrom(d && d.words), ...loadProtosFrom(mine)]) map.set(p.word, p);
+  for (const p of loadProtosFrom(d && d.words)) map.set(p.word, p);
   protos = [...map.values()];
 });
 const word = (l) => (domain && domain.words[l]) || base(l);

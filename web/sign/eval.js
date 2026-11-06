@@ -1,5 +1,5 @@
 // 정확도 평가: 녹화한 관절 점 파일(index.html '정확도 평가용 녹화')을 설정별로 다시 돌려 비교. 모델은 브라우저에서 그대로 실행.
-import { DEFAULTS, FrameCleaner, Recognizer, Segmenter, WindowCommitter, base, classify, docWords, fromB64, frameToFeatures,
+import { DEFAULTS, FrameCleaner, Recognizer, Segmenter, WindowCommitter, base, classify, docWords, frameToFeatures,
   rankQuestions, rerank } from "./core.js";
 
 const $ = (id) => document.getElementById(id);
@@ -23,12 +23,11 @@ const CONFIGS = [
 
 async function init() {
   domain = await (await fetch("./domain.json")).json();
-  try { protos = JSON.parse(localStorage.getItem("ieum-sign-protos") || "[]").map((p) => ({ word: p.word, samples: p.samples.map(fromB64) })); } catch { /* 없음 */ }
   $("msg").textContent = "모델 불러오는 중…";
   await rec.load("./", (g, t) => t && ($("msg").textContent = `모델 불러오는 중… ${Math.round(100 * g / t)}%`));
   const s = new Set(domain.labels);
   domainIdx = rec.labels.map((l, i) => (s.has(l) ? i : -1)).filter((i) => i >= 0);
-  $("msg").textContent = `준비 완료 · 새 낱말 ${protos.length}개 (이 기기에 가르친 것)`;
+  $("msg").textContent = "준비 완료";
   $("run").disabled = false;
 }
 
