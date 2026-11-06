@@ -543,6 +543,8 @@ function listen() {
   wave.start();
 }
 $("mic").onclick = listen;
+// 카메라 수어 팝업이 뜨기 시작하면 듣기를 그 순간 끔. (팝업이 떠 있을 때 마이크를 누르면 팝업 닫기와 듣기가 같은 클릭에서 같이 시작: sign/app.js)
+addEventListener("sign-open", () => { if (listening) endListening(); });
 $("go").onclick = () => { if (listening) endListening(); run(); };
 
 async function run() {
