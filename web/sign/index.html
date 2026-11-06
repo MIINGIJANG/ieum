@@ -20,22 +20,20 @@
   .box { background: var(--box); border-radius: 12px; padding: 12px; display: grid; gap: 8px; }
   /* 본 화면에서 카메라 버튼을 누르면 뜰 큰 박스 (기존 박스 색), 안쪽 박스는 마우스 올림 색 */
   .panel { background: var(--box); border-radius: 14px; padding: 12px; display: grid; gap: 12px; }
-  .panel .box { background: var(--bg); }   /* 팝업 안 낱말 칸: 흰색 (다크 모드는 배경색) */
+  .panel .box { background: var(--bg); gap: 0; }   /* 팝업 안 낱말 칸: 흰색 (다크 모드는 배경색) */
+  /* 낱말 칸 안내 문구: 위(칸 여백 12px)·아래 12px, 위쪽 안내 문구와 같은 간격 */
+  .panel .box > .notice { margin-bottom: 12px; }
+  #suggest > .notice { padding-top: 12px; margin-bottom: 6px; }   /* 질문 블럭 위 안내: 낱말과 12px, 질문과 12px (+ 질문 사이 6px) */
   button { font: inherit; color: var(--ink); background: var(--bg); border: 0; border-radius: 8px; padding: 4px 10px; }
   button { cursor: pointer; }
   button:hover { background: var(--hover); }
   button:disabled { opacity: .5; cursor: default; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-  .bar { height: 6px; border-radius: 3px; background: var(--bg); overflow: hidden; }
-  .bar i { display: block; height: 100%; width: 0; background: var(--ink); transition: width .2s; }
   .cam { position: relative; width: 100%; aspect-ratio: 1 / 1; border-radius: 12px; overflow: hidden; background: #000; }   /* 정사각형, 꺼져도 크기 그대로 */
   .cam .off { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 10px; padding: 16px; text-align: center; color: #fff; }
-  .cam .off .bar { width: min(220px, 60vw); background: rgba(255, 255, 255, .25); }
-  .cam .off .bar i { background: #fff; }
   .notice { margin: 0; font-size: .88rem; line-height: 1; text-align: center; color: var(--ink); position: relative; top: 1px; }   /* 본 화면 안내 문구와 같은 모양, 카메라 칸 밖 위. 글자가 줄 안에서 살짝 위로 붙어 1px 내려 위아래 간격 맞춤 */
   #stop { position: absolute; right: 10px; bottom: 10px; }
   .cam video, .cam canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }   /* 거울처럼 보이게 */
-  .hint { position: absolute; left: 0; right: 0; bottom: 12px; text-align: center; color: #fff; text-shadow: 0 1px 3px #000; }
   .chip { display: inline-flex; border-radius: 8px; overflow: hidden; }
   .chip .w { border-radius: 0; font-weight: 500; padding: 4px 10px; }
   .chip.unsure .w { opacity: .7; }
@@ -69,17 +67,14 @@
   <section class="cam">
     <video id="video" playsinline muted></video>
     <canvas id="overlay"></canvas>
-    <p class="hint" id="handHint" hidden>손이 보이지 않아요</p>
     <div class="off" id="loadBox">
-      <p id="loadMsg">처음 한 번 인식 모델(약 60MB)을 받습니다.</p>
-      <div class="bar"><i id="loadBar"></i></div>
       <button id="start">카메라 켜기</button>
     </div>
     <button id="stop" hidden>카메라 끄기</button>
   </section>
 
   <section class="box">
-    <div class="row"><h2>알아들은 낱말</h2> <small>낱말을 누르면 그 낱말로 질문을 찾아요</small></div>
+    <p class="notice">표현하신 단어를 클릭해 주세요.</p>
     <div id="words"></div>
     <div id="suggest"></div>
   </section>

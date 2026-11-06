@@ -34,7 +34,7 @@ fetch(BASE + "custom_words.json").then((r) => (r.ok ? r.json() : null)).catch(()
 const word = (l) => (domain && domain.words[l]) || base(l);
 
 // ---------------- 불러오기 ----------------
-function setLoad(text, pct) { $("loadMsg").textContent = text; if (pct != null) $("loadBar").style.width = `${pct}%`; }
+function setLoad() {}   // 카메라 칸에는 안내 문구·불러오기 막대를 두지 않음 (불러오는 동안은 켜기 버튼만 눌리지 않게)
 async function loadModels() {
   await domainReady;
   setLoad("수어 단어 인식 모델 불러오는 중…", 5);
@@ -89,7 +89,6 @@ function onFrame(raw, t) {
   draw(raw);
   const frame = opts.smooth ? cleaner.clean(raw, t) : raw;
   const feat = frameToFeatures(frame, opts.useZ);
-  $("handHint").hidden = !!(frame.leftHand.length || frame.rightHand.length);
   if (!rec.session) return;
 
   if (opts.segment === "motion") {
@@ -150,7 +149,6 @@ async function startCamera() {
     raf = requestAnimationFrame(loop);
   } catch (e) {
     console.error(e);
-    setLoad(`시작하지 못했습니다: ${e.message || e}`, null);
     $("start").disabled = false;
   }
 }
@@ -159,8 +157,7 @@ function stopCamera() {
   if (stream) stream.getTracks().forEach((t) => t.stop());
   stream = null; $("video").srcObject = null;
   const cv = $("overlay"); cv.getContext("2d").clearRect(0, 0, cv.width, cv.height);   // 꺼지면 손 선도 지움
-  $("handHint").hidden = true;
-  $("stop").hidden = true; $("loadBox").hidden = false; $("start").disabled = false; setLoad("카메라가 꺼져 있습니다", null);
+  $("stop").hidden = true; $("loadBox").hidden = false; $("start").disabled = false;
 }
 
 // ---------------- 낱말 · 질문 ----------------
@@ -220,7 +217,8 @@ function suggest(ch) {
   const joined = orderWords(picked, groups, ranked.filter(([c]) => c === picked.length).map(([, , q]) => q)).join(" ");
   // 보여 줄 질문 3개는 그대로 고르고, 화면에는 긴 것부터 (맨 아래는 낱말을 이어 붙인 블럭)
   const qs = ranked.slice(0, 3).map(([, , q]) => q).filter((q) => q !== joined).sort((a, b) => textWidth(b) - textWidth(a));
-  rollTo(box, [...qs, joined].map((q) => `<button class="q" data-q="${esc(q)}">${esc(q)}</button>`).join(""));
+  rollTo(box, `<p class="notice" data-k="notice">표현하신 질문을 클릭해 주세요.</p>`
+    + [...qs.map((q) => [q, q]), [joined, "__joined"]].map(([q, k]) => `<button class="q" data-q="${esc(q)}" data-k="${esc(k)}">${esc(q)}</button>`).join(""));
 }
 /** 고른 낱말을 말이 되는 순서로: 우리 질문들에서 두 낱말이 어느 쪽이 먼저 나오는지 세어 정함
  *  (고른 낱말을 모두 담은 질문은 크게 침). 질문에 같이 나온 적이 없으면 이름씨 → 묻는 말 → '~다'·'~하다' 말 순, 그다음 고른 순서 */
@@ -253,6 +251,7 @@ function rollTo(el, html) {
   if (el.dataset.html === html) return;
   el.dataset.html = html;
   const from = el.getBoundingClientRect().height;
+  const before = new Map([...el.querySelectorAll("[data-k]")].map((c) => [c.dataset.k, c.getBoundingClientRect().top]));
   if (rollAnim) { rollAnim.onfinish = null; rollAnim.cancel(); }
   el.style.overflow = "hidden";
   if (!html) {   // 다 풀면: 질문 블럭을 그대로 둔 채 위로 말려 들어간 뒤 비움
@@ -264,6 +263,13 @@ function rollTo(el, html) {
   const to = el.getBoundingClientRect().height;
   rollAnim = el.animate([{ height: `${from}px` }, { height: `${to}px` }], ROLL);
   rollAnim.onfinish = () => { el.style.overflow = ""; rollAnim = null; };
+  // 남는 블럭은 예전 자리에서 새 자리로 미끄러지고, 새로 생긴 블럭은 서서히 나타남 (갑자기 튀지 않게)
+  for (const c of el.querySelectorAll("[data-k]")) {
+    const t0 = before.get(c.dataset.k);
+    if (t0 == null) { if (before.size) c.animate([{ opacity: 0 }, { opacity: 1 }], ROLL); continue; }
+    const dy = t0 - c.getBoundingClientRect().top;
+    if (Math.abs(dy) >= 1) c.animate([{ transform: `translateY(${dy}px)` }, { transform: "none" }], ROLL);
+  }
 }
 // 질문 블럭을 누르면 팝업이 닫히고 입력창에 들어감 (보내기는 사용자가)
 $("suggest").onclick = (e) => {
