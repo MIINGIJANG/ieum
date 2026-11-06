@@ -118,6 +118,8 @@ async function onSegment(feats) {
   addItem(await classify(rec, feats, opts, domainIdx, protos));
 }
 function addItem(r) {
+  // 한 낱말을 하는 중에 잠깐 멈추면 여러 조각으로 끊겨 같은 낱말이 여러 번 나옴 → 이미 있는 낱말이면 다시 넣지 않음
+  if (items.some((it) => word(it.label) === word(r.label))) return;
   items.push({ label: r.label, cands: r.cands.map((c) => ({ label: c.label, p: c.p })), confident: r.confident, locked: false, custom: r.custom });
   renderWords();
   if (navigator.vibrate) navigator.vibrate(30);
