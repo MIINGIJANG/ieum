@@ -86,15 +86,17 @@ function showInfo(d, err) {
   const box = $("sosInfo");
   const er = d && d.er;
   if (err || !er) { box.innerHTML = `<p>응급실 정보를 불러오지 못했습니다.</p>`; box.hidden = false; return; }
-  const rt = d.route, line = [];
-  if (rt && rt.duration != null) line.push(`차로 약 ${Math.max(1, Math.round(rt.duration / 60))}분`);
-  line.push(`${((rt && rt.distance != null ? rt.distance / 1000 : er.km) || 0).toFixed(1)}km`);
+  const rt = d.route;
+  const km = ((rt && rt.distance != null ? rt.distance / 1000 : er.km) || 0).toFixed(1);
   const bed = er.beds == null ? "" : er.beds > 0 ? `응급실 남은 병상 ${er.beds}` : "응급실 병상 없음";
   const tel = er.er_tel || er.tel;
-  box.innerHTML = `<p class="name">${esc(er.name)}</p><p>${esc(line.join(" · "))}</p>`
-    + (bed || er.ct ? `<p>${esc([bed, er.ct === "Y" ? "CT 가능" : ""].filter(Boolean).join(" · "))}</p>` : "")
-    + (tel ? `<p><a href="tel:${esc(tel.replace(/[^0-9+]/g, ""))}">${esc(tel)}</a></p>` : "")
-    + (er.updated ? `<p class="sub">${esc(ago(er.updated))}</p>` : "");
+  // 병원 이름 / [자동차 n분] [n km] / [응급실 남은 병상 n] [전화번호] / [n분 전 갱신] — 이름 말고는 모두 블럭
+  const chip = (t) => `<span class="chip">${esc(t)}</span>`;
+  const row = (xs) => (xs.filter(Boolean).length ? `<div class="row">${xs.filter(Boolean).join("")}</div>` : "");
+  box.innerHTML = `<p class="name">${esc(er.name)}</p>`
+    + row([rt && rt.duration != null ? chip(`자동차 ${Math.max(1, Math.round(rt.duration / 60))}분`) : "", chip(`${km}km`)])
+    + row([bed ? chip(bed) : "", tel ? `<a class="chip" href="tel:${esc(tel.replace(/[^0-9+]/g, ""))}">${esc(tel)}</a>` : ""])
+    + row([er.updated ? chip(ago(er.updated)) : ""]);
   box.hidden = false;
 }
 async function refresh(p) {
