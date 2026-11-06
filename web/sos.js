@@ -98,8 +98,17 @@ function showInfo(d, err) {
   const list = d ? (d.ers && d.ers.length ? d.ers : d.er ? [{ er: d.er, route: d.route }] : []) : [];
   if (err || !list.length) { wrap.innerHTML = ""; wrap.hidden = true; return; }   // 못 불러오면 정보 칸 없이 지도만
   if (shown !== d) { shown = d; sel = 0; }
+  const first = wrap.hidden;
   wrap.innerHTML = list.map(erBox).join("");
   wrap.hidden = false;
+  if (first) roll(wrap);
+}
+// 응급실 정보 칸: 처음 나타날 때 카메라 팝업 단어 칸처럼 아래로 늘어나며 내려옴 (0.5초, 같은 곡선). 지도 칸과의 12px 간격도 같이 벌어짐
+const ROLL = { duration: 500, easing: "cubic-bezier(.3,.7,.2,1)" };
+function roll(el) {
+  const h = el.getBoundingClientRect().height, m = getComputedStyle(el).marginTop;
+  el.style.overflow = "hidden";
+  el.animate([{ height: "0px", marginTop: "0px" }, { height: `${h}px`, marginTop: m }], ROLL).onfinish = () => { el.style.overflow = ""; };
 }
 // 응급실 칸을 누르면 위 지도의 경로가 그 병원으로 (1순위 ↔ 2순위)
 $("sosInfo").addEventListener("click", (e) => {
