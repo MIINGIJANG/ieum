@@ -77,10 +77,12 @@ def main():
            "labels": picked, "words": {x: base(x) for x in picked},
            "to_doc": {k: v for k, v in rev.items() if k in {base(x) for x in picked}}, "combos": combos,
            # 질문 찾기 후보: 예시 질문 + 모범 답안이 있는 질문 + 개발용 평가 질문 (heldout 은 평가용이라 넣지 않음)
-           "questions": list(dict.fromkeys(
+           # 묻는 문장(물음표로 끝남)만 — answers.json 에는 '~하세요.' 같은 시연 문장, 평가 질문에는 '~ 보호구' 같은 검색어도 섞여 있음
+           "questions": [q for q in dict.fromkeys(
                json.loads((ROOT / "data/kosha/example_questions.json").read_text(encoding="utf-8"))
                + list(json.loads((ROOT / "data/kosha/answers.json").read_text(encoding="utf-8")))
-               + [r["question"] for r in csv.DictReader(open(ROOT / "data/eval/eval_questions.csv", encoding="utf-8-sig"))]))}
+               + [r["question"] for r in csv.DictReader(open(ROOT / "data/eval/eval_questions.csv", encoding="utf-8-sig"))])
+               if q.strip().endswith("?")]}
     (ROOT / "web/sign/domain.json").write_text(json.dumps(out, ensure_ascii=False, indent=0), encoding="utf-8")
     print(f"모델 {len(labels)}개 중 {len(picked)}개 (말 {len({base(x) for x in picked})}개)")
     missing = sorted(w for w in want if w not in {base(x) for x in labels} and len(w) > 1)

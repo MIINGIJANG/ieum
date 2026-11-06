@@ -1,7 +1,7 @@
 // 카메라 수어 입력 화면 (시험판, 본 화면과 따로). 공통 부분은 core.js, 관절 점 엔진은 engines.js.
 // 영상은 기기 밖으로 나가지 않음 (서버에는 고른 질문 글자만).
 import { DEFAULTS, FrameCleaner, Recognizer, Segmenter, WindowCommitter, base, classify, docWords, fromB64,
-  frameToFeatures, rankQuestions, rerank } from "./core.js";
+  frameToFeatures, mentions, rankQuestions, rerank } from "./core.js";
 import { createEngine } from "./engines.js";
 
 const $ = (id) => document.getElementById(id);
@@ -197,7 +197,12 @@ function suggest(ch) {
   const box = $("suggest");
   if (!picked.length) { box.innerHTML = ""; return; }
   const joined = picked.join(" ");
-  const qs = rankQuestions(docWords(picked, domain), examples).map(([, q]) => q).filter((q) => q !== joined);
+  // 고른 낱말을 많이 담은 질문부터 (낱말마다 문서 말·활용형도 인정: 입다 → 착용·입는), 같으면 드문 말 점수 순
+  const groups = picked.map((w) => docWords([w], domain));
+  const covered = (q) => groups.filter((g) => g.some((w) => mentions(q, w))).length;
+  const qs = rankQuestions(docWords(picked, domain), examples, Infinity)
+    .map(([sc, q]) => [covered(q), sc, q]).filter(([c]) => c > 0)
+    .sort((a, b) => b[0] - a[0] || b[1] - a[1]).slice(0, 3).map(([, , q]) => q).filter((q) => q !== joined);
   box.innerHTML = [...qs, joined].map((q) => `<button class="q" data-q="${esc(q)}">${esc(q)}</button>`).join("");
 }
 // 질문 블럭을 누르면 팝업이 닫히고 입력창에 들어감 (보내기는 사용자가)

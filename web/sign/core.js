@@ -228,11 +228,18 @@ export function docWords(ws, domain) {
   const map = (domain && domain.to_doc) || {};
   return [...new Set(out.flatMap((w) => (map[w] ? [map[w], w] : [w])))];
 }
+/** 질문에 낱말이 나오는지: 그대로, 또는 '~다' 말은 활용형으로 (높다 → 높은·높아, 입다 → 입는·입어) */
+const FORMS = ["은", "는", "을", "어", "아", "고", "게", "지", "다", "으"];
+export function mentions(q, w) {
+  if (q.includes(w)) return true;
+  if (w.length >= 2 && w.endsWith("다")) { const stem = w.slice(0, -1); return FORMS.some((e) => q.includes(stem + e)); }
+  return false;
+}
 const bigrams = (s) => { s = s.replace(/\s/g, ""); const out = new Set(); for (let i = 0; i < s.length - 1; i++) out.add(s.slice(i, i + 2)); return out; };
 /** 낱말 → 비슷한 질문 (드문 말을 무겁게). [[점수, 질문]...] */
-export function rankQuestions(ws, questions, k = 3) {
+export function rankQuestions(ws, questions, k = 3) {   // k = Infinity 면 전부
   if (!ws.length) return [];
-  const hit = (q, w) => (q.includes(w) ? 1 : [...bigrams(w)].some((b) => bigrams(q).has(b)) ? 0.5 : 0);
+  const hit = (q, w) => (mentions(q, w) ? 1 : [...bigrams(w)].some((b) => bigrams(q).has(b)) ? 0.5 : 0);
   const weight = Object.fromEntries(ws.map((w) => [w, Math.log((questions.length + 1) / (1 + questions.filter((q) => q.includes(w)).length)) + 0.1]));
   const total = ws.reduce((a, w) => a + weight[w], 0) || 1;
   return questions.map((q) => [ws.reduce((a, w) => a + weight[w] * hit(q, w), 0) / total, q]).filter(([s]) => s > 0).sort((a, b) => b[0] - a[0]).slice(0, k);
