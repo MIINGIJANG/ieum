@@ -318,4 +318,24 @@ def motions(req: Glosses):
 
 
 # 웹 화면 (web/index.html, 3D 모델·라이브러리 포함). API 경로보다 뒤에 둬야 함
+@app.get("/sos/config")
+def sos_config():
+    """SOS 준비 상태: 지도 표시용 카카오 JavaScript 키(공개용, 도메인으로 보호)와 서버 키가 있는지."""
+    from ksl import sos
+    return sos.configured()
+
+
+@app.get("/sos/nearest")
+def sos_nearest(lat: float, lng: float):
+    """지금 위치에서 가장 가까운 응급실 + 자동차 경로 + 실시간 병상 (ksl/sos.py). 위치는 저장하지 않음."""
+    from ksl import sos
+    if not sos.configured()["er"]:
+        return JSONResponse({"error": "not_configured"}, status_code=503)
+    try:
+        return sos.nearest(lat, lng)
+    except Exception as e:
+        print("[이음] SOS 응급실 조회 실패:", e)
+        return JSONResponse({"error": "failed"}, status_code=502)
+
+
 app.mount("/", StaticFiles(directory=ROOT / "web", html=True), name="web")

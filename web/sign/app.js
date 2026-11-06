@@ -375,9 +375,10 @@ const POP_SCALE = { from: 0.5, to: 0.2 };   // 나타날 때 50%에서 시작, �
 let panelOpen = false, pop = { s: 1, sv: 0, o: 1, ov: 0, ts: 1, to: 1, raf: 0, last: 0 };
 // 팝업 자리·크기: 입력창 아래 12px, 가운데. 가로 길이는 카메라 칸에 맞춰 (입력창보다 넓지 않게)
 let panelGap = null;   // 입력창 아랫면 ~ 팝업 윗면
-function placePanel() {
-  const p = $("panel"), f = $("form");
+function placePanel(p = $("panel")) {   // SOS 팝업(sos.js)도 같은 자리·폭으로 씀
+  const f = $("form");
   const par = p.offsetParent || document.body, pr = par.getBoundingClientRect(), fr = f.getBoundingClientRect();
+  const row = ($("qrow") || f).getBoundingClientRect();                  // 가로: 입력창+SOS 덩어리 가운데 (시험 페이지는 입력창)
   // 위쪽: 예시 질문 블럭 아래, 겹치지 않게. 예시 질문~팝업 간격 = 입력창~예시 질문 간격.
   //  입력창 아랫면에서 얼마나 떨어지는지 기억해 두어, 나중에 예시 질문이 모두 사라져도 자리는 그대로
   const ex = [...document.querySelectorAll("#examples button")].filter(b => b.offsetParent).map(b => b.getBoundingClientRect());
@@ -386,14 +387,14 @@ function placePanel() {
     panelGap = b + gap - fr.bottom;
   }
   p.style.top = `${fr.bottom + (panelGap ?? 12) - pr.top}px`;
-  const cam = fitCam(fr);
-  const w = Math.min(fr.width, cam + 24);                                // 팝업도 카메라·단어·질문 칸에 맞춰 같이 줄임 (양옆 여백 12px)
+  const cam = fitCam(row, p);
+  const w = Math.min(row.width, cam + 24);                               // 팝업도 카메라·단어·질문 칸에 맞춰 같이 줄임 (양옆 여백 12px)
   p.style.width = `${w}px`;
-  p.style.left = `${fr.left + (fr.width - w) / 2 - pr.left}px`;          // 입력창 아래 가운데
+  p.style.left = `${row.left + (row.width - w) / 2 - pr.left}px`;        // 입력창(+SOS) 아래 가운데
 }
 // 카메라 칸·단어 칸·질문 칸 가로 길이(= 팝업 안쪽 폭): 나올 수 있는 질문 중 가장 긴 것이 줄바꿈 없이 들어가는 폭 (입력창보다 넓지 않게)
-function fitCam(fr) {
-  const p = $("panel"), full = fr.width - 24;
+function fitCam(fr, p = $("panel")) {
+  const full = fr.width - 24;
   const longest = Math.max(0, ...examples.map(textWidth));
   const cam = Math.round(Math.min(full, Math.ceil(longest) + 20 + 16 + 2));   // 글자 + 블럭 안 여백(좌우 10px) + 칸 안 여백(좌우 8px)
   // 휴대폰처럼 화면이 좁아 그 폭이 안 나오면, 질문 글자를 가장 긴 질문이 한 줄에 들어가는 크기로 줄임
@@ -542,5 +543,5 @@ function measureNotice() {
 }
 document.fonts?.ready.then(measureNotice);
 prepare().catch(() => {});   // 페이지를 열면 바로 모델 준비 (카메라 권한은 팝업을 열 때 물음)
-window.__sign = { opts, items, renderWords, draw, docWords: (ws) => docWords(ws, domain), rec, addItem,
+window.__sign = { opts, items, renderWords, draw, place: placePanel, springScroll, closePanel, isOpen: () => panelOpen, docWords: (ws) => docWords(ws, domain), rec, addItem,
   classify: (f) => classify(rec, f, opts, domainIdx, protos) };

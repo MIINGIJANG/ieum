@@ -1,23 +1,23 @@
 /* 카메라 수어 입력 팝업 (본 화면 web/index.html 과 시험 페이지 web/sign/index.html 이 같이 씀).
    본 화면 다른 요소에 영향이 없도록 모두 #panel·#camBtn 안에서만 정함. 색은 본 화면과 같음 */
-#panel, #camBtn { --bg: #ffffff; --box: #e8e8e8; --hover: #dcdcdc; --strong: #5f5f5f; --ink: #000000; --on: #ffffff; }
-@media (prefers-color-scheme: dark) { #panel, #camBtn { --bg: #242526; --box: #3e3f40; --hover: #48494a; --strong: #0d0d0e; --ink: #ffffff; --on: #ffffff; } }
+#panel, #sosPanel, #camBtn { --bg: #ffffff; --box: #e8e8e8; --hover: #dcdcdc; --strong: #5f5f5f; --ink: #000000; --on: #ffffff; }
+@media (prefers-color-scheme: dark) { #panel, #sosPanel, #camBtn { --bg: #242526; --box: #3e3f40; --hover: #48494a; --strong: #0d0d0e; --ink: #ffffff; --on: #ffffff; } }
 
 /* 입력창의 카메라 버튼: 팝업이 떠 있는 동안 초록 (마이크 듣는 중 주황처럼 배경 없이 그림만) */
 #camBtn.on { color: #34c759 !important; }
 
-/* 팝업: 입력창 바로 아래, 입력창과 같은 가로 길이 */
-#panel {
+/* 팝업: 입력창 바로 아래, 입력창과 같은 가로 길이 (SOS 팝업도 같은 틀) */
+#panel, #sosPanel {
   position: absolute; z-index: 30;   /* 가로 길이·자리는 app.js 가 입력창과 똑같이 맞춤 */
   background: var(--hover); color: var(--ink); border-radius: 14px; padding: 12px; display: grid;   /* 팝업 배경 = 블럭에 마우스 올렸을 때 색 */
   font-size: 14px; line-height: 1.5; text-align: left;
 }
-#panel[hidden] { display: none !important; }
-#panel [hidden] { display: none !important; }
-#panel * { box-sizing: border-box; }
-#panel > :not(:first-child) { margin-top: 12px; }   /* 칸 사이 12px (질문 칸은 비었을 때 간격이 남지 않게 안쪽에서 띄움) */
+#panel[hidden], #sosPanel[hidden] { display: none !important; }
+#panel [hidden], #sosPanel [hidden] { display: none !important; }
+#panel *, #sosPanel * { box-sizing: border-box; }
+#panel > :not(:first-child), #sosPanel > :not(:first-child) { margin-top: 12px; }   /* 칸 사이 12px (질문 칸은 비었을 때 간격이 남지 않게 안쪽에서 띄움) */
 #panel > #suggest, #panel > #wordsWrap { margin-top: 0; }
-#panel p { margin: 0; }
+#panel p, #sosPanel p { margin: 0; }
 #panel button { font: inherit; color: var(--ink); background: var(--bg); border: 0; border-radius: 8px; padding: 4px 10px; cursor: pointer; }
 #panel button:hover { background: var(--hover); }
 #panel button:disabled { opacity: .5; cursor: default; }
@@ -34,7 +34,7 @@
 #panel .cam .off { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 10px; padding: 16px; text-align: center; color: #fff; }
 
 /* 단어 칸·질문 칸: 흰색 (다크 모드는 배경색). 칸 안 위·아래·블럭 사이 간격 모두 8px */
-#panel .box { background: var(--bg); border-radius: 12px; padding: 8px; display: grid; width: var(--cam, 100%); max-width: 100%; margin: 0 auto; }   /* 카메라 칸과 같은 가로 길이, 가운데 */
+#panel .box, #sosPanel .box { background: var(--bg); border-radius: 12px; padding: 8px; display: grid; width: var(--cam, 100%); max-width: 100%; margin: 0 auto; }   /* 카메라 칸과 같은 가로 길이, 가운데 */
 #panel .chip { display: inline-flex; border-radius: 8px; overflow: hidden; }
 #panel .chip .w { border-radius: 0; font-weight: 500; padding: 4px 10px; }
 #panel #words { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; }
@@ -47,3 +47,10 @@
 #panel #words .w, #panel #suggest .q { background: var(--box); }
 #panel #words .w:hover, #panel #suggest .q:hover { background: var(--hover); }
 #panel #words .chip.sel .w, #panel #suggest .q:active { background: var(--strong); color: var(--on); }
+
+/* SOS 팝업: 지도 칸(카메라 칸과 같은 4:3·같은 폭) 위, 응급실 정보 칸 아래 */
+#sosPanel .map { position: relative; width: var(--cam, 100%); max-width: 100%; justify-self: center; aspect-ratio: 4 / 3; border-radius: 12px; overflow: hidden; background: var(--bg); }
+#sosPanel .info { gap: 4px; text-align: center; justify-items: center; margin-top: 12px; }   /* 지도 칸과 12px (.box 의 margin: 0 auto 보다 나중에) */
+#sosPanel .info .name { font-size: 1rem; font-weight: 700; }
+#sosPanel .info .sub { opacity: .7; font-size: .85rem; }
+#sosPanel .info a { color: inherit; font-weight: 500; }

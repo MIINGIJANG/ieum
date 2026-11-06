@@ -68,6 +68,7 @@ self.addEventListener("fetch", (e) => {
   const req = e.request;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;     // 글꼴 등 다른 사이트는 브라우저에 맡김
+  if (url.pathname.startsWith("/sos/")) return;        // SOS(위치·응급실)는 저장하지 않고 늘 서버에서
   if (req.method === "GET") {
     e.respondWith(BIG.test(url.pathname) ? cacheFirst(req) : networkFirst(req));
     return;

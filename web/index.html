@@ -96,7 +96,12 @@
   body.result .hero h1 { display: none; }
   .notice { display: none; margin: 0; font-size: .88rem; line-height: 1; color: var(--muted); }
   body.result .notice { display: block; }
-  form.query { position: relative; width: min(100%, 640px); }
+  .qrow { display: flex; align-items: center; gap: 16.6px; width: min(100%, 640px); }   /* 사이 간격 = 마이크 그림과 카메라 그림 사이 간격 */
+  form.query { position: relative; flex: 1; min-width: 0; }
+  /* SOS: 입력창 높이와 같은 지름의 원, 입력창과 같은 배경, 빨간 테두리·글씨 (지름은 sos.js 가 입력창 높이로 맞춤) */
+  .sos { flex: none; width: 56px; height: 56px; padding: 0; border-radius: 50%; border: 2px solid #ff3b30; background: var(--surface);
+         color: #ff3b30; font: inherit; font-size: 1rem; font-weight: 700; letter-spacing: .02em; cursor: pointer; }
+  body.landing.sos-open { overflow: auto; }   /* SOS 팝업이 떠 있는 동안은 아래로 내려 볼 수 있게 */
   form.query input {
     width: 100%;
     padding: 15px 126px 15px 20px;   /* 오른쪽 아이콘 3개 (보내기·마이크·카메라) */
@@ -220,6 +225,8 @@
   <section class="hero" aria-label="검색">
     <h1>이음</h1>
     <p class="notice">일부 단어의 수어 동작만 준비되어 있습니다.</p>
+    <!-- 입력창 + SOS 버튼: 둘을 합친 덩어리가 예전 입력창 폭(640px)이고 가운데 -->
+    <div class="qrow" id="qrow">
     <form class="query" id="form">
       <input id="q" name="q" autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" placeholder="어떤 도움을 드릴까요?" aria-label="질문 또는 문장 입력">
       <div class="tools">
@@ -235,6 +242,8 @@
         </button>
       </div>
     </form>
+    <button id="sosBtn" class="sos" type="button" aria-label="가장 가까운 응급실 찾기">SOS</button>
+    </div>
     <!-- 카메라 수어 입력 팝업 (모양 sign/popup.css, 동작 sign/app.js) -->
     <div class="panel" id="panel" hidden>
       <p class="notice">수어를 표현해 주세요.</p>
@@ -247,6 +256,11 @@
         <section class="box"><div id="words"></div></section>
       </div>
       <div id="suggest"></div>
+    </div>
+    <!-- SOS 팝업: 지도(위) + 가장 가까운 응급실 정보(아래). 모양은 카메라 팝업과 같음 (sign/popup.css), 동작 sos.js -->
+    <div class="panel" id="sosPanel" hidden>
+      <section class="map" id="sosMap" aria-label="응급실까지 경로 지도"></section>
+      <section class="box info" id="sosInfo" aria-live="polite" hidden></section>
     </div>
     <div class="examples" id="examples"></div>
   </section>
@@ -304,7 +318,8 @@ outer: for (const url of order) {
 }
 if (!window.avatar) window.dispatchEvent(new Event("avatar-failed"));
 </script>
-<script type="module" src="./sign/app.js"></script>   <!-- 카메라 수어 입력: 모델은 첫 로딩 화면에서 미리 준비 -->
+<script type="module" src="./sign/app.js"></script>
+<script type="module" src="./sos.js"></script>   <!-- SOS: 지도·응급실 준비도 첫 로딩 화면에서 -->   <!-- 카메라 수어 입력: 모델은 첫 로딩 화면에서 미리 준비 -->
 <script>
 const API = location.protocol.startsWith("http") ? "" : "http://localhost:8000";
 // 오프라인 모드: 받은 화면·답·동작을 저장해 두고 인터넷이 끊기면 그것으로 (web/sw.js, 화면 변화 없음)
@@ -351,6 +366,8 @@ const cameraReady = new Promise((res) => {
   addEventListener("sign-ready", res, { once: true });
   addEventListener("sign-failed", res, { once: true });
 });
+// SOS: 카카오 지도 불러오기, 위치를 이미 허락한 기기면 위치와 가까운 응급실까지 미리 (sos.js 가 끝나면 알림)
+const sosReady = new Promise((res) => addEventListener("sos-ready", res, { once: true }));
 // 예시 질문의 답을 미리 받아 둠 → 예시를 골라 보내면 기다림 없이 바로 답 (보이는 예시는 로딩 중에, 새로 보이는 예시는 그때그때)
 const answers = new Map();
 function prefetchAnswer(q) {
@@ -369,7 +386,8 @@ const bootAll = Promise.all([
   boot.add("examples", examplesReady),
   boot.add("fonts", Promise.race([document.fonts ? document.fonts.ready : null, new Promise(r => setTimeout(r, 3000))])),  // 글꼴은 3초까지만 기다림
   boot.add("answers", Promise.race([answersReady, new Promise(r => setTimeout(r, 20000))])),   // 예시 질문 답은 20초까지만 기다림
-  boot.add("camera", cameraReady),   // 카메라 모델 받기·엔진 시작·첫 계산까지 끝까지 기다림 (처음 한 번 약 60MB, 다음부터는 저장해 둔 것) → 사용 중 기다림 없음
+  boot.add("camera", cameraReady),
+  boot.add("sos", Promise.race([sosReady, new Promise(r => setTimeout(r, 12000))])),   // 지도 불러오기 + (이미 허락했으면) 위치·가까운 응급실까지 미리, 12초까지만   // 카메라 모델 받기·엔진 시작·첫 계산까지 끝까지 기다림 (처음 한 번 약 60MB, 다음부터는 저장해 둔 것) → 사용 중 기다림 없음
 ]);
 // 너무 오래 걸리면(아주 느린 망) 3분 뒤에는 그냥 시작 (남은 준비는 뒤에서 계속)
 Promise.race([bootAll, new Promise(r => setTimeout(r, 180000))]).then(() => {
@@ -379,7 +397,7 @@ Promise.race([bootAll, new Promise(r => setTimeout(r, 180000))]).then(() => {
   el.remove();                                 // 바로 사라짐 (페이드 없음)
   toTop();
   // 로딩 화면이 사라지면 입력창(과 예시 질문)이 아래에서 올라옴. 제목 '이음'은 제자리
-  [document.getElementById("form"), document.getElementById("examples")].forEach((x, i) =>
+  [document.getElementById("qrow"), document.getElementById("examples")].forEach((x, i) =>
       x.animate([{ transform: "translateY(40px)", opacity: 0 }, { transform: "none", opacity: 1 }],
                 { duration: 550, delay: i * 100, easing: "cubic-bezier(.2,.8,.2,1)", fill: "backwards" }));
 });
@@ -589,7 +607,7 @@ async function run() {
 function showResults() {
   if (document.body.classList.contains("result")) return;
   // 입력창과 예시 질문은 함께 제자리에서 위로 미끄러지고(FLIP), 입력창 위 안내는 서서히 나타남
-  const moving = [$("form"), $("examples")];
+  const moving = [$("qrow"), $("examples")];
   const y0 = moving.map(el => el.getBoundingClientRect().top);
   document.body.classList.replace("landing", "result");
   const ease = { duration: 550, easing: "cubic-bezier(.2,.8,.2,1)" };
