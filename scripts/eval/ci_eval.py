@@ -3,8 +3,7 @@
   python scripts/eval/ci_eval.py            # 결과 표는 $GITHUB_STEP_SUMMARY 에도 씀
 
 - 번역 모델·Claude 없이 (규칙 기반 답변) 돌림: 비용 0원, 1~2분
-- 안전 안내 문장은 번역 모델 대신 '번역으로 가는지(mode=translate)'만 확인
-- 기준: 문서 밖 입력은 하나도 답하면 안 됨, 문서 안 질문 답함·정답 쪽 출처·안내 문장 번역은 기준 이상
+- 기준: 문서 밖 입력은 하나도 답하면 안 됨, 문서 안 질문 답함·정답 쪽 출처는 기준 이상
   (점수를 일부러 바꿨으면 baseline.json 을 고쳐서 같이 올리기)
 """
 import json
@@ -41,20 +40,18 @@ def main():
     pipe._tr = _NoModel()
     r = evaluate(pipe, detail=True)
     d = r["자세히"]
-    inq, oos, sents = d["문서 안 질문"], d["문서 밖 입력"], d["안전 안내 문장"]
+    inq, oos = d["문서 안 질문"], d["문서 밖 입력"]
     gold = [x for x in inq if x["정답쪽"]]
     got = {
         "answered": sum(x["답함"] for x in inq),
         "hit": sum(x["답함"] and int(x["정답쪽"]) in x["출처쪽"] for x in gold),
         "leaked": sum(not x["답하지 않음"] for x in oos),
-        "translated": sum(x["번역함"] for x in sents),
     }
     base = json.loads((ROOT / "data/eval/baseline.json").read_text(encoding="utf-8"))
     checks = [
         ("문서 안 질문 답함", got["answered"], f"≥ {base['answered']} / {len(inq)}", got["answered"] >= base["answered"]),
         ("정답 쪽이 출처에 있음", got["hit"], f"≥ {base['hit']} / {len(gold)}", got["hit"] >= base["hit"]),
         ("문서 밖 입력에 답함 (환각)", got["leaked"], f"≤ {base['leaked']} / {len(oos)}", got["leaked"] <= base["leaked"]),
-        ("안전 안내 문장 번역", got["translated"], f"≥ {base['translated']} / {len(sents)}", got["translated"] >= base["translated"]),
     ]
     ok = all(c[3] for c in checks)
     lines = ["## 환각 방지 평가 (규칙 기반 답변)", "", "| 항목 | 결과 | 기준 | |", "|---|---|---|---|"]

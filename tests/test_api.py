@@ -34,11 +34,6 @@ def test_query_refuses_chitchat(client):
     assert client.post("/query", json={"text": "안녕하세요"}).json()["mode"] == "none"
 
 
-def test_demo_sentence_uses_memory(client):
-    r = client.post("/query", json={"text": "낙하물을 조심하세요."}).json()
-    assert r["mode"] == "translate" and r["sentences"][0]["method"] == "memory"
-
-
 def test_motion(client):
     r = client.post("/motion", json={"glosses": ["위험1", "없는단어"]}).json()
     assert r["frames"] and [s["has_motion"] for s in r["segments"]] == [True, False]   # 지문자는 기본 꺼짐 → 회색

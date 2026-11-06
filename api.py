@@ -139,14 +139,9 @@ def cached_query(text, beam=4, log=True):
 
 @app.post("/query")
 def query(req: Query):
-    """검색창 하나: 질문이면 /ask, 문장이면 /translate 처럼 동작. 응답의 mode 로 구분."""
+    """검색창 하나: 모든 입력을 질문으로 보고 문서 검색 후 답변. 답하지 않으면 mode 가 none."""
     r = cached_query(req.text, req.beam, log=not req.prefetch)
     return {"ok": True} if req.seen else r
-
-
-@app.post("/translate")
-def translate(req: Text):
-    return pipe.translate_text(req.text, req.beam)
 
 
 @app.get("/demo_sentences")

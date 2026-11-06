@@ -456,19 +456,14 @@ class SafetySignPipeline:
         return r
 
     def _query(self, text, beam=4):
-        """검색창 하나로: 확정 문장이면 그대로 번역, 질문처럼 보이면 문서 검색 후 답변, 아니면 문장 번역.
+        """검색창 하나로: 모든 입력을 질문으로 보고 문서 검색 후 답변 (문장을 바로 번역하는 기능은 없앰).
         안전 문서와 관련이 없는 입력(인사·잡담·문서 밖 주제)은 답하지 않음."""
-        hit = self._memory_hit(text)
-        if hit:                                                      # 확정 안내 문장 (말투만 달라도: '착용해야 돼' → '착용하세요')
-            return {"mode": "translate", **self.translate_text(hit["korean"], beam)}
         t = text.strip()
-        is_sentence = re.search(r"(다|요|세요|시오)[.!]?$", t) is not None   # 완결된 안내 문장
-        if self._Q.search(t) or not is_sentence:                              # 질문 또는 '감전 위험' 같은 키워드
-            r = self.ask(text, beam)
-            return r if r.get("mode") == "none" else {"mode": "ask", **r}
-        if not self.in_domain(t):
+        is_sentence = re.search(r"(다|요|세요|시오)[.!]?$", t) is not None   # 질문이 아닌 완결 문장 ('수고하셨습니다.')
+        if not self._Q.search(t) and is_sentence and not self.in_domain(t):
             return self._abstain(text, 0.0)
-        return {"mode": "translate", **self.translate_text(text, beam)}
+        r = self.ask(text, beam)
+        return r if r.get("mode") == "none" else {"mode": "ask", **r}
 
     def _memory_hit(self, text):
         """확정 안내 문장 찾기: 그대로, 또는 끝맺음만 바꿔서 같은 문장이 있으면 그 문장."""
