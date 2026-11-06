@@ -6,9 +6,9 @@
 /* 입력창의 카메라 버튼: 팝업이 떠 있는 동안 초록 (마이크 듣는 중 주황처럼 배경 없이 그림만) */
 #camBtn.on { color: #34c759 !important; }
 
-/* 팝업: 입력창 아래 카메라 버튼 쪽에 떠 있음 (자리는 app.js 가 입력창 위치로 맞춤) */
+/* 팝업: 입력창 바로 아래, 입력창과 같은 가로 길이 */
 #panel {
-  position: absolute; z-index: 30; width: min(420px, calc(100vw - 32px));
+  position: absolute; z-index: 30;   /* 가로 길이·자리는 app.js 가 입력창과 똑같이 맞춤 */
   background: var(--box); color: var(--ink); border-radius: 14px; padding: 12px; display: grid;
   font-size: 14px; line-height: 1.5; text-align: left;
 }
