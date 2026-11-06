@@ -432,6 +432,22 @@ function popTo(open) {
   el.style.transformOrigin = popOrigin();
   if (!pop.raf) { pop.last = performance.now(); pop.raf = requestAnimationFrame(popStep); }   // 움직이는 중이면 지금 값·속도 그대로 목표만 바꿈
 }
+// 화면 스크롤도 팝업과 같은 스프링으로 직접 움직임. 브라우저의 부드러운 스크롤(behavior: "smooth")은
+//  첫 화면처럼 스크롤 잠금을 막 푼 직후·멀리 내릴 때 끊겨 보여서 쓰지 않음
+let scrollAnim = 0;
+function springScroll(to) {
+  cancelAnimationFrame(scrollAnim);
+  const from = scrollY, d = to - from, w = (2 * Math.PI) / SPRING.response, t0 = performance.now();
+  if (Math.abs(d) < 1) return;
+  const step = (t) => {
+    const x = (t - t0) / 1000, k = (1 + w * x) * Math.exp(-w * x);   // 임계 감쇠 스프링: 1 → 0
+    window.scrollTo(0, to - d * k);
+    scrollAnim = Math.abs(d * k) < 0.5 ? 0 : requestAnimationFrame(step);
+    if (!scrollAnim) window.scrollTo(0, to);
+  };
+  scrollAnim = requestAnimationFrame(step);
+}
+for (const ev of ["wheel", "touchstart", "keydown"]) addEventListener(ev, () => { cancelAnimationFrame(scrollAnim); scrollAnim = 0; }, { passive: true });   // 사용자가 직접 스크롤하면 멈춤
 let scrollBack = null;   // 팝업을 열 때 화면을 입력창이 위로 오게 내렸다면, 닫을 때 원래 자리로
 function openPanel() {
   // 팝업이 다 닫힌 뒤 다시 열면 처음 상태로 (닫히는 도중에 다시 누르면 하던 그대로)
@@ -446,7 +462,7 @@ function openPanel() {
   if (Math.abs(top - 16) > 2) {
     scrollBack ??= scrollY;
     document.body.style.minHeight = `${Math.ceil(scrollY + top - 16 + innerHeight)}px`;
-    requestAnimationFrame(() => { if (panelOpen) scrollTo({ top: scrollY + $("form").getBoundingClientRect().top - 16, behavior: "smooth" }); });
+    requestAnimationFrame(() => { if (panelOpen) springScroll(scrollY + $("form").getBoundingClientRect().top - 16); });
   }
   if (fresh) measureNotice();
   startCamera();
@@ -458,7 +474,7 @@ function closePanel() {
   if (!panelOpen) return;
   panelOpen = false; $("camBtn").classList.remove("on");
   popTo(false);
-  if (scrollBack != null) { scrollTo({ top: scrollBack, behavior: "smooth" }); scrollBack = null; }
+  if (scrollBack != null) { springScroll(scrollBack); scrollBack = null; }
 }
 // 카메라를 쓸 수 없는 게 미리 보이면(카메라 없음·권한 거절) 팝업을 열지 않음. 모르면 열고, 켜기에 실패하면 바로 닫음
 async function cameraUsable() {
