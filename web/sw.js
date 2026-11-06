@@ -3,6 +3,7 @@
 //   - 화면·아바타·라이브러리·출처 쪽 이미지 (GET)
 //   - 질문 답 (POST /query): 처음 화면에서 예시 질문 답을 미리 받아 두므로 예시 질문은 오프라인에서도 됨
 //   - 단어 동작 (POST /motions)
+//   - 카메라 수어 입력 모델 (/sign/models·lib): 이것만 저장해 둔 것을 먼저 씀 (크고 거의 안 바뀜)
 // 화면 모양·문구는 바꾸지 않음. 팀원 SignBridge 의 오프라인 준비(useOfflineReady)를 참고.
 const CACHE = "ieum-offline-v1";
 const SHELL = ["./", "./index.html", "./avatar.js", "./avatar-common.js", "./avatar-vrm.js", "./rig.js", "./face.js",
@@ -34,6 +35,18 @@ async function postKey(req) {
   return null;
 }
 
+// 카메라 수어 입력의 큰 파일(인식 모델 25MB·관절 점 모델·MediaPipe/ONNX 라이브러리, 약 60MB)은 한 번 받으면 저장해 둔 것을 바로 씀
+// (새로고침해도 다시 받지 않음). 파일을 바꿀 때는 위 CACHE 이름을 바꾸면 새로 받음
+const BIG = /\/sign\/(models|lib)\//;
+async function cacheFirst(req) {
+  const cache = await caches.open(CACHE);
+  const hit = await cache.match(req);
+  if (hit) return hit;
+  const res = await fetch(req);
+  if (res.ok) cache.put(req, res.clone()).catch(() => null);
+  return res;
+}
+
 async function networkFirst(req, key) {
   const cache = await caches.open(CACHE);
   try {
@@ -56,7 +69,7 @@ self.addEventListener("fetch", (e) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;     // 글꼴 등 다른 사이트는 브라우저에 맡김
   if (req.method === "GET") {
-    e.respondWith(networkFirst(req));
+    e.respondWith(BIG.test(url.pathname) ? cacheFirst(req) : networkFirst(req));
     return;
   }
   if (req.method === "POST" && (url.pathname.endsWith("/query") || url.pathname.endsWith("/motions"))) {
