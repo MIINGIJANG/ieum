@@ -379,6 +379,10 @@ function fitCam(fr) {
   const p = $("panel"), full = fr.width - 24;
   const longest = Math.max(0, ...examples.map(textWidth));
   const cam = Math.round(Math.min(full, Math.ceil(longest) + 20 + 16 + 2));   // 글자 + 블럭 안 여백(좌우 10px) + 칸 안 여백(좌우 8px)
+  // 휴대폰처럼 화면이 좁아 그 폭이 안 나오면, 질문 글자를 가장 긴 질문이 한 줄에 들어가는 크기로 줄임
+  const base = parseFloat(getComputedStyle($("suggest")).fontSize) || 14;
+  if (longest && cam < Math.ceil(longest) + 38) p.style.setProperty("--qfs", `${Math.floor(base * (cam - 38) / longest * 10) / 10}px`);
+  else p.style.removeProperty("--qfs");
   p.style.setProperty("--cam", `${cam}px`);
   return cam;
 }
