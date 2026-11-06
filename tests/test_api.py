@@ -70,3 +70,9 @@ def test_motions_batch(client):
 def test_blocks_check(client):
     r = client.get("/blocks_check").json()
     assert r["total"] == len(r["rows"]) > 0 and all("problems" in x and "blocks" in x for x in r["rows"])
+
+
+def test_sos_not_configured(client, monkeypatch):
+    monkeypatch.delenv("DATA_GO_KR_KEY", raising=False)
+    assert client.get("/sos/nearest", params={"lat": 35.8, "lng": 128.5}).status_code == 503
+    assert client.get("/sos/config").json()["er"] is False

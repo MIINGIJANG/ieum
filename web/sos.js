@@ -1,0 +1,176 @@
+// SOS: 버튼을 누르면 위치 권한을 묻고, 허락하면 팝업에 지도(위)와 가장 가까운 응급실 정보(아래).
+// 팝업 틀·자리·폭·움직임은 카메라 팝업과 같음 (sign/popup.css, sign/app.js 의 place·springScroll).
+// 미리 할 수 있는 일(카카오 지도 불러오기, 위치를 이미 허락한 기기면 위치·가까운 응급실)은 첫 로딩 화면에서 → 'sos-ready'
+const $ = (id) => document.getElementById(id);
+const API = new URL("./", import.meta.url).href;
+const SPRING = { response: 0.35, damping: 1 }, POP_SCALE = { from: 0.5, to: 0.2 };   // 카메라 팝업과 같은 값
+
+let cfg = null, kakaoReady = null, pos = null, posAt = 0, result = null, resultFor = null, map = null, layers = [];
+let open = false, scrollBack = null;
+const pop = { s: 1, sv: 0, o: 1, ov: 0, ts: 1, to: 1, raf: 0, last: 0 };
+
+// ---------- 미리 준비 (첫 로딩 화면) ----------
+function loadKakao(key) {
+  return new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(key)}&autoload=false`;
+    s.onload = () => window.kakao.maps.load(res);
+    s.onerror = rej;
+    document.head.append(s);
+  });
+}
+function getPos(timeout = 10000) {
+  return new Promise((res, rej) => {
+    if (!navigator.geolocation) return rej(new Error("no geolocation"));
+    navigator.geolocation.getCurrentPosition((p) => {
+      pos = { lat: p.coords.latitude, lng: p.coords.longitude }; posAt = Date.now(); res(pos);
+    }, rej, { enableHighAccuracy: true, timeout, maximumAge: 60000 });
+  });
+}
+async function fetchNearest(p) {
+  const key = `${p.lat.toFixed(3)},${p.lng.toFixed(3)}`;
+  if (result && resultFor === key) return result;
+  const r = await fetch(`${API}sos/nearest?lat=${p.lat}&lng=${p.lng}`);
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || r.status);
+  result = d; resultFor = key;
+  return d;
+}
+(async () => {
+  try {
+    cfg = await (await fetch(`${API}sos/config`)).json();
+    if (cfg.kakao_js) { kakaoReady = loadKakao(cfg.kakao_js); await kakaoReady.catch(() => { kakaoReady = null; }); }
+    // 위치를 이미 허락해 둔 기기면 위치와 가까운 응급실까지 미리 (처음이면 권한은 버튼을 누를 때 물음)
+    const st = await navigator.permissions?.query({ name: "geolocation" }).catch(() => null);
+    if (st && st.state === "granted") await getPos(6000).then(fetchNearest).catch(() => {});
+  } catch { /* 준비 실패: 버튼을 누를 때 다시 */ }
+  dispatchEvent(new Event("sos-ready"));
+})();
+
+// SOS 원 지름 = 입력창 높이
+const fitBtn = () => { const h = $("form").getBoundingClientRect().height; if (h) { $("sosBtn").style.width = $("sosBtn").style.height = `${h}px`; } };
+fitBtn();
+if (window.ResizeObserver) new ResizeObserver(fitBtn).observe($("form"));
+
+// ---------- 지도 · 응급실 정보 ----------
+function drawMap(p, d) {
+  if (!kakaoReady || !window.kakao?.maps) return;
+  const K = window.kakao.maps, here = new K.LatLng(p.lat, p.lng);
+  if (!map) map = new K.Map($("sosMap"), { center: here, level: 4 });
+  else map.relayout();
+  layers.forEach((l) => l.setMap(null)); layers = [];
+  layers.push(new K.Marker({ position: here, map }));
+  const bounds = new K.LatLngBounds(); bounds.extend(here);
+  const er = d && d.er;
+  if (er) {
+    const at = new K.LatLng(er.lat, er.lng);
+    layers.push(new K.Marker({ position: at, map, title: er.name }));
+    bounds.extend(at);
+    const path = (d.route && d.route.path || []).map(([la, lo]) => new K.LatLng(la, lo));
+    if (path.length) {
+      layers.push(new K.Polyline({ path, map, strokeWeight: 6, strokeColor: "#ff3b30", strokeOpacity: 0.9, strokeStyle: "solid" }));
+      path.forEach((x) => bounds.extend(x));
+    }
+    map.setBounds(bounds, 24, 24, 24, 24);
+  } else map.setCenter(here);
+}
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+function ago(t) {   // '20261106163000' → 'n분 전'
+  if (!t || t.length < 12) return "";
+  const d = new Date(+t.slice(0, 4), +t.slice(4, 6) - 1, +t.slice(6, 8), +t.slice(8, 10), +t.slice(10, 12));
+  const m = Math.max(0, Math.round((Date.now() - d) / 60000));
+  return m < 1 ? "방금 갱신" : m < 60 ? `${m}분 전 갱신` : `${Math.floor(m / 60)}시간 전 갱신`;
+}
+function showInfo(d, err) {
+  const box = $("sosInfo");
+  const er = d && d.er;
+  if (err || !er) { box.innerHTML = `<p>응급실 정보를 불러오지 못했습니다.</p>`; box.hidden = false; return; }
+  const rt = d.route, line = [];
+  if (rt && rt.duration != null) line.push(`차로 약 ${Math.max(1, Math.round(rt.duration / 60))}분`);
+  line.push(`${((rt && rt.distance != null ? rt.distance / 1000 : er.km) || 0).toFixed(1)}km`);
+  const bed = er.beds == null ? "" : er.beds > 0 ? `응급실 남은 병상 ${er.beds}` : "응급실 병상 없음";
+  const tel = er.er_tel || er.tel;
+  box.innerHTML = `<p class="name">${esc(er.name)}</p><p>${esc(line.join(" · "))}</p>`
+    + (bed || er.ct ? `<p>${esc([bed, er.ct === "Y" ? "CT 가능" : ""].filter(Boolean).join(" · "))}</p>` : "")
+    + (tel ? `<p><a href="tel:${esc(tel.replace(/[^0-9+]/g, ""))}">${esc(tel)}</a></p>` : "")
+    + (er.updated ? `<p class="sub">${esc(ago(er.updated))}</p>` : "");
+  box.hidden = false;
+}
+async function refresh(p) {
+  drawMap(p, result && resultFor === `${p.lat.toFixed(3)},${p.lng.toFixed(3)}` ? result : null);
+  try { const d = await fetchNearest(p); if (open) { showInfo(d); drawMap(p, d); } }
+  catch { if (open) showInfo(null, true); }
+}
+
+// ---------- 팝업 열기·닫기 (카메라 팝업과 같은 스프링) ----------
+function origin() {
+  const p = $("sosPanel"), f = $("form").getBoundingClientRect(), b = $("sosBtn").getBoundingClientRect();
+  const t = p.style.transform; p.style.transform = "";
+  const r = p.getBoundingClientRect(); p.style.transform = t;
+  return `${b.left + b.width / 2 - r.left}px ${f.bottom - r.top}px`;
+}
+function render() {
+  const el = $("sosPanel");
+  el.style.opacity = String(Math.min(1, Math.max(0, pop.o)));
+  el.style.transform = Math.abs(pop.s - 1) < 0.001 ? "" : `scale(${pop.s})`;
+  el.style.pointerEvents = pop.to ? "" : "none";
+}
+function step(t) {
+  const dt = Math.min(0.032, (t - pop.last) / 1000 || 0.016); pop.last = t;
+  const w = (2 * Math.PI) / SPRING.response, k = 2 * SPRING.damping * w;
+  pop.sv += (-w * w * (pop.s - pop.ts) - k * pop.sv) * dt; pop.s += pop.sv * dt;
+  pop.ov += (-w * w * (pop.o - pop.to) - k * pop.ov) * dt; pop.o += pop.ov * dt;
+  if (Math.abs(pop.s - pop.ts) < 0.001 && Math.abs(pop.sv) < 0.01 && Math.abs(pop.o - pop.to) < 0.001 && Math.abs(pop.ov) < 0.01) {
+    pop.s = pop.ts; pop.o = pop.to; pop.sv = pop.ov = 0; pop.raf = 0; render();
+    if (!pop.to) { $("sosPanel").hidden = true; document.body.classList.remove("sos-open"); document.documentElement.style.minHeight = ""; }
+    return;
+  }
+  render();
+  pop.raf = requestAnimationFrame(step);
+}
+function popTo(show) {
+  const el = $("sosPanel");
+  if (show && el.hidden) {
+    el.hidden = false; $("sosInfo").hidden = true;
+    window.__sign?.place?.(el);
+    pop.s = POP_SCALE.from; pop.o = 0; pop.sv = pop.ov = 0;
+  }
+  pop.ts = show ? 1 : POP_SCALE.to; pop.to = show ? 1 : 0;
+  el.style.transformOrigin = origin();
+  if (!pop.raf) { pop.last = performance.now(); pop.raf = requestAnimationFrame(step); }
+}
+function openPanel(p) {
+  open = true;
+  document.body.classList.add("sos-open");
+  popTo(true);
+  const top = $("form").getBoundingClientRect().top;   // 카메라 팝업처럼 입력창이 화면 위쪽(16px)에 오도록
+  if (Math.abs(top - 16) > 2) {
+    scrollBack ??= scrollY;
+    document.documentElement.style.minHeight = `${Math.ceil(scrollY + top - 16 + innerHeight)}px`;
+    requestAnimationFrame(() => { if (open) window.__sign?.springScroll?.(scrollY + $("form").getBoundingClientRect().top - 16); });
+  }
+  refresh(p);
+}
+function closePanel() {
+  if (!open) return;
+  open = false;
+  popTo(false);
+  if (scrollBack != null) { window.__sign?.springScroll?.(scrollBack); scrollBack = null; }
+}
+let asking = false;
+$("sosBtn").onclick = async () => {
+  if (open) return closePanel();
+  if (asking) return;
+  if (pos && Date.now() - posAt < 120000) { openPanel(pos); getPos().catch(() => {}); return; }   // 방금 받은 위치가 있으면 바로
+  asking = true;
+  try { openPanel(await getPos()); }          // 위치 권한을 묻고, 허락하면 팝업 (거절하면 열지 않음)
+  catch { /* 거절·실패: 열지 않음 */ }
+  finally { asking = false; }
+};
+// 팝업 밖을 누르면 그 순간 닫힘. 누른 곳이 버튼이면 그 버튼도 그대로 눌림 (카메라·마이크·예시 질문 등)
+document.addEventListener("click", (e) => {
+  if (!open || $("sosPanel").contains(e.target) || $("sosBtn").contains(e.target)) return;
+  closePanel();
+  if (!e.target.closest?.("button, a, [role=button]")) { e.preventDefault(); e.stopPropagation(); }
+}, true);
+addEventListener("resize", () => { if (open) { window.__sign?.place?.($("sosPanel")); map?.relayout(); } });
