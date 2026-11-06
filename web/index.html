@@ -261,7 +261,7 @@
     <!-- SOS 팝업: 지도(위) + 가장 가까운 응급실 정보(아래). 모양은 카메라 팝업과 같음 (sign/popup.css), 동작 sos.js -->
     <div class="panel" id="sosPanel" hidden>
       <section class="map" id="sosMap" aria-label="응급실까지 경로 지도"></section>
-      <section class="box info" id="sosInfo" aria-live="polite" hidden></section>
+      <div id="sosInfo" aria-live="polite" hidden></div>   <!-- 1순위·2순위 응급실 칸 (누르면 지도 경로가 그 병원으로) -->
     </div>
     <div class="examples" id="examples"></div>
   </section>

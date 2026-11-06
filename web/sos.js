@@ -76,11 +76,9 @@ function drawMap(p, d) {
   } else map.setCenter(here);
 }
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-function showInfo(d, err) {
-  const box = $("sosInfo");
-  const er = d && d.er;
-  if (err || !er) { box.innerHTML = `<p>응급실 정보를 불러오지 못했습니다.</p>`; box.hidden = false; return; }
-  const rt = d.route;
+let shown = null, sel = 0, lastPos = null;   // 지금 보이는 결과, 지도에 경로를 그린 병원(0: 1순위, 1: 2순위)
+function erBox(x, i) {
+  const er = x.er, rt = x.route;
   const km = ((rt && rt.distance != null ? rt.distance / 1000 : er.km) || 0).toFixed(1);
   const bed = er.beds == null ? "" : er.beds > 0 ? `응급실 남은 병상 ${er.beds}` : "응급실 병상 없음";
   const tel = er.er_tel || er.tel;
@@ -88,13 +86,30 @@ function showInfo(d, err) {
   const chip = (t) => `<span class="chip">${esc(t)}</span>`;
   const chips = [rt && rt.duration != null ? chip(`자동차 ${Math.max(1, Math.round(rt.duration / 60))}분`) : "", chip(`${km}km`),
     bed ? chip(bed) : "", tel ? `<a class="chip" href="tel:${esc(tel.replace(/[^0-9+]/g, ""))}">${esc(tel)}</a>` : ""].filter(Boolean);
-  box.innerHTML = `<p class="name">${esc(er.name)}</p><div class="grid">${chips.join("")}</div>`;
-  box.hidden = false;
+  return `<section class="box info" data-i="${i}"><p class="name">${esc(er.name)}</p><div class="grid">${chips.join("")}</div></section>`;
 }
+function showInfo(d, err) {
+  const wrap = $("sosInfo");
+  const list = d ? (d.ers && d.ers.length ? d.ers : d.er ? [{ er: d.er, route: d.route }] : []) : [];
+  if (err || !list.length) { wrap.innerHTML = `<section class="box info"><p>응급실 정보를 불러오지 못했습니다.</p></section>`; wrap.hidden = false; return; }
+  if (shown !== d) { shown = d; sel = 0; }
+  wrap.innerHTML = list.map(erBox).join("");
+  wrap.hidden = false;
+}
+// 응급실 칸을 누르면 위 지도의 경로가 그 병원으로 (1순위 ↔ 2순위)
+$("sosInfo").addEventListener("click", (e) => {
+  const b = e.target.closest?.(".info[data-i]");
+  if (!b || !shown || !lastPos) return;
+  const i = +b.dataset.i, list = shown.ers || [];
+  if (!list[i] || i === sel) return;
+  sel = i;
+  drawMap(lastPos, list[i]);
+});
 async function refresh(p) {
   if (!p) return;                              // 위치가 아직이면 지도·정보는 위치가 나오면 그림
   drawMap(p, result && resultFor === `${p.lat.toFixed(3)},${p.lng.toFixed(3)}` ? result : null);
-  try { const d = await fetchNearest(p); if (open) { showInfo(d); drawMap(p, d); } }
+  lastPos = p;
+  try { const d = await fetchNearest(p); if (open) { showInfo(d); drawMap(p, (d.ers || [])[sel] || d); } }
   catch { if (open) showInfo(null, true); }
 }
 
@@ -127,7 +142,7 @@ function step(t) {
 function popTo(show) {
   const el = $("sosPanel");
   if (show && el.hidden) {
-    el.hidden = false; $("sosInfo").hidden = true;
+    el.hidden = false; $("sosInfo").hidden = true; shown = null;   // 다시 열면 1순위부터
     window.__sign?.place?.(el);
     pop.s = POP_SCALE.from; pop.o = 0; pop.sv = pop.ov = 0;
   }
