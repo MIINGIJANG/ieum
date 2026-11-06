@@ -150,15 +150,15 @@ async function startCamera() {
   if (stream || starting) return;
   starting = true; $("loadBox").hidden = true; $("start").disabled = true;
   try {
-    const cam = navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: "user" }, audio: false });
-    await prepare();
-    const s = await cam;
+    // 카메라 화면은 받는 즉시 보여 줌 (인식 모델 준비를 기다리지 않음). 손 인식은 모델이 준비되면 시작
+    const s = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: "user" }, audio: false });
     if (!panelOpen) { s.getTracks().forEach((t) => t.stop()); return; }   // 켜지는 동안 팝업을 닫았으면 끔
     stream = s;
     const v = $("video");
     v.srcObject = stream;
     await v.play();
-    $("stop").hidden = false;
+    await prepare();
+    if (stream !== s) return;                                             // 준비하는 동안 꺼졌으면 그대로
     cleaner.reset(); seg.reset(); win.reset();
     raf = requestAnimationFrame(loop);
   } catch (e) {
@@ -171,7 +171,7 @@ function stopCamera() {
   if (stream) stream.getTracks().forEach((t) => t.stop());
   stream = null; $("video").srcObject = null;
   const cv = $("overlay"); cv.getContext("2d").clearRect(0, 0, cv.width, cv.height);   // 꺼지면 손 선도 지움
-  $("stop").hidden = true; $("loadBox").hidden = false; $("start").disabled = false;
+  $("loadBox").hidden = false; $("start").disabled = false;
 }
 
 // ---------------- 낱말 · 질문 ----------------
@@ -402,7 +402,6 @@ function showWords() {
   wordsAnim.onfinish = () => { el.style.overflow = ""; wordsAnim = null; };
 }
 $("start").onclick = startCamera;   // 권한을 거절했거나 실패했을 때만 보이는 다시 켜기
-$("stop").onclick = stopCamera;
 /** 처음 상태로: 알아들은 낱말·고른 낱말·질문 블럭을 모두 비움 (카메라 칸만 남음) */
 function resetWords() {
   items.length = 0; selOrder = 0; win.lastCommitted = "";
