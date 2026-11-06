@@ -174,50 +174,44 @@ function chosen() {
 }
 function renderWords() {
   const ch = chosen();
-  $("words").innerHTML = items.map((it, i) => `<span class="chip${it.confident ? "" : " unsure"}"><button class="w" data-i="${i}" title="${it.confident ? "" : "확실하지 않아요 — 눌러서 후보 확인"}">${esc(word(ch[i]))}${it.confident ? "" : "?"}</button><button class="x" data-x="${i}" aria-label="지우기">✕</button></span>`).join("")
+  $("words").innerHTML = items.map((it, i) => `<span class="chip${it.confident ? "" : " unsure"}${it.sel ? " sel" : ""}"><button class="w" data-i="${i}">${esc(word(ch[i]))}${it.confident ? "" : "?"}</button><button class="x" data-x="${i}" aria-label="지우기">✕</button></span>`).join("")
     || `<span class="empty">수어를 하면 여기에 낱말이 쌓입니다</span>`;
-  $("alts").hidden = true;
   suggest(ch);
 }
+// 낱말을 누르면 고르기/풀기 (고른 순서대로 질문을 찾음)
+let selOrder = 0;
 $("words").onclick = (e) => {
   const x = e.target.closest("[data-x]"), w = e.target.closest("[data-i]");
   if (x) { items.splice(+x.dataset.x, 1); win.lastCommitted = ""; renderWords(); return; }
   if (w) {
-    const i = +w.dataset.i;
-    $("alts").hidden = false;
-    $("alts").innerHTML = `<span>다른 후보:</span>` + items[i].cands.map((c) => `<button data-r="${i}" data-l="${esc(c.label)}">${esc(word(c.label))} <small>${Math.round(c.p * 100)}%</small></button>`).join("");
+    const i = +w.dataset.i, it = items[i];
+    if (!it.sel) { it.label = chosen()[i]; it.locked = true; }   // 고른 낱말은 뒤에 낱말이 더 들어와도 바뀌지 않게
+    it.sel = it.sel ? 0 : ++selOrder; renderWords();
   }
 };
-$("alts").onclick = (e) => {
-  const b = e.target.closest("[data-r]");
-  if (!b) return;
-  const it = items[+b.dataset.r];
-  it.label = b.dataset.l; it.locked = true; it.confident = true;   // 사용자가 고른 낱말은 그대로
-  renderWords();
-};
-$("clear").onclick = () => { items.length = 0; win.lastCommitted = ""; renderWords(); $("answer").hidden = true; };
+$("clear").onclick = () => { items.length = 0; win.lastCommitted = ""; renderWords(); };
 
 fetch(API + "examples").then((r) => r.json()).then((x) => { examples = [...new Set([...x.map((e) => e.question), ...examples])]; renderWords(); }).catch(() => {});
 domainReady.then(() => { examples = [...new Set([...examples, ...((domain && domain.questions) || [])])]; renderWords(); });
+/** 고른 낱말로 질문 블럭: 비슷한 질문 + 맨 뒤에 고른 낱말을 이어 붙인 블럭 (항상 있음) */
 function suggest(ch) {
-  const ws = docWords(ch.map(word), domain), box = $("suggest");
-  if (!ws.length) { box.innerHTML = ""; return; }
-  box.innerHTML = rankQuestions(ws, examples).map(([, q]) => `<button class="q" data-q="${esc(q)}">${esc(q)}</button>`).join("")
-    + `<button class="q direct" data-q="${esc(ws.join(" "))}">낱말로 바로 묻기: “${esc(ws.join(" "))}”</button>`;
+  const picked = items.map((it, i) => [it.sel, word(ch[i])]).filter(([s]) => s).sort((a, b) => a[0] - b[0]).map(([, w]) => w);
+  const box = $("suggest");
+  if (!picked.length) { box.innerHTML = ""; return; }
+  const joined = picked.join(" ");
+  const qs = rankQuestions(docWords(picked, domain), examples).map(([, q]) => q).filter((q) => q !== joined);
+  box.innerHTML = [...qs, joined].map((q) => `<button class="q" data-q="${esc(q)}">${esc(q)}</button>`).join("");
 }
-$("suggest").onclick = async (e) => {
+// 질문 블럭을 누르면 팝업이 닫히고 입력창에 들어감 (보내기는 사용자가)
+$("suggest").onclick = (e) => {
   const b = e.target.closest("[data-q]");
   if (!b) return;
-  const q = b.dataset.q, a = $("answer");
-  a.hidden = false; a.innerHTML = `<p>“${esc(q)}” 답을 찾는 중…</p>`;
-  try {
-    const d = await (await fetch(API + "query", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: q }) })).json();
-    const blocks = (d.sentences || []).flatMap((s) => (s.words || []).filter(Boolean));
-    a.innerHTML = `<p class="q">질문: ${esc(q)}</p><p>${esc(d.answer_text || "관련 내용을 찾지 못했습니다.")}</p>`
-      + (blocks.length ? `<p class="blocks">수어 블록: ${blocks.map(esc).join(" · ")}</p>` : "");
-  } catch { a.innerHTML = `<p>서버에 묻지 못했습니다.</p>`; }
+  $("q").value = b.dataset.q;
+  closePanel();
+  $("q").focus();
 };
-
+function closePanel() { if (stream) stopCamera(); $("panel").hidden = true; }
+$("camBtn").onclick = () => { if ($("panel").hidden) $("panel").hidden = false; else closePanel(); };
 
 $("start").onclick = startCamera;
 $("stop").onclick = stopCamera;
