@@ -1,7 +1,7 @@
 // 카메라 수어 입력 화면 (시험판, 본 화면과 따로). 공통 부분은 core.js, 관절 점 엔진은 engines.js.
 // 영상은 기기 밖으로 나가지 않음 (서버에는 고른 질문 글자만).
 import { DEFAULTS, FrameCleaner, Recognizer, Segmenter, WindowCommitter, base, classify, docWords, fromB64,
-  frameToFeatures, mentions, rankQuestions, rerank } from "./core.js";
+  frameToFeatures, mentionAt, mentions, rankQuestions, rerank } from "./core.js";
 import { createEngine } from "./engines.js";
 
 const $ = (id) => document.getElementById(id);
@@ -212,14 +212,39 @@ function suggest(ch) {
   const picked = items.map((it, i) => [it.sel, word(ch[i])]).filter(([s]) => s).sort((a, b) => a[0] - b[0]).map(([, w]) => w);
   const box = $("suggest");
   if (!picked.length) { rollTo(box, ""); return; }
-  const joined = picked.join(" ");
   // 고른 낱말을 많이 담은 질문부터 (낱말마다 문서 말·활용형도 인정: 입다 → 착용·입는), 같으면 드문 말 점수 순
   const groups = picked.map((w) => docWords([w], domain));
   const covered = (q) => groups.filter((g) => g.some((w) => mentions(q, w))).length;
-  const qs = rankQuestions(docWords(picked, domain), examples, Infinity)
-    .map(([sc, q]) => [covered(q), sc, q]).filter(([c]) => c > 0)
-    .sort((a, b) => b[0] - a[0] || b[1] - a[1]).slice(0, 3).map(([, , q]) => q).filter((q) => q !== joined);
+  const ranked = rankQuestions(docWords(picked, domain), examples, Infinity)
+    .map(([sc, q]) => [covered(q), sc, q]).filter(([c]) => c > 0).sort((a, b) => b[0] - a[0] || b[1] - a[1]);
+  const joined = orderWords(picked, groups, ranked.filter(([c]) => c === picked.length).map(([, , q]) => q)).join(" ");
+  // 보여 줄 질문 3개는 그대로 고르고, 화면에는 긴 것부터 (맨 아래는 낱말을 이어 붙인 블럭)
+  const qs = ranked.slice(0, 3).map(([, , q]) => q).filter((q) => q !== joined).sort((a, b) => textWidth(b) - textWidth(a));
   rollTo(box, [...qs, joined].map((q) => `<button class="q" data-q="${esc(q)}">${esc(q)}</button>`).join(""));
+}
+/** 고른 낱말을 말이 되는 순서로: 우리 질문들에서 두 낱말이 어느 쪽이 먼저 나오는지 세어 정함
+ *  (고른 낱말을 모두 담은 질문은 크게 침). 질문에 같이 나온 적이 없으면 이름씨 → 묻는 말 → '~다'·'~하다' 말 순, 그다음 고른 순서 */
+const ASK = new Set(["언제", "어디", "어떻게", "무엇", "뭐", "왜", "누구", "몇", "얼마"]);
+const DOING = new Set(["확인", "교체", "착용", "사용", "세척", "보관", "점검", "관리", "조심", "주의"]);   // '~하다' 로 끝을 맺는 말 → 뒤로
+function orderWords(picked, groups, full) {
+  if (picked.length < 2) return picked;
+  const pos = (q, g) => { const at = g.map((w) => mentionAt(q, w)).filter((i) => i >= 0); return at.length ? Math.min(...at) : -1; };
+  const fullSet = new Set(full);
+  const score = picked.map(() => 0);
+  for (const q of examples) {
+    const p = groups.map((g) => pos(q, g)), wgt = fullSet.has(q) ? 10 : 1;
+    for (let a = 0; a < picked.length; a++) for (let b = 0; b < picked.length; b++)
+      if (a !== b && p[a] >= 0 && p[b] >= 0 && p[a] < p[b]) score[a] += wgt;   // a 가 b 보다 먼저 나오면 a 점수
+  }
+  const kind = (w) => (ASK.has(w) ? 1 : w.endsWith("다") || DOING.has(w) ? 2 : 0);
+  return picked.map((w, i) => [w, i]).sort(([wa, a], [wb, b]) => score[b] - score[a] || kind(wa) - kind(wb) || a - b).map(([w]) => w);
+}
+/** 질문 블럭 글자 폭 (화면 글꼴 그대로 잼) */
+let measureCtx = null;
+function textWidth(t) {
+  measureCtx ??= document.createElement("canvas").getContext("2d");
+  measureCtx.font = getComputedStyle($("suggest")).font;
+  return measureCtx.measureText(t).width;
 }
 // 질문 블럭이 생기거나 바뀔 때: 롤러블 화면처럼 아래로 늘어나며(줄어들며) 드러남. 움직이는 중에 또 바뀌면 지금 높이에서 이어감
 let rollAnim = null;

@@ -230,10 +230,13 @@ export function docWords(ws, domain) {
 }
 /** 질문에 낱말이 나오는지: 그대로, 또는 '~다' 말은 활용형으로 (높다 → 높은·높아, 입다 → 입는·입어) */
 const FORMS = ["은", "는", "을", "어", "아", "고", "게", "지", "다", "으"];
-export function mentions(q, w) {
-  if (q.includes(w)) return true;
-  if (w.length >= 2 && w.endsWith("다")) { const stem = w.slice(0, -1); return FORMS.some((e) => q.includes(stem + e)); }
-  return false;
+export function mentions(q, w) { return mentionAt(q, w) >= 0; }
+/** 질문 안에서 낱말이 처음 나오는 자리 (없으면 -1) */
+export function mentionAt(q, w) {
+  const at = [q.indexOf(w)];
+  if (w.length >= 2 && w.endsWith("다")) { const stem = w.slice(0, -1); for (const e of FORMS) at.push(q.indexOf(stem + e)); }
+  const ok = at.filter((i) => i >= 0);
+  return ok.length ? Math.min(...ok) : -1;
 }
 const bigrams = (s) => { s = s.replace(/\s/g, ""); const out = new Set(); for (let i = 0; i < s.length - 1; i++) out.add(s.slice(i, i + 2)); return out; };
 /** 낱말 → 비슷한 질문 (드문 말을 무겁게). [[점수, 질문]...] */
