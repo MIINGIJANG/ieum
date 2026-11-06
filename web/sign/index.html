@@ -42,17 +42,25 @@
   .chip.unsure .w { opacity: .7; }
   #words { display: flex; flex-wrap: wrap; gap: 6px; min-height: 2.2em; align-items: center; }
   .empty { opacity: .6; }
-  #alts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
   #suggest { display: grid; gap: 6px; }
   #suggest .q { text-align: left; }
-  #suggest .direct { opacity: .8; }
-  #answer .q { font-weight: 500; }
-  #answer .blocks { opacity: .8; font-size: .95rem; }
+  /* 시험용: 본 화면 입력창 흉내 (질문 블럭을 누르면 팝업이 닫히고 여기에 들어감, 보내기는 사용자가) */
+  form.query { position: relative; }
+  form.query input { width: 100%; padding: 15px 56px 15px 20px; border: 0; border-radius: 999px; background: var(--box); color: var(--ink); font: inherit; font-size: 1rem; }
+  form.query input::placeholder { color: var(--ink); opacity: 1; }
+  form.query input:focus { outline: none; }
+  form.query #camBtn { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); width: 32px; height: 40px; padding: 0; background: transparent; display: grid; place-items: center; }
+  form.query #camBtn svg { width: 22px; height: 22px; }
+  #words .chip.sel .w { background: var(--strong); color: var(--on); }   /* 고른 낱말 */
 </style>
 </head>
 <body>
 <main>
-<div class="panel">
+<form class="query" id="form" onsubmit="return false">
+  <input id="q" autocomplete="off" placeholder="어떤 도움을 드릴까요?" aria-label="질문">
+  <button id="camBtn" type="button" aria-label="카메라로 수어 입력"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5a2 2 0 0 1 2-2h2l1.5-2h6l1.5 2h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.6"/></svg></button>
+</form>
+<div class="panel" id="panel">
   <p class="notice">두 손으로 수어를 표현해 주세요.</p>
   <section class="cam">
     <video id="video" playsinline muted></video>
@@ -67,13 +75,11 @@
   </section>
 
   <section class="box">
-    <div class="row"><h2>알아들은 낱말</h2> <small>낱말을 누르면 다른 후보로 바꿀 수 있어요 (? 는 확실하지 않은 낱말)</small> <button id="clear">모두 지우기</button></div>
+    <div class="row"><h2>알아들은 낱말</h2> <small>낱말을 누르면 그 낱말로 질문을 찾아요</small> <button id="clear">모두 지우기</button></div>
     <div id="words"></div>
-    <div id="alts" hidden></div>
     <div id="suggest"></div>
   </section>
 
-  <section class="box" id="answer" hidden></section>
 </div>
 </main>
 <script type="module" src="./app.js"></script>
