@@ -182,7 +182,7 @@ function renderWords() {
     it.k ??= ++chipSeq;
     return `<span class="chip${it.sel ? " sel" : ""}" data-k="${it.k}"><button class="w" data-i="${i}">${esc(word(ch[i]))}</button></span>`;   // 확실하지 않은 낱말도 따로 표시하지 않음
   }).join("");
-  showWords(items.length > 0);   // 알아들은 낱말이 없으면 카메라 칸만
+  if (items.length) showWords();   // 알아들은 낱말이 생기면 단어 칸이 내려옴
   for (const c of box.querySelectorAll(".chip")) {   // 예전 자리에서 새 자리로 (FLIP)
     const r0 = before.get(c.dataset.k); if (!r0) continue;
     const r1 = c.getBoundingClientRect(), dx = r0.left - r1.left, dy = r0.top - r1.top;
@@ -361,11 +361,9 @@ $("camBtn").onclick = () => (panelOpen ? closePanel() : openPanel());
 
 // 단어 칸(안내 문구 포함): 처음 나타날 때 질문 칸처럼 아래로 늘어나며 내려옴
 let wordsAnim = null;
-function showWords(on) {
+function showWords() {
   const el = $("wordsWrap");
-  if (on === !el.hidden) return;
-  if (wordsAnim) { wordsAnim.cancel(); wordsAnim = null; }
-  if (!on) { el.hidden = true; return; }
+  if (!el.hidden) return;
   el.hidden = false;
   const h = el.getBoundingClientRect().height;
   el.style.overflow = "hidden";
@@ -382,6 +380,8 @@ $("stop").onclick = stopCamera;
 function resetWords() {
   items.length = 0; selOrder = 0; win.lastCommitted = "";
   const box = $("suggest"); box.innerHTML = ""; box.dataset.html = "";
+  if (wordsAnim) { wordsAnim.cancel(); wordsAnim = null; }
+  $("wordsWrap").hidden = true;   // 팝업이 열리기 전(안 보일 때)에만 비우므로 움직임 없이 숨김
   renderWords();
 }
 // 시험용 예시 단어 (본 화면에 붙일 때는 지움)
@@ -390,5 +390,22 @@ function seedExample() {
     items.push({ label: l, cands: [{ label: l, p: 1 }], confident: true, locked: true });
 }
 renderWords();
+// 안내 문구 글자 위·아래 빈칸 재기: 줄 높이 안에서 실제 글자(잉크)가 차지하지 않는 위·아래 높이 → CSS --nt·--nb
+//  기준선 위치는 화면에서 직접 재고(높이 0 칸을 글자 줄에 붙여 봄), 글자 높이는 같은 글꼴로 그려서 잼
+function measureNotice() {
+  const el = document.querySelector(".notice"); if (!el) return;
+  const cs = getComputedStyle(el), fs = parseFloat(cs.fontSize);
+  const probe = document.createElement("span"); probe.style.cssText = "display:inline-block;width:0;height:0;vertical-align:baseline";
+  el.appendChild(probe);
+  const r = el.getBoundingClientRect(), base = probe.getBoundingClientRect().bottom - r.top;
+  probe.remove();
+  const g = document.createElement("canvas").getContext("2d"); g.font = `${cs.fontWeight} ${fs}px ${cs.fontFamily}`;
+  const m = g.measureText(el.textContent);
+  const top = Math.max(0, base - m.actualBoundingBoxAscent), bottom = Math.max(0, r.height - (base + m.actualBoundingBoxDescent));
+  document.documentElement.style.setProperty("--nt", `${top.toFixed(2)}px`);
+  document.documentElement.style.setProperty("--nb", `${bottom.toFixed(2)}px`);
+}
+measureNotice();
+document.fonts?.ready.then(measureNotice);
 window.__sign = { opts, items, renderWords, seedExample, draw, docWords: (ws) => docWords(ws, domain), rec, addItem,
   classify: (f) => classify(rec, f, opts, domainIdx, protos) };
