@@ -40,6 +40,17 @@ app = FastAPI(title="이음 — 산업안전 수어 안내 API", version="0.4.0"
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.add_middleware(GZipMiddleware, minimum_size=1000)   # 아바타(6MB→2.5MB)·동작 JSON 압축 → 휴대폰 로딩 빠르게
 
+
+@app.middleware("http")
+async def _sign_no_stale(request, call_next):
+    """카메라 수어 입력(/sign/) 화면 파일은 매번 새 버전인지 확인 (브라우저가 예전 app.js 를 그대로 쓰면 화면 틀과 코드가 섞임).
+    바뀌지 않았으면 304 로 바로 끝나서 느려지지 않음. 큰 모델 파일(.onnx·.task·.wasm)은 그대로 둠."""
+    res = await call_next(request)
+    p = request.url.path
+    if p.startswith("/sign/") and (p.endswith("/") or p.rsplit(".", 1)[-1] in ("html", "js", "css", "json")):
+        res.headers["Cache-Control"] = "no-cache"
+    return res
+
 INDEX = os.environ.get("KSL_INDEX", "checkpoints/kosha_index.pkl")
 
 
