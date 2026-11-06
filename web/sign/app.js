@@ -182,7 +182,7 @@ function renderWords() {
     it.k ??= ++chipSeq;
     return `<span class="chip${it.sel ? " sel" : ""}" data-k="${it.k}"><button class="w" data-i="${i}">${esc(word(ch[i]))}</button></span>`;   // 확실하지 않은 낱말도 따로 표시하지 않음
   }).join("");
-  $("wordsNotice").hidden = $("wordsBox").hidden = !items.length;   // 알아들은 낱말이 없으면 카메라 칸만
+  showWords(items.length > 0);   // 알아들은 낱말이 없으면 카메라 칸만
   for (const c of box.querySelectorAll(".chip")) {   // 예전 자리에서 새 자리로 (FLIP)
     const r0 = before.get(c.dataset.k); if (!r0) continue;
     const r1 = c.getBoundingClientRect(), dx = r0.left - r1.left, dy = r0.top - r1.top;
@@ -334,21 +334,36 @@ function closePanel() {
 }
 $("camBtn").onclick = () => (panelOpen ? closePanel() : openPanel());
 
-$("start").onclick = startCamera;
+// 단어 칸(안내 문구 포함): 처음 나타날 때 질문 칸처럼 아래로 늘어나며 내려옴
+let wordsAnim = null;
+function showWords(on) {
+  const el = $("wordsWrap");
+  if (on === !el.hidden) return;
+  if (wordsAnim) { wordsAnim.cancel(); wordsAnim = null; }
+  if (!on) { el.hidden = true; return; }
+  el.hidden = false;
+  const h = el.getBoundingClientRect().height;
+  el.style.overflow = "hidden";
+  wordsAnim = el.animate([{ height: "0px" }, { height: `${h}px` }], ROLL);
+  wordsAnim.onfinish = () => { el.style.overflow = ""; wordsAnim = null; };
+}
+$("start").onclick = () => {
+  // 시험용: 카메라 켜기를 누르면 수어를 알아들었다고 치고 예시 단어를 넣음 (본 화면에 붙일 때는 지움)
+  if (!items.length) setTimeout(() => { if (!items.length) { seedExample(); renderWords(); } }, 600);
+  startCamera();
+};
 $("stop").onclick = stopCamera;
-/** 처음 상태로: 알아들은 낱말·고른 낱말·질문 블럭을 모두 비움 */
+/** 처음 상태로: 알아들은 낱말·고른 낱말·질문 블럭을 모두 비움 (카메라 칸만 남음) */
 function resetWords() {
   items.length = 0; selOrder = 0; win.lastCommitted = "";
-  seedExample();
   const box = $("suggest"); box.innerHTML = ""; box.dataset.html = "";
   renderWords();
 }
-// 시험용: 카메라로 낱말 몇 개를 이미 알아들은 상태로 시작 (본 화면에 붙일 때는 지움)
+// 시험용 예시 단어 (본 화면에 붙일 때는 지움)
 function seedExample() {
   for (const l of ["보호1", "입다1", "위험1", "높다1", "언제1", "확인1"])
     items.push({ label: l, cands: [{ label: l, p: 1 }], confident: true, locked: true });
 }
-seedExample();
 renderWords();
-window.__sign = { opts, items, renderWords, draw, docWords: (ws) => docWords(ws, domain), rec, addItem,
+window.__sign = { opts, items, renderWords, seedExample, draw, docWords: (ws) => docWords(ws, domain), rec, addItem,
   classify: (f) => classify(rec, f, opts, domainIdx, protos) };
