@@ -250,7 +250,8 @@ function textWidth(t) {
 //     (칸 높이도 함께 늘거나 줄음) → ③ 비워 둔 자리에 새 블럭이 나타남. 도중에 또 바뀌면 지금 모습에서 새로 시작
 let rollAnim = null, rollSeq = 0;
 const ROLL = { duration: 500, easing: "cubic-bezier(.3,.7,.2,1)" };
-const FADE = { duration: 200, easing: "ease-out" };
+const QROLL = { ...ROLL, duration: 300 };   // 질문 칸·질문 블럭은 더 빠르게 (0.5초 → 0.3초)
+const FADE = { duration: 120, easing: "ease-out" };
 const animDone = (a) => a.finished.catch(() => null);
 async function rollTo(el, html) {
   if (el.dataset.html === html) return;
@@ -261,7 +262,7 @@ async function rollTo(el, html) {
   el.style.overflow = "hidden";
   if (!html) {   // 다 풀면: 질문 블럭을 그대로 둔 채 위로 말려 들어간 뒤 비움
     const from = el.getBoundingClientRect().height;
-    rollAnim = el.animate([{ height: `${from}px` }, { height: "0px" }], { ...ROLL, fill: "forwards" });
+    rollAnim = el.animate([{ height: `${from}px` }, { height: "0px" }], { ...QROLL, fill: "forwards" });
     rollAnim.onfinish = () => { el.innerHTML = ""; el.style.overflow = ""; rollAnim.cancel(); rollAnim = null; };
     return;
   }
@@ -281,14 +282,14 @@ async function rollTo(el, html) {
   const to = el.getBoundingClientRect().height;
   const entering = [...el.querySelectorAll("[data-k]")].filter((c) => !before.has(c.dataset.k));
   const moves = [];
-  rollAnim = el.animate([{ height: `${from}px` }, { height: `${to}px` }], ROLL);
+  rollAnim = el.animate([{ height: `${from}px` }, { height: `${to}px` }], QROLL);
   moves.push(animDone(rollAnim));
   if (!first) {
     for (const c of entering) c.style.opacity = "0";     // 새 블럭은 자리가 비워진 뒤에
     for (const c of el.querySelectorAll("[data-k]")) {
       const t0 = before.get(c.dataset.k); if (t0 == null) continue;
       const dy = t0 - c.getBoundingClientRect().top;
-      if (Math.abs(dy) >= 1) moves.push(animDone(c.animate([{ transform: `translateY(${dy}px)` }, { transform: "none" }], ROLL)));
+      if (Math.abs(dy) >= 1) moves.push(animDone(c.animate([{ transform: `translateY(${dy}px)` }, { transform: "none" }], QROLL)));
     }
   }
   await Promise.all(moves);
