@@ -38,9 +38,7 @@
   .cam video, .cam canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }   /* 거울처럼 보이게 */
   .chip { display: inline-flex; border-radius: 8px; overflow: hidden; }
   .chip .w { border-radius: 0; font-weight: 500; padding: 4px 10px; }
-  .chip.unsure .w { opacity: .7; }
   #words { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; }   /* 낱말 가운데 정렬 */
-  .empty { opacity: .6; }
   #suggest .box { gap: 8px; justify-items: center; }   /* 질문 가운데 정렬, 박스는 글자 길이만큼 */
   #suggest .q { text-align: center; max-width: 100%; }
   /* 시험용: 본 화면 입력창 흉내 (질문 블럭을 누르면 팝업이 닫히고 여기에 들어감, 보내기는 사용자가) */
@@ -75,8 +73,8 @@
     <button id="stop" hidden>카메라 끄기</button>
   </section>
 
-  <p class="notice">표현하신 단어를 클릭해 주세요.</p>
-  <section class="box">
+  <p class="notice" id="wordsNotice" hidden>표현하신 단어를 클릭해 주세요.</p>
+  <section class="box" id="wordsBox" hidden>
     <div id="words"></div>
   </section>
   <div id="suggest"></div>

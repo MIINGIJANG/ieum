@@ -180,8 +180,9 @@ function renderWords() {
   box.innerHTML = order.map((i) => {
     const it = items[i];
     it.k ??= ++chipSeq;
-    return `<span class="chip${it.confident ? "" : " unsure"}${it.sel ? " sel" : ""}" data-k="${it.k}"><button class="w" data-i="${i}">${esc(word(ch[i]))}${it.confident ? "" : "?"}</button></span>`;
-  }).join("") || `<span class="empty">수어를 하면 여기에 낱말이 쌓입니다</span>`;
+    return `<span class="chip${it.sel ? " sel" : ""}" data-k="${it.k}"><button class="w" data-i="${i}">${esc(word(ch[i]))}</button></span>`;   // 확실하지 않은 낱말도 따로 표시하지 않음
+  }).join("");
+  $("wordsNotice").hidden = $("wordsBox").hidden = !items.length;   // 알아들은 낱말이 없으면 카메라 칸만
   for (const c of box.querySelectorAll(".chip")) {   // 예전 자리에서 새 자리로 (FLIP)
     const r0 = before.get(c.dataset.k); if (!r0) continue;
     const r1 = c.getBoundingClientRect(), dx = r0.left - r1.left, dy = r0.top - r1.top;
