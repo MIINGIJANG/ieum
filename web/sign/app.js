@@ -216,7 +216,7 @@ const POP_FRAMES = [{ opacity: 0, transform: "translateY(-12px) scale(.97)" }, {
 let popAnim = null, panelOpen = true;
 function openPanel() {
   const p = $("panel");
-  panelOpen = true;
+  panelOpen = true; $("camBtn").classList.add("on");
   if (popAnim) popAnim.cancel();
   p.hidden = false;
   p.style.transformOrigin = "top center";
@@ -226,7 +226,7 @@ function closePanel() {
   if (stream) stopCamera();
   const p = $("panel");
   if (!panelOpen) return;
-  panelOpen = false;
+  panelOpen = false; $("camBtn").classList.remove("on");
   if (popAnim) popAnim.cancel();
   popAnim = p.animate([...POP_FRAMES].reverse(), { duration: 200, easing: "cubic-bezier(.4,0,1,1)", fill: "forwards" });
   popAnim.onfinish = () => { p.hidden = true; popAnim.cancel(); popAnim = null; };

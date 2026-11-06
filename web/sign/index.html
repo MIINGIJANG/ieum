@@ -51,6 +51,7 @@
   form.query input:focus { outline: none; }
   form.query #camBtn { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); width: 32px; height: 40px; padding: 0; background: transparent; display: grid; place-items: center; }
   form.query #camBtn svg { width: 22px; height: 22px; }
+  form.query #camBtn.on { color: #34c759; }   /* 팝업이 떠 있는 동안 카메라 버튼 초록 (마이크 듣는 중 주황처럼 배경 없이 그림만) */
   #words .chip.sel .w { background: var(--strong); color: var(--on); }   /* 고른 낱말 */
 </style>
 </head>
@@ -58,7 +59,7 @@
 <main>
 <form class="query" id="form" onsubmit="return false">
   <input id="q" autocomplete="off" placeholder="어떤 도움을 드릴까요?" aria-label="질문">
-  <button id="camBtn" type="button" aria-label="카메라로 수어 입력"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5a2 2 0 0 1 2-2h2l1.5-2h6l1.5 2h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.6"/></svg></button>
+  <button id="camBtn" class="on" type="button" aria-label="카메라로 수어 입력"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5a2 2 0 0 1 2-2h2l1.5-2h6l1.5 2h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.6"/></svg></button>
 </form>
 <div class="panel" id="panel">
   <p class="notice">두 손으로 수어를 표현해 주세요.</p>
