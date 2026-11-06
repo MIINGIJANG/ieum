@@ -172,10 +172,23 @@ function chosen() {
   }
   return items.map((it) => it.label);
 }
+// 고른 낱말은 고른 순서대로 앞에, 나머지는 알아들은 순서대로 뒤에. 자리가 바뀌면 스르륵 미끄러져 옮겨감
+let chipSeq = 0;
 function renderWords() {
-  const ch = chosen();
-  $("words").innerHTML = items.map((it, i) => `<span class="chip${it.confident ? "" : " unsure"}${it.sel ? " sel" : ""}"><button class="w" data-i="${i}">${esc(word(ch[i]))}${it.confident ? "" : "?"}</button></span>`).join("")
-    || `<span class="empty">수어를 하면 여기에 낱말이 쌓입니다</span>`;
+  const ch = chosen(), box = $("words");
+  const before = new Map([...box.querySelectorAll(".chip")].map((c) => [c.dataset.k, c.getBoundingClientRect()]));
+  const order = items.map((it, i) => i).sort((a, b) => (items[a].sel && items[b].sel ? items[a].sel - items[b].sel : !!items[b].sel - !!items[a].sel || a - b));
+  box.innerHTML = order.map((i) => {
+    const it = items[i];
+    it.k ??= ++chipSeq;
+    return `<span class="chip${it.confident ? "" : " unsure"}${it.sel ? " sel" : ""}" data-k="${it.k}"><button class="w" data-i="${i}">${esc(word(ch[i]))}${it.confident ? "" : "?"}</button></span>`;
+  }).join("") || `<span class="empty">수어를 하면 여기에 낱말이 쌓입니다</span>`;
+  for (const c of box.querySelectorAll(".chip")) {   // 예전 자리에서 새 자리로 (FLIP)
+    const r0 = before.get(c.dataset.k); if (!r0) continue;
+    const r1 = c.getBoundingClientRect(), dx = r0.left - r1.left, dy = r0.top - r1.top;
+    if (Math.abs(dx) + Math.abs(dy) < 1) continue;
+    c.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "none" }], { duration: 450, easing: "cubic-bezier(.3,.7,.2,1)" });
+  }
   suggest(ch);
 }
 // 낱말을 누르면 고르기/풀기 (고른 순서대로 질문을 찾음)
