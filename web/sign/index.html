@@ -39,10 +39,10 @@
   .chip { display: inline-flex; background: var(--bg); border-radius: 8px; overflow: hidden; }
   .chip .w { border-radius: 0; font-weight: 500; padding: 4px 10px; }
   .chip.unsure .w { opacity: .7; }
-  #words { display: flex; flex-wrap: wrap; gap: 6px; min-height: 2.2em; align-items: center; }
+  #words { display: flex; flex-wrap: wrap; gap: 6px; min-height: 2.2em; align-items: center; justify-content: center; }   /* 낱말 가운데 정렬 */
   .empty { opacity: .6; }
-  #suggest { display: grid; gap: 6px; }
-  #suggest .q { text-align: left; }
+  #suggest { display: grid; gap: 6px; justify-items: center; }   /* 질문 가운데 정렬, 박스는 글자 길이만큼 */
+  #suggest .q { text-align: center; max-width: 100%; }
   /* 시험용: 본 화면 입력창 흉내 (질문 블럭을 누르면 팝업이 닫히고 여기에 들어감, 보내기는 사용자가) */
   form.query { position: relative; }
   form.query input { width: 100%; padding: 15px 56px 15px 20px; border: 0; border-radius: 999px; background: var(--box); color: var(--ink); font: inherit; font-size: 1rem; }
