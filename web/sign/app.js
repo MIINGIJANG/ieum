@@ -246,8 +246,10 @@ $("suggest").onclick = (e) => {
   if (!b) return;
   $("q").value = b.dataset.q;
   closePanel();
+  needReset = true;   // 다음에 카메라 버튼으로 열면 처음 상태로
   $("q").focus();
 };
+let needReset = false;
 // 팝업 열기·닫기 (애플 가이드: Designing Fluid Interfaces / HIG Motion)
 //  - 카메라 버튼 아래(입력창 아랫면)에서 커져 나오고, 닫을 때 같은 길로 그리로 들어감
 //  - 튕김 없는 스프링 (damping 1.0, response 0.35초), 열기·닫기 같은 곡선
@@ -288,7 +290,10 @@ function popTo(open) {
   el.style.transformOrigin = popOrigin();
   if (!pop.raf) { pop.last = performance.now(); pop.raf = requestAnimationFrame(popStep); }   // 움직이는 중이면 지금 값·속도 그대로 목표만 바꿈
 }
-function openPanel() { panelOpen = true; $("camBtn").classList.add("on"); popTo(true); }
+function openPanel() {
+  if (needReset) { needReset = false; resetWords(); }
+  panelOpen = true; $("camBtn").classList.add("on"); popTo(true);
+}
 function closePanel() {
   if (stream) stopCamera();
   if (!panelOpen) return;
@@ -299,9 +304,19 @@ $("camBtn").onclick = () => (panelOpen ? closePanel() : openPanel());
 
 $("start").onclick = startCamera;
 $("stop").onclick = stopCamera;
+/** 처음 상태로: 알아들은 낱말·고른 낱말·질문 블럭을 모두 비움 */
+function resetWords() {
+  items.length = 0; selOrder = 0; win.lastCommitted = "";
+  seedExample();
+  const box = $("suggest"); box.innerHTML = ""; box.dataset.html = "";
+  renderWords();
+}
 // 시험용: 카메라로 낱말 몇 개를 이미 알아들은 상태로 시작 (본 화면에 붙일 때는 지움)
-for (const l of ["보호1", "입다1", "위험1", "높다1", "언제1", "확인1"])
-  items.push({ label: l, cands: [{ label: l, p: 1 }], confident: true, locked: true });
+function seedExample() {
+  for (const l of ["보호1", "입다1", "위험1", "높다1", "언제1", "확인1"])
+    items.push({ label: l, cands: [{ label: l, p: 1 }], confident: true, locked: true });
+}
+seedExample();
 renderWords();
 window.__sign = { opts, items, renderWords, draw, docWords: (ws) => docWords(ws, domain), rec, addItem,
   classify: (f) => classify(rec, f, opts, domainIdx, protos) };
