@@ -1,171 +1,176 @@
-// 카메라 수어 입력 (시험판, 본 화면과 따로): 웹캠 → 관절 점(MediaPipe Holistic, 기기 안) → 낱말 인식(ONNX, 기기 안)
-// → 후보에서 골라 고치기 → 비슷한 예시 질문 / 낱말로 바로 묻기 → 이음 서버(/query) 답변.
-// 인식 모델·특징 변환은 팀원 SignBridge(github.com/BioCode67/signbridge) 것을 그대로 씀:
-//   src/recognition/landmarks.ts(특징 155차원) · onnxRecognizer.ts · useRecognizer.ts(확정 규칙) · holistic.ts
-// 영상은 기기 밖으로 나가지 않음 (서버에는 고른 낱말·질문 글자만 감).
-import { FilesetResolver, HolisticLandmarker } from "./lib/mediapipe/vision_bundle.mjs";
-import * as ort from "./lib/ort/ort.wasm.min.mjs";
+// 카메라 수어 입력 화면 (시험판, 본 화면과 따로). 공통 부분은 core.js, 관절 점 엔진은 engines.js.
+// 영상은 기기 밖으로 나가지 않음 (서버에는 고른 질문 글자만).
+import { DEFAULTS, FrameCleaner, Recognizer, Segmenter, WindowCommitter, base, classify, docWords, embed, fromB64,
+  frameToFeatures, rankQuestions, rerank, resampleSequence, toB64 } from "./core.js";
+import { createEngine } from "./engines.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const API = new URL("../", location.href).href;          // 이음 서버 (같은 주소의 위 폴더)
+const API = new URL("../", location.href).href;
+const BASE = "./";
 
-// ---------------- 특징 (팀원 landmarks.ts 를 그대로 옮김 — 바꾸면 모델과 어긋남) ----------------
-const POSE_KEYS = [0, 11, 12, 13, 14, 15, 16, 23, 24];   // 코·양 어깨·팔꿈치·손목·엉덩이
-const FEATURE_DIM = POSE_KEYS.length * 3 + 21 * 3 * 2 + 2; // 155
-const SEQ_LEN = 32;
-
-function frameToFeatures(frame) {
-  const pose = frame.pose;
-  if (pose.length < 25) return null;
-  const lS = pose[11], rS = pose[12];
-  if (!lS || !rS) return null;
-  const cx = (lS.x + rS.x) / 2, cy = (lS.y + rS.y) / 2, cz = (lS.z + rS.z) / 2;
-  const sw = Math.hypot(lS.x - rS.x, lS.y - rS.y);
-  if (sw < 1e-4) return null;
-  const inv = 1 / sw, out = new Float32Array(FEATURE_DIM);
-  let o = 0;
-  const push = (p) => { out[o++] = (p.x - cx) * inv; out[o++] = (p.y - cy) * inv; out[o++] = (p.z - cz) * inv; };
-  for (const i of POSE_KEYS) { if (pose[i]) push(pose[i]); else o += 3; }   // 안 잡힌 점은 0
-  const hasL = frame.leftHand.length === 21, hasR = frame.rightHand.length === 21;
-  if (hasL) for (let i = 0; i < 21; i++) push(frame.leftHand[i]); else o += 63;
-  if (hasR) for (let i = 0; i < 21; i++) push(frame.rightHand[i]); else o += 63;
-  out[o++] = hasL ? 1 : 0; out[o++] = hasR ? 1 : 0;
-  return out;
-}
-function resampleSequence(frames, seqLen = SEQ_LEN) {
-  const out = new Float32Array(seqLen * FEATURE_DIM);
-  if (!frames.length) return out;
-  for (let t = 0; t < seqLen; t++) {
-    const src = frames.length === 1 ? 0 : Math.round((t * (frames.length - 1)) / (seqLen - 1));
-    out.set(frames[src], t * FEATURE_DIM);
-  }
-  return out;
+// ---------------- 설정 (기기에 기억) ----------------
+const opts = { ...DEFAULTS };
+try { Object.assign(opts, JSON.parse(localStorage.getItem("ieum-sign-opts") || "{}")); } catch { /* 저장 못 해도 기본값 */ }
+const OPT_IDS = { engine: "optEngine", worker: "optWorker", segment: "optSegment", domain: "domainOnly", calibrate: "optCalibrate",
+  smooth: "optSmooth", useZ: "optZ", rerank: "optRerank", custom: "optCustom" };
+for (const [k, id] of Object.entries(OPT_IDS)) {
+  const el = $(id);
+  if (!el) continue;
+  if (el.type === "checkbox") el.checked = !!opts[k]; else el.value = opts[k];
+  el.onchange = () => {
+    opts[k] = el.type === "checkbox" ? el.checked : el.value;
+    try { localStorage.setItem("ieum-sign-opts", JSON.stringify(opts)); } catch { /* 무시 */ }
+    if (k === "engine" || k === "worker") restartEngine();
+    if (k === "segment") { seg.reset(); win.reset(); }
+    if (k === "rerank") renderWords();
+  };
 }
 
-// ---------------- 인식 규칙 (팀원 useRecognizer.ts 와 같은 값) ----------------
-const BUFFER_CAP = 48, INFER_MS = 250, MIN_FRAMES = 12, HAND_MIN_RATIO = 0.25, STABLE_HITS = 2, CONF = 0.6;
-
-let landmarker = null, session = null, inputName = "input", labels = [], domain = null, domainIdx = null;
-let stream = null, raf = 0, lastTs = -1, buf = [], inFlight = false, timer = 0;
-let pending = { label: "", hits: 0 }, lastCommitted = "";
-const words = [];                                         // [{label, alts:[...]}]
+// ---------------- 상태 ----------------
+const rec = new Recognizer();
+let domain = null, domainIdx = null, engine = null, worker = null, workerBusy = false, stream = null, raf = 0;
+const cleaner = new FrameCleaner(), seg = new Segmenter(), win = new WindowCommitter();
+const recent = [];                                      // 미리 보기용 최근 1.5초 특징
+const items = [];                                       // 알아들은 낱말 [{label, cands, confident, locked, custom}]
+let recording = null, teaching = null, classifying = false, lastPreview = 0;
 const fpsTimes = [];
 
+// 새 낱말 (기기에 저장 + web/sign/custom_words.json 기본값)
+let protos = [];
+function saveProtos() { try { localStorage.setItem("ieum-sign-protos", JSON.stringify(protos.map((p) => ({ word: p.word, samples: p.samples.map(toB64) })))); } catch { /* 무시 */ } renderProtos(); }
+function loadProtosFrom(list) { return (list || []).map((p) => ({ word: p.word, samples: p.samples.map(fromB64) })); }
+
+const domainReady = fetch(BASE + "domain.json").then((r) => r.json()).then((d) => { domain = d; renderWords(); }).catch(() => null);
+fetch(BASE + "custom_words.json").then((r) => (r.ok ? r.json() : null)).catch(() => null).then((d) => {
+  let mine = [];
+  try { mine = JSON.parse(localStorage.getItem("ieum-sign-protos") || "[]"); } catch { /* 무시 */ }
+  const map = new Map();
+  for (const p of [...loadProtosFrom(d && d.words), ...loadProtosFrom(mine)]) map.set(p.word, p);
+  protos = [...map.values()];
+  renderProtos();
+});
+const word = (l) => (domain && domain.words[l]) || base(l);
+
 // ---------------- 불러오기 ----------------
-// 산업안전 단어 목록·문서 말 바꾸기는 카메라를 켜기 전에도 씀 (낱말 고치기·질문 찾기)
-const domainReady = fetch("./domain.json").then((r) => r.json()).then((d) => { domain = d; renderWords(); }).catch(() => null);
-async function fetchWithProgress(url, onP) {
-  const res = await fetch(url);
-  if (!res.ok || !res.body) throw new Error(`${url} (${res.status})`);
-  const total = Number(res.headers.get("content-length") || 0), reader = res.body.getReader(), chunks = [];
-  let got = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value); got += value.length; onP && onP(got, total);
-  }
-  const out = new Uint8Array(got);
-  let off = 0;
-  for (const c of chunks) { out.set(c, off); off += c.length; }
-  return out;
-}
 function setLoad(text, pct) { $("loadMsg").textContent = text; if (pct != null) $("loadBar").style.width = `${pct}%`; }
-
-async function loadAll() {
-  setLoad("단어 목록 불러오는 중…", 2);
-  const meta = await (await fetch("./models/meta.json")).json();
-  if (meta.feature_dim !== FEATURE_DIM || meta.seq_len !== SEQ_LEN)
-    throw new Error(`특징 규격이 다름: 모델 ${meta.feature_dim}×${meta.seq_len}, 화면 ${FEATURE_DIM}×${SEQ_LEN}`);
-  labels = meta.labels;
+async function loadModels() {
   await domainReady;
-  if (domain) { const set = new Set(domain.labels); domainIdx = labels.map((l, i) => set.has(l) ? i : -1).filter((i) => i >= 0); }
-  $("vocabInfo").textContent = `전체 ${meta.num_classes.toLocaleString()}개 · 산업안전 ${domainIdx ? domainIdx.length : 0}개 (검증 정확도 ${(meta.val_top1 * 100).toFixed(1)}%, 전체 단어 기준)`;
-
-  setLoad("관절 인식 모델 불러오는 중…", 5);
-  const vision = await FilesetResolver.forVisionTasks(new URL("./lib/mediapipe", location.href).href);
-  const taskBytes = await fetchWithProgress("./models/holistic_landmarker.task", (g, t) => t && setLoad("관절 인식 모델 불러오는 중…", 5 + 35 * g / t));
-  for (const delegate of ["GPU", "CPU"]) {
-    try {
-      landmarker = await HolisticLandmarker.createFromOptions(vision, { baseOptions: { modelAssetBuffer: taskBytes, delegate }, runningMode: "VIDEO" });
-      break;
-    } catch (e) { console.warn("Holistic", delegate, "실패", e); }
-  }
-  if (!landmarker) throw new Error("관절 인식 모델을 시작하지 못함");
-
-  setLoad("수어 단어 인식 모델 불러오는 중…", 40);
-  ort.env.wasm.wasmPaths = new URL("./lib/ort/", location.href).href;
-  ort.env.wasm.numThreads = 1;                           // 크로스오리진 격리 없이도 동작하게
-  const model = await fetchWithProgress("./models/model.onnx", (g, t) => t && setLoad("수어 단어 인식 모델 불러오는 중…", 40 + 55 * g / t));
-  session = await ort.InferenceSession.create(model, { executionProviders: ["wasm"], graphOptimizationLevel: "all" });
-  inputName = session.inputNames[0];
-  await session.run({ [inputName]: new ort.Tensor("float32", new Float32Array(SEQ_LEN * FEATURE_DIM), [1, SEQ_LEN, FEATURE_DIM]) });   // 첫 추론 미리
+  setLoad("수어 단어 인식 모델 불러오는 중…", 5);
+  await rec.load(BASE, (g, t) => t && setLoad("수어 단어 인식 모델 불러오는 중…", 5 + 60 * g / t));
+  if (domain) { const s = new Set(domain.labels); domainIdx = rec.labels.map((l, i) => (s.has(l) ? i : -1)).filter((i) => i >= 0); }
+  $("vocabInfo").textContent = `전체 ${rec.meta.num_classes.toLocaleString()}개 · 산업안전 ${domainIdx ? domainIdx.length : 0}개 (검증 정확도 ${(rec.meta.val_top1 * 100).toFixed(1)}%, 전체 단어 기준)`;
+  await startEngine();
   setLoad("준비 완료", 100);
 }
-
-// ---------------- 인식 ----------------
-async function predict(seq) {
-  const out = await session.run({ [inputName]: new ort.Tensor("float32", seq, [1, SEQ_LEN, FEATURE_DIM]) });
-  const logits = out[session.outputNames[0]].data;
-  const idx = $("domainOnly").checked && domainIdx && domainIdx.length ? domainIdx : null;   // 산업안전 단어만이면 그 안에서만 softmax
-  const ids = idx || [...logits.keys()];
-  let max = -Infinity;
-  for (const i of ids) if (logits[i] > max) max = logits[i];
-  let sum = 0;
-  const ex = new Map();
-  for (const i of ids) { const e = Math.exp(logits[i] - max); ex.set(i, e); sum += e; }
-  const top = [...ex.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([i, e]) => ({ label: labels[i], p: e / sum }));
-  return top;
+async function startEngine() {
+  setLoad(`관절 인식 모델 불러오는 중… (${opts.engine === "light" ? "가벼운 모드" : "Holistic"})`, 70);
+  if (opts.worker && typeof Worker !== "undefined" && typeof createImageBitmap !== "undefined") {
+    try {
+      worker = new Worker(new URL("./landmark-worker.js", import.meta.url), { type: "module" });
+      await new Promise((res, rej) => {
+        worker.onmessage = (e) => { if (e.data.type === "ready") res(); else if (e.data.type === "error") rej(new Error(e.data.message)); };
+        worker.onerror = (e) => rej(new Error(e.message || "작업자 스레드 오류"));
+        worker.postMessage({ type: "init", kind: opts.engine, base: BASE });
+      });
+      worker.onmessage = (e) => {
+        workerBusy = false;
+        if (e.data.type === "frame") onFrame(e.data.frame, e.data.ts);
+        else if (e.data.type === "error") console.warn("작업자 스레드:", e.data.message);
+      };
+      $("engineInfo").textContent = `${opts.engine === "light" ? "가벼운 모드" : "Holistic"} · 작업자 스레드`;
+      return;
+    } catch (e) { console.warn("작업자 스레드를 못 써서 화면에서 계산", e); if (worker) worker.terminate(); worker = null; }
+  }
+  engine = await createEngine(opts.engine, BASE);
+  $("engineInfo").textContent = `${opts.engine === "light" ? "가벼운 모드" : "Holistic"} · 화면 스레드`;
 }
-function word(label) { return (domain && domain.words[label]) || label.replace(/[\d#]+$/, ""); }
-
-function tick() {
-  if (buf.length < MIN_FRAMES || !session) return;
-  const withHand = buf.filter((f) => f[FEATURE_DIM - 2] > 0 || f[FEATURE_DIM - 1] > 0).length;
-  const ok = withHand / buf.length >= HAND_MIN_RATIO;
-  $("handHint").hidden = ok;
-  if (!ok) { pending = { label: "", hits: 0 }; $("live").textContent = "—"; return; }   // 손이 없으면 답을 내지 않음
-  if (inFlight) return;
-  inFlight = true;
-  predict(resampleSequence(buf)).then((top) => {
-    $("live").innerHTML = top.slice(0, 3).map((c) => `${esc(word(c.label))} <small>${Math.round(c.p * 100)}%</small>`).join(" · ");
-    const best = top[0];
-    if (best.p >= CONF) {
-      if (pending.label === best.label) pending.hits++; else pending = { label: best.label, hits: 1 };
-      if (pending.hits >= STABLE_HITS && best.label !== lastCommitted) {
-        lastCommitted = best.label;
-        words.push({ label: best.label, alts: top.map((c) => c.label) });
-        renderWords();
-      }
-    } else pending = { label: "", hits: 0 };
-  }).catch((e) => console.error(e)).finally(() => { inFlight = false; });
+async function restartEngine() {
+  if (!rec.session) return;
+  if (worker) { worker.terminate(); worker = null; }
+  if (engine) { engine.close(); engine = null; }
+  cleaner.reset(); seg.reset(); win.reset();
+  await startEngine();
 }
 
+// ---------------- 프레임마다 ----------------
+let lastTs = -1;
 function loop() {
   raf = requestAnimationFrame(loop);
   const v = $("video");
   if (v.readyState < 2) return;
-  const now = performance.now();
-  if (now <= lastTs) return;
-  lastTs = now;
-  let res;
-  try { res = landmarker.detectForVideo(v, now); } catch { return; }
-  const pick = (a) => (a && a.length ? a[0].map((p) => ({ x: p.x, y: p.y, z: p.z })) : []);
-  const frame = { pose: pick(res.poseLandmarks), leftHand: pick(res.leftHandLandmarks), rightHand: pick(res.rightHandLandmarks) };
-  draw(frame, v.videoWidth, v.videoHeight);
-  const f = frameToFeatures(frame);
-  if (f) { buf.push(f); if (buf.length > BUFFER_CAP) buf.shift(); }
-  fpsTimes.push(now); while (fpsTimes.length && now - fpsTimes[0] > 1000) fpsTimes.shift();
-  $("fps").textContent = `${fpsTimes.length}fps · 몸 ${frame.pose.length ? "✓" : "✗"} · 왼손 ${frame.leftHand.length ? "✓" : "✗"} · 오른손 ${frame.rightHand.length ? "✓" : "✗"}`;
+  const ts = performance.now();
+  if (ts <= lastTs) return;
+  if (worker) {
+    if (workerBusy) return;                              // 앞 프레임 계산 중이면 건너뜀 (밀리지 않게)
+    workerBusy = true; lastTs = ts;
+    createImageBitmap(v).then((bm) => worker.postMessage({ type: "frame", bitmap: bm, ts }, [bm])).catch(() => { workerBusy = false; });
+    return;
+  }
+  if (!engine) return;
+  lastTs = ts;
+  let frame;
+  try { frame = engine.detect(v, ts); } catch { return; }
+  onFrame(frame, ts);
 }
 
-function draw(frame, w, h) {
-  const cv = $("overlay");
+const r4 = (v) => Math.round(v * 1e4) / 1e4;
+function onFrame(raw, t) {
+  if (recording) recording.frames.push({ t: Math.round(t - recording.t0), pose: raw.pose.map((p) => [r4(p.x), r4(p.y), r4(p.z), r4(p.visibility ?? 1)]),
+    lh: raw.leftHand.length ? raw.leftHand.map((p) => [r4(p.x), r4(p.y), r4(p.z)]) : null, rh: raw.rightHand.length ? raw.rightHand.map((p) => [r4(p.x), r4(p.y), r4(p.z)]) : null });
+  const frame = opts.smooth ? cleaner.clean(raw, t) : raw;
+  draw(frame);
+  const feat = frameToFeatures(frame, opts.useZ);
+  fpsTimes.push(t); while (fpsTimes.length && t - fpsTimes[0] > 1000) fpsTimes.shift();
+  $("fps").textContent = `${fpsTimes.length}fps · 몸 ${frame.pose.length ? "✓" : "✗"} · 왼손 ${frame.leftHand.length ? "✓" : "✗"} · 오른손 ${frame.rightHand.length ? "✓" : "✗"}`;
+  $("handHint").hidden = !!(frame.leftHand.length || frame.rightHand.length);
+  if (feat) { recent.push({ t, feat }); while (recent.length && t - recent[0].t > 1500) recent.shift(); }
+  if (!rec.session) return;
+
+  if (opts.segment === "motion") {
+    const s = seg.push(frame, feat, t);
+    $("segState").textContent = seg.cur ? "낱말 하는 중…" : seg.waitMove ? "다음 낱말을 하세요" : "손을 올려 시작";
+    if (s) onSegment(s.frames);
+  } else if (!classifying) {
+    classifying = true;
+    win.push(feat, t, (fs) => classify(rec, fs, opts, domainIdx, protos)).then((r) => r && addItem(r)).finally(() => { classifying = false; });
+    $("segState").textContent = "예전 방식 (최근 48프레임)";
+  }
+  if (t - lastPreview > 300 && recent.length >= 8 && !classifying) {   // 미리 보기 (확정 아님)
+    lastPreview = t; classifying = true;
+    classify(rec, recent.map((r) => r.feat), opts, domainIdx, protos)
+      .then((r) => { $("live").innerHTML = r.cands.slice(0, 3).map((c) => `${esc(word(c.label))} <small>${Math.round(c.p * 100)}%</small>`).join(" · "); })
+      .finally(() => { classifying = false; });
+  }
+}
+
+async function onSegment(feats) {
+  if (teaching) {                                        // 새 낱말 가르치기: 예시로 저장
+    const logits = await rec.logits(resampleSequence(feats));
+    teaching.samples.push(embed(logits));
+    $("teachMsg").textContent = `'${teaching.word}' 예시 ${teaching.samples.length}/5`;
+    if (teaching.samples.length >= 5) {
+      protos = protos.filter((p) => p.word !== teaching.word).concat([{ word: teaching.word, samples: teaching.samples }]);
+      $("teachMsg").textContent = `'${teaching.word}' 를 배웠습니다 (예시 5개)`;
+      teaching = null; saveProtos();
+    }
+    return;
+  }
+  addItem(await classify(rec, feats, opts, domainIdx, protos));
+}
+function addItem(r) {
+  items.push({ label: r.label, cands: r.cands.map((c) => ({ label: c.label, p: c.p })), confident: r.confident, locked: false, custom: r.custom });
+  renderWords();
+  if (navigator.vibrate) navigator.vibrate(30);
+}
+
+function draw(frame) {
+  const v = $("video"), cv = $("overlay"), w = v.videoWidth || 640, h = v.videoHeight || 480;
   if (cv.width !== w) { cv.width = w; cv.height = h; }
   const g = cv.getContext("2d");
   g.clearRect(0, 0, w, h);
   const dot = (p, r, c) => { g.fillStyle = c; g.beginPath(); g.arc(p.x * w, p.y * h, r, 0, 7); g.fill(); };
-  for (const i of POSE_KEYS) if (frame.pose[i]) dot(frame.pose[i], 4, "#f39a45");
+  for (const i of [0, 11, 12, 13, 14, 15, 16, 23, 24]) if (frame.pose[i]) dot(frame.pose[i], 4, "#f39a45");
   for (const p of frame.leftHand) dot(p, 3, "#4aa3ff");
   for (const p of frame.rightHand) dot(p, 3, "#44d17a");
 }
@@ -173,14 +178,14 @@ function draw(frame, w, h) {
 async function startCamera() {
   $("start").disabled = true;
   try {
-    if (!session) await loadAll();
+    if (!rec.session) await loadModels();
     stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: "user" }, audio: false });
     const v = $("video");
     v.srcObject = stream;
     await v.play();
     $("loadBox").hidden = true; $("run").hidden = false;
-    buf = []; raf = requestAnimationFrame(loop);
-    timer = setInterval(tick, INFER_MS);
+    cleaner.reset(); seg.reset(); win.reset();
+    raf = requestAnimationFrame(loop);
   } catch (e) {
     console.error(e);
     setLoad(`시작하지 못했습니다: ${e.message || e}`, null);
@@ -188,82 +193,113 @@ async function startCamera() {
   }
 }
 function stopCamera() {
-  cancelAnimationFrame(raf); clearInterval(timer);
+  cancelAnimationFrame(raf);
   if (stream) stream.getTracks().forEach((t) => t.stop());
   stream = null; $("video").srcObject = null;
   $("run").hidden = true; $("loadBox").hidden = false; $("start").disabled = false; $("start").textContent = "카메라 다시 켜기";
 }
 
 // ---------------- 낱말 · 질문 ----------------
+let examples = [];
+function chosen() {
+  if (opts.rerank && items.length > 1) {
+    const path = rerank(items, (domain && domain.questions) || examples, domain);
+    return items.map((it, i) => (it.locked ? it.label : path[i]));
+  }
+  return items.map((it) => it.label);
+}
 function renderWords() {
-  $("words").innerHTML = words.map((w, i) => `<span class="chip"><button class="w" data-i="${i}">${esc(word(w.label))}</button><button class="x" data-x="${i}" aria-label="지우기">✕</button></span>`).join("") || `<span class="empty">수어를 하면 여기에 낱말이 쌓입니다</span>`;
+  const ch = chosen();
+  $("words").innerHTML = items.map((it, i) => `<span class="chip${it.confident ? "" : " unsure"}"><button class="w" data-i="${i}" title="${it.confident ? "" : "확실하지 않아요 — 눌러서 후보 확인"}">${esc(word(ch[i]))}${it.confident ? "" : "?"}</button><button class="x" data-x="${i}" aria-label="지우기">✕</button></span>`).join("")
+    || `<span class="empty">수어를 하면 여기에 낱말이 쌓입니다</span>`;
   $("alts").hidden = true;
-  suggest();
+  suggest(ch);
 }
 $("words").onclick = (e) => {
   const x = e.target.closest("[data-x]"), w = e.target.closest("[data-i]");
-  if (x) { words.splice(+x.dataset.x, 1); lastCommitted = ""; renderWords(); return; }
+  if (x) { items.splice(+x.dataset.x, 1); win.lastCommitted = ""; renderWords(); return; }
   if (w) {
     const i = +w.dataset.i;
     $("alts").hidden = false;
-    $("alts").innerHTML = `<span>다른 후보:</span>` + words[i].alts.map((l) => `<button data-r="${i}" data-l="${esc(l)}">${esc(word(l))}</button>`).join("");
+    $("alts").innerHTML = `<span>다른 후보:</span>` + items[i].cands.map((c) => `<button data-r="${i}" data-l="${esc(c.label)}">${esc(word(c.label))} <small>${Math.round(c.p * 100)}%</small></button>`).join("");
   }
 };
 $("alts").onclick = (e) => {
   const b = e.target.closest("[data-r]");
   if (!b) return;
-  words[+b.dataset.r].label = b.dataset.l;
+  const it = items[+b.dataset.r];
+  it.label = b.dataset.l; it.locked = true; it.confident = true;   // 사용자가 고른 낱말은 그대로
   renderWords();
 };
-$("clear").onclick = () => { words.length = 0; lastCommitted = ""; renderWords(); $("answer").hidden = true; };
+$("clear").onclick = () => { items.length = 0; win.lastCommitted = ""; renderWords(); $("answer").hidden = true; };
 
-let examples = [];
-// 질문 찾기 후보: 서버의 예시 질문 + domain.json 의 질문들 (모범 답안이 있는 질문·개발용 평가 질문)
-fetch(API + "examples").then((r) => r.json()).then((x) => { examples = [...new Set([...x.map((e) => e.question), ...examples])]; suggest(); }).catch(() => {});
-domainReady.then(() => { examples = [...new Set([...examples, ...((domain && domain.questions) || [])])]; suggest(); });
-const bigrams = (s) => { s = s.replace(/\s/g, ""); const out = new Set(); for (let i = 0; i < s.length - 1; i++) out.add(s.slice(i, i + 2)); return out; };
-// 수어 낱말 → 문서에 쓰는 말: 대체 표현을 거꾸로(머리 + 보호 → 안전모), 단어표를 거꾸로(입다 → 착용). 원래 말도 같이 둠
-function docWords(ws) {
-  let out = [...ws];
-  for (const c of (domain && domain.combos) || []) {
-    const at = c.words.map((w) => out.indexOf(w));
-    if (at.every((i) => i >= 0)) { out = out.filter((w) => !c.words.includes(w)); out.splice(Math.min(...at), 0, c.as); }
-  }
-  const map = (domain && domain.to_doc) || {};
-  return [...new Set(out.flatMap((w) => (map[w] ? [map[w], w] : [w])))];
-}
-function suggest() {
-  const ws = docWords(words.map((w) => word(w.label)));
-  const box = $("suggest");
+fetch(API + "examples").then((r) => r.json()).then((x) => { examples = [...new Set([...x.map((e) => e.question), ...examples])]; renderWords(); }).catch(() => {});
+domainReady.then(() => { examples = [...new Set([...examples, ...((domain && domain.questions) || [])])]; renderWords(); });
+function suggest(ch) {
+  const ws = docWords(ch.map(word), domain), box = $("suggest");
   if (!ws.length) { box.innerHTML = ""; return; }
-  // 낱말이 질문에 얼마나 들어 있는지 (말 그대로 1, 두 글자 묶음만 겹치면 0.5).
-  // 드문 말일수록 무겁게 ('언제'처럼 여러 질문에 있는 말보다 '안전모'가 질문을 더 잘 가림)
-  const hit = (q, w) => (q.includes(w) ? 1 : [...bigrams(w)].some((b) => bigrams(q).has(b)) ? 0.5 : 0);
-  const weight = Object.fromEntries(ws.map((w) => [w, Math.log((examples.length + 1) / (1 + examples.filter((q) => q.includes(w)).length)) + 0.1]));
-  const total = ws.reduce((a, w) => a + weight[w], 0) || 1;
-  const scored = examples.map((q) => [ws.reduce((a, w) => a + weight[w] * hit(q, w), 0) / total, q])
-    .filter(([s]) => s > 0).sort((a, b) => b[0] - a[0]).slice(0, 3);
-  box.innerHTML = scored.map(([s, q]) => `<button class="q" data-q="${esc(q)}">${esc(q)}</button>`).join("")
+  box.innerHTML = rankQuestions(ws, examples).map(([, q]) => `<button class="q" data-q="${esc(q)}">${esc(q)}</button>`).join("")
     + `<button class="q direct" data-q="${esc(ws.join(" "))}">낱말로 바로 묻기: “${esc(ws.join(" "))}”</button>`;
 }
 $("suggest").onclick = async (e) => {
   const b = e.target.closest("[data-q]");
   if (!b) return;
-  const q = b.dataset.q;
-  const a = $("answer");
+  const q = b.dataset.q, a = $("answer");
   a.hidden = false; a.innerHTML = `<p>“${esc(q)}” 답을 찾는 중…</p>`;
   try {
     const d = await (await fetch(API + "query", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: q }) })).json();
     const blocks = (d.sentences || []).flatMap((s) => (s.words || []).filter(Boolean));
     a.innerHTML = `<p class="q">질문: ${esc(q)}</p><p>${esc(d.answer_text || "관련 내용을 찾지 못했습니다.")}</p>`
       + (blocks.length ? `<p class="blocks">수어 블록: ${blocks.map(esc).join(" · ")}</p>` : "");
-  } catch (err) {
-    a.innerHTML = `<p>서버에 묻지 못했습니다.</p>`;
+  } catch { a.innerHTML = `<p>서버에 묻지 못했습니다.</p>`; }
+};
+
+// ---------------- 녹화 (관절 점만, 평가용) ----------------
+domainReady.then(() => { for (const q of (domain && domain.questions) || []) $("recQ").insertAdjacentHTML("beforeend", `<option>${esc(q)}</option>`); });
+$("recBtn").onclick = () => {
+  if (!recording) {
+    recording = { version: 1, engine: opts.engine, created: new Date().toISOString(),
+      label: { question: $("recQ").value, words: $("recWords").value.trim() }, t0: performance.now(), frames: [] };
+    $("recBtn").textContent = "녹화 끝"; $("recMsg").textContent = "녹화 중… (영상은 저장하지 않고 관절 점 숫자만)";
+    return;
   }
+  const r = recording; recording = null; delete r.t0;
+  $("recBtn").textContent = "녹화 시작";
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(r)], { type: "application/json" }));
+  a.download = `sign_${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+  a.click();
+  $("recMsg").textContent = `${r.frames.length}프레임 저장 → 평가 페이지(eval.html)에 넣으세요`;
+};
+
+// ---------------- 새 낱말 가르치기 ----------------
+function renderProtos() {
+  $("protoList").innerHTML = protos.length
+    ? protos.map((p) => `<span class="chip"><span class="w">${esc(p.word)} <small>${p.samples.length}</small></span><button class="x" data-del="${esc(p.word)}">✕</button></span>`).join("")
+    : `<span class="empty">아직 없음</span>`;
+}
+$("protoList").onclick = (e) => { const b = e.target.closest("[data-del]"); if (b) { protos = protos.filter((p) => p.word !== b.dataset.del); saveProtos(); } };
+$("teachBtn").onclick = () => {
+  const w = $("teachWord").value.trim();
+  if (!w) { $("teachMsg").textContent = "낱말을 먼저 적으세요"; return; }
+  if (opts.segment !== "motion") { $("teachMsg").textContent = "'손 움직임으로 끊기'를 켜야 예시를 모을 수 있어요"; return; }
+  teaching = { word: w, samples: [] };
+  $("teachMsg").textContent = `'${w}' 수어를 5번 하세요 (한 번 하고 손을 내리기)`;
+};
+$("protoExport").onclick = () => {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify({ words: protos.map((p) => ({ word: p.word, samples: p.samples.map(toB64) })) })], { type: "application/json" }));
+  a.download = "custom_words.json"; a.click();
+};
+$("protoImport").onchange = async (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  const d = JSON.parse(await f.text());
+  for (const p of loadProtosFrom(d.words)) protos = protos.filter((x) => x.word !== p.word).concat([p]);
+  saveProtos();
 };
 
 $("start").onclick = startCamera;
 $("stop").onclick = stopCamera;
 renderWords();
-// 시험용: 카메라 없이 특징 함수·모델을 확인할 수 있게
-window.__sign = { frameToFeatures, resampleSequence, predict, loadAll, FEATURE_DIM, SEQ_LEN, words, renderWords, docWords };
+window.__sign = { opts, items, renderWords, docWords: (ws) => docWords(ws, domain), rec, addItem,
+  classify: (f) => classify(rec, f, opts, domainIdx, protos) };
