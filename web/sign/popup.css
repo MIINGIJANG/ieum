@@ -49,7 +49,8 @@
 #panel #words .chip.sel .w, #panel #suggest .q:active { background: var(--strong); color: var(--on); }
 
 /* SOS 팝업: 지도 칸(카메라 칸과 같은 4:3·같은 폭) 위, 응급실 정보 칸 아래 */
-#sosPanel .map { position: relative; width: var(--cam, 100%); max-width: 100%; justify-self: center; aspect-ratio: 4 / 3; border-radius: 12px; overflow: hidden; background: var(--bg); }
+#sosPanel { grid-template-rows: minmax(0, 1fr) auto; }   /* 팝업 높이는 sos.js 가 화면 아래까지로 정함: 지도 칸이 남는 높이를 채움 */
+#sosPanel .map { position: relative; width: var(--cam, 100%); max-width: 100%; min-height: 0; justify-self: center; border-radius: 12px; overflow: hidden; background: var(--bg); }
 #sosPanel #sosInfo { display: grid; gap: 12px; }   /* 1순위·2순위 칸 사이 12px (지도 칸과도 12px) */
 #sosPanel .info { gap: 8px; text-align: center; justify-items: center; cursor: pointer; }
 #sosPanel .info .name { font-size: 1rem; font-weight: 700; }
