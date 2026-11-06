@@ -217,8 +217,8 @@ function suggest(ch) {
   const joined = orderWords(picked, groups, ranked.filter(([c]) => c === picked.length).map(([, , q]) => q)).join(" ");
   // 보여 줄 질문 3개는 그대로 고르고, 화면에는 긴 것부터 (맨 아래는 낱말을 이어 붙인 블럭)
   const qs = ranked.slice(0, 3).map(([, , q]) => q).filter((q) => q !== joined).sort((a, b) => textWidth(b) - textWidth(a));
-  rollTo(box, `<p class="notice" data-k="notice">표현하신 질문을 클릭해 주세요.</p>`
-    + [...qs.map((q) => [q, q]), [joined, "__joined"]].map(([q, k]) => `<button class="q" data-q="${esc(q)}" data-k="${esc(k)}">${esc(q)}</button>`).join(""));
+  rollTo(box, `<p class="notice" data-k="notice">표현하신 질문을 클릭해 주세요.</p><section class="box">`
+    + [...qs.map((q) => [q, q]), [joined, "__joined"]].map(([q, k]) => `<button class="q" data-q="${esc(q)}" data-k="${esc(k)}">${esc(q)}</button>`).join("") + `</section>`);
 }
 /** 고른 낱말을 말이 되는 순서로: 우리 질문들에서 두 낱말이 어느 쪽이 먼저 나오는지 세어 정함
  *  (고른 낱말을 모두 담은 질문은 크게 침). 질문에 같이 나온 적이 없으면 이름씨 → 묻는 말 → '~다'·'~하다' 말 순, 그다음 고른 순서 */

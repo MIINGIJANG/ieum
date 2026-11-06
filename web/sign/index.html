@@ -19,11 +19,13 @@
   a { color: inherit; }
   .box { background: var(--box); border-radius: 12px; padding: 12px; display: grid; gap: 8px; }
   /* 본 화면에서 카메라 버튼을 누르면 뜰 큰 박스 (기존 박스 색), 안쪽 박스는 마우스 올림 색 */
-  .panel { background: var(--box); border-radius: 14px; padding: 12px; display: grid; gap: 12px; }
-  .panel .box { background: var(--bg); gap: 0; }   /* 팝업 안 낱말 칸: 흰색 (다크 모드는 배경색) */
+  .panel { background: var(--box); border-radius: 14px; padding: 12px; display: grid; }
+  .panel > :not(:first-child) { margin-top: 12px; }   /* 칸 사이 12px (질문 칸은 비었을 때 간격이 남지 않게 안쪽에서 띄움) */
+  .panel .box { background: var(--bg); gap: 0; }   /* 팝업 안 낱말 칸·질문 칸: 흰색 (다크 모드는 배경색) */
   /* 낱말 칸 안내 문구: 위(칸 여백 12px)·아래 12px, 위쪽 안내 문구와 같은 간격 */
-  .panel .box > .notice { margin-bottom: 12px; }
-  #suggest > .notice { padding-top: 12px; margin-bottom: 6px; }   /* 질문 블럭 위 안내: 낱말과 12px, 질문과 12px (+ 질문 사이 6px) */
+  /* 질문 안내 문구 + 질문 칸: 카메라 칸처럼 안내 문구는 칸 밖 위. 없을 때 빈 간격이 남지 않게 위 간격을 안쪽에 둠 */
+  .panel > #suggest { margin-top: 0; }
+  #suggest > .notice { padding-top: 12px; margin-bottom: 12px; }
   button { font: inherit; color: var(--ink); background: var(--bg); border: 0; border-radius: 8px; padding: 4px 10px; }
   button { cursor: pointer; }
   button:hover { background: var(--hover); }
@@ -39,7 +41,7 @@
   .chip.unsure .w { opacity: .7; }
   #words { display: flex; flex-wrap: wrap; gap: 6px; min-height: 2.2em; align-items: center; justify-content: center; }   /* 낱말 가운데 정렬 */
   .empty { opacity: .6; }
-  #suggest { display: grid; gap: 6px; justify-items: center; }   /* 질문 가운데 정렬, 박스는 글자 길이만큼 */
+  #suggest .box { gap: 6px; justify-items: center; }   /* 질문 가운데 정렬, 박스는 글자 길이만큼 */
   #suggest .q { text-align: center; max-width: 100%; }
   /* 시험용: 본 화면 입력창 흉내 (질문 블럭을 누르면 팝업이 닫히고 여기에 들어감, 보내기는 사용자가) */
   form.query { position: relative; }
@@ -73,11 +75,11 @@
     <button id="stop" hidden>카메라 끄기</button>
   </section>
 
+  <p class="notice">표현하신 단어를 클릭해 주세요.</p>
   <section class="box">
-    <p class="notice">표현하신 단어를 클릭해 주세요.</p>
     <div id="words"></div>
-    <div id="suggest"></div>
   </section>
+  <div id="suggest"></div>
 
 </div>
 </main>
