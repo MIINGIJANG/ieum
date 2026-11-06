@@ -195,7 +195,7 @@ domainReady.then(() => { examples = [...new Set([...examples, ...((domain && dom
 function suggest(ch) {
   const picked = items.map((it, i) => [it.sel, word(ch[i])]).filter(([s]) => s).sort((a, b) => a[0] - b[0]).map(([, w]) => w);
   const box = $("suggest");
-  if (!picked.length) { box.innerHTML = ""; return; }
+  if (!picked.length) { rollTo(box, ""); return; }
   const joined = picked.join(" ");
   // 고른 낱말을 많이 담은 질문부터 (낱말마다 문서 말·활용형도 인정: 입다 → 착용·입는), 같으면 드문 말 점수 순
   const groups = picked.map((w) => docWords([w], domain));
@@ -203,7 +203,26 @@ function suggest(ch) {
   const qs = rankQuestions(docWords(picked, domain), examples, Infinity)
     .map(([sc, q]) => [covered(q), sc, q]).filter(([c]) => c > 0)
     .sort((a, b) => b[0] - a[0] || b[1] - a[1]).slice(0, 3).map(([, , q]) => q).filter((q) => q !== joined);
-  box.innerHTML = [...qs, joined].map((q) => `<button class="q" data-q="${esc(q)}">${esc(q)}</button>`).join("");
+  rollTo(box, [...qs, joined].map((q) => `<button class="q" data-q="${esc(q)}">${esc(q)}</button>`).join(""));
+}
+// 질문 블럭이 생기거나 바뀔 때: 롤러블 화면처럼 아래로 늘어나며(줄어들며) 드러남. 움직이는 중에 또 바뀌면 지금 높이에서 이어감
+let rollAnim = null;
+const ROLL = { duration: 500, easing: "cubic-bezier(.3,.7,.2,1)" };
+function rollTo(el, html) {
+  if (el.dataset.html === html) return;
+  el.dataset.html = html;
+  const from = el.getBoundingClientRect().height;
+  if (rollAnim) { rollAnim.onfinish = null; rollAnim.cancel(); }
+  el.style.overflow = "hidden";
+  if (!html) {   // 다 풀면: 질문 블럭을 그대로 둔 채 위로 말려 들어간 뒤 비움
+    rollAnim = el.animate([{ height: `${from}px` }, { height: "0px" }], { ...ROLL, fill: "forwards" });
+    rollAnim.onfinish = () => { el.innerHTML = ""; el.style.overflow = ""; rollAnim.cancel(); rollAnim = null; };
+    return;
+  }
+  el.innerHTML = html;
+  const to = el.getBoundingClientRect().height;
+  rollAnim = el.animate([{ height: `${from}px` }, { height: `${to}px` }], ROLL);
+  rollAnim.onfinish = () => { el.style.overflow = ""; rollAnim = null; };
 }
 // 질문 블럭을 누르면 팝업이 닫히고 입력창에 들어감 (보내기는 사용자가)
 $("suggest").onclick = (e) => {
