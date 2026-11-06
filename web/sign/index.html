@@ -24,8 +24,8 @@
   .panel .box { background: var(--bg); gap: 0; padding: 8px; }   /* 팝업 안 낱말 칸·질문 칸: 흰색 (다크 모드는 배경색). 칸 안 위·아래·블럭 사이 간격 모두 8px */
   /* 낱말 칸 안내 문구: 위(칸 여백 12px)·아래 12px, 위쪽 안내 문구와 같은 간격 */
   /* 질문 안내 문구 + 질문 칸: 카메라 칸처럼 안내 문구는 칸 밖 위. 없을 때 빈 간격이 남지 않게 위 간격을 안쪽에 둠 */
-  .panel > #suggest { margin-top: 0; }
-  #suggest > .notice { padding-top: 12px; margin-bottom: 12px; }
+  .panel > #suggest, .panel > #wordsWrap { margin-top: 0; }
+  #suggest > .notice, #wordsWrap > .notice { padding-top: 12px; margin-bottom: 12px; }   /* 단어 칸도 질문 칸처럼 안내 문구와 함께 내려옴 */
   button { font: inherit; color: var(--ink); background: var(--bg); border: 0; border-radius: 8px; padding: 4px 10px; }
   button { cursor: pointer; }
   button:hover { background: var(--hover); }
@@ -73,10 +73,12 @@
     <button id="stop" hidden>카메라 끄기</button>
   </section>
 
-  <p class="notice" id="wordsNotice" hidden>표현하신 단어를 클릭해 주세요.</p>
-  <section class="box" id="wordsBox" hidden>
-    <div id="words"></div>
-  </section>
+  <div id="wordsWrap" hidden>
+    <p class="notice">표현하신 단어를 클릭해 주세요.</p>
+    <section class="box">
+      <div id="words"></div>
+    </section>
+  </div>
   <div id="suggest"></div>
 
 </div>
