@@ -57,6 +57,7 @@ ieum/
 │   ├── avatar.js           3D 수어 아바타 — rig.js(뼈 이름 인식), face.js(표정·입 모양), avatar-common.js, avatar-vrm.js
 │   ├── handshapes.json     손 모양 군집·손가락 시너지 (scripts/data/build_handshapes.py)
 │   ├── blocks.html, missing.html   점검 페이지
+│   ├── sign/               카메라 수어 입력 시험판 (/sign/, 본 화면과 따로) — docs/sign_input.md
 │   ├── models/             아바타 (avatar.glb: Microsoft Rocketbox, MIT / avatar.vrm: 예전 아바타)
 │   ├── pages/              출처용 PDF 쪽 이미지
 │   └── vendor/             three.js 등 라이브러리 (인터넷 없이 동작)
@@ -92,6 +93,7 @@ ieum/
 | [docs/evaluation.md](docs/evaluation.md) | 테스트·CI 평가·점검 도구 |
 | [docs/deploy_huggingface.md](docs/deploy_huggingface.md) | Hugging Face 배포와 운영 |
 | [docs/translation_model.md](docs/translation_model.md) | 한국어→글로스 번역 모델 (설계 근거, 학습) |
+| [docs/sign_input.md](docs/sign_input.md) | 카메라 수어 입력 시험판 (`/sign/`) |
 | docs/project_plan.hwp | 과제 수행계획서 |
 | docs/reports/missing_words_priority.csv | 동작 추가 우선순위 (팀 수집 요청용) |
 
