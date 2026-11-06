@@ -118,8 +118,8 @@ const r4 = (v) => Math.round(v * 1e4) / 1e4;
 function onFrame(raw, t) {
   if (recording) recording.frames.push({ t: Math.round(t - recording.t0), pose: raw.pose.map((p) => [r4(p.x), r4(p.y), r4(p.z), r4(p.visibility ?? 1)]),
     lh: raw.leftHand.length ? raw.leftHand.map((p) => [r4(p.x), r4(p.y), r4(p.z)]) : null, rh: raw.rightHand.length ? raw.rightHand.map((p) => [r4(p.x), r4(p.y), r4(p.z)]) : null });
+  draw(raw);
   const frame = opts.smooth ? cleaner.clean(raw, t) : raw;
-  draw(frame);
   const feat = frameToFeatures(frame, opts.useZ);
   fpsTimes.push(t); while (fpsTimes.length && t - fpsTimes[0] > 1000) fpsTimes.shift();
   $("fps").textContent = `${fpsTimes.length}fps · 몸 ${frame.pose.length ? "✓" : "✗"} · 왼손 ${frame.leftHand.length ? "✓" : "✗"} · 오른손 ${frame.rightHand.length ? "✓" : "✗"}`;
@@ -164,15 +164,30 @@ function addItem(r) {
   if (navigator.vibrate) navigator.vibrate(30);
 }
 
+// 손 21점 잇는 선 (엄지·검지·중지·약지·소지 + 손바닥), 몸은 어깨·팔·엉덩이
+const HAND_LINES = [[0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [5, 9], [9, 10], [10, 11], [11, 12],
+  [9, 13], [13, 14], [14, 15], [15, 16], [13, 17], [0, 17], [17, 18], [18, 19], [19, 20]];
+const POSE_LINES = [[11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 24], [23, 24]];
+/** 화면에는 **정리 전 관절 점**을 그림 (떨림 줄이기는 인식에만 씀 → 점이 손을 늦게 따라가지 않게) */
 function draw(frame) {
   const v = $("video"), cv = $("overlay"), w = v.videoWidth || 640, h = v.videoHeight || 480;
   if (cv.width !== w) { cv.width = w; cv.height = h; }
   const g = cv.getContext("2d");
   g.clearRect(0, 0, w, h);
-  const dot = (p, r, c) => { g.fillStyle = c; g.beginPath(); g.arc(p.x * w, p.y * h, r, 0, 7); g.fill(); };
-  for (const i of [0, 11, 12, 13, 14, 15, 16, 23, 24]) if (frame.pose[i]) dot(frame.pose[i], 4, "#f39a45");
-  for (const p of frame.leftHand) dot(p, 3, "#4aa3ff");
-  for (const p of frame.rightHand) dot(p, 3, "#44d17a");
+  g.lineCap = "round";
+  const lines = (pts, pairs, color, width) => {
+    g.strokeStyle = color; g.lineWidth = width; g.beginPath();
+    for (const [a, b] of pairs) if (pts[a] && pts[b]) { g.moveTo(pts[a].x * w, pts[a].y * h); g.lineTo(pts[b].x * w, pts[b].y * h); }
+    g.stroke();
+  };
+  const dots = (pts, idx, r, color) => { g.fillStyle = color; for (const i of idx) if (pts[i]) { g.beginPath(); g.arc(pts[i].x * w, pts[i].y * h, r, 0, 7); g.fill(); } };
+  const all = [...Array(21).keys()];
+  if (frame.pose.length) { lines(frame.pose, POSE_LINES, "rgba(243,154,69,.8)", 3); dots(frame.pose, [0, 11, 12, 13, 14, 15, 16, 23, 24], 4, "#f39a45"); }
+  for (const [hand, color] of [[frame.leftHand, "#4aa3ff"], [frame.rightHand, "#44d17a"]]) {
+    if (hand.length !== 21) continue;
+    lines(hand, HAND_LINES, color, 2.5);
+    dots(hand, all, 2.5, color);
+  }
 }
 
 async function startCamera() {
@@ -301,5 +316,5 @@ $("protoImport").onchange = async (e) => {
 $("start").onclick = startCamera;
 $("stop").onclick = stopCamera;
 renderWords();
-window.__sign = { opts, items, renderWords, docWords: (ws) => docWords(ws, domain), rec, addItem,
+window.__sign = { opts, items, renderWords, draw, docWords: (ws) => docWords(ws, domain), rec, addItem,
   classify: (f) => classify(rec, f, opts, domainIdx, protos) };
