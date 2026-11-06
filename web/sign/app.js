@@ -304,10 +304,8 @@ $("suggest").onclick = (e) => {
   if (!b) return;
   $("q").value = b.dataset.q;
   closePanel();
-  needReset = true;   // 다음에 카메라 버튼으로 열면 처음 상태로
   $("q").focus();
 };
-let needReset = false;
 // 팝업 열기·닫기 (애플 가이드: Designing Fluid Interfaces / HIG Motion)
 //  - 카메라 버튼 아래(입력창 아랫면)에서 커져 나오고, 닫을 때 같은 길로 그리로 들어감
 //  - 튕김 없는 스프링 (damping 1.0, response 0.35초), 열기·닫기 같은 곡선
@@ -349,7 +347,8 @@ function popTo(open) {
   if (!pop.raf) { pop.last = performance.now(); pop.raf = requestAnimationFrame(popStep); }   // 움직이는 중이면 지금 값·속도 그대로 목표만 바꿈
 }
 function openPanel() {
-  if (needReset) { needReset = false; resetWords(); }
+  // 팝업이 다 닫힌 뒤 다시 열면 처음 상태로 (닫히는 도중에 다시 누르면 하던 그대로)
+  if ($("panel").hidden) resetWords();
   panelOpen = true; $("camBtn").classList.add("on"); popTo(true);
 }
 function closePanel() {
