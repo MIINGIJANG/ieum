@@ -34,6 +34,7 @@ def test_nearest(monkeypatch):
     out = sos.nearest(35.84, 128.58)
     assert out["er"]["name"] == "가까운병원" and out["er"]["beds"] == 4 and out["er"]["ct"] == "Y"
     assert out["route"]["duration"] == 120 and out["route"]["path"][0] == [35.84, 128.58]
+    assert [x["er"]["name"] for x in out["ers"]] == ["가까운병원", "먼병원"] and out["ers"][1]["route"]["duration"] == 300
 
 
 def test_without_route_key(monkeypatch):

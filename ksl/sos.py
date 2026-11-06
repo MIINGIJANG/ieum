@@ -107,14 +107,14 @@ def route(lat, lng, to_lat, to_lng):
 
 
 def nearest(lat, lng):
-    """가장 가까운 응급실(차로 가장 빨리 닿는 곳, 경로를 못 구하면 직선거리 가장 가까운 곳) + 경로 + 병상."""
+    """가까운 응급실 1·2순위(차로 빨리 닿는 순, 경로를 못 구하면 직선거리 순) + 경로 + 병상."""
     key = (round(lat, 3), round(lng, 3))   # 약 100m 안의 같은 자리는 1분 동안 같은 답
     hit = _CACHE.get(key)
     if hit and time.time() - hit[0] < _TTL:
         return hit[1]
     cands = nearby(lat, lng)
     if not cands:
-        return {"er": None, "route": None}
+        return {"er": None, "route": None, "ers": []}
     top = cands[:3]                           # 가까운 3곳은 차로 걸리는 시간으로 비교
     reg = lambda a: " ".join((a or "").split()[:2])          # 병상은 지역(시·도 + 시·군·구)마다 한 번에 받음
     regions = list(dict.fromkeys(reg(c["addr"]) for c in top))
@@ -130,12 +130,11 @@ def nearest(lat, lng):
         bedf = {r: ex.submit(safe, beds, r) for r in regions}
         routes = [f.result() for f in routes]
         bedmap = {r: (f.result() or {}) for r, f in bedf.items()}
-    best, best_route = cands[0], None
-    for c, rt in zip(top, routes):
-        if rt and rt.get("duration") is not None and (best_route is None or rt["duration"] < best_route["duration"]):
-            best, best_route = c, rt
-    best = {**best, **bedmap.get(reg(best["addr"]), {}).get(best["hpid"], {})}
-    out = {"er": best, "route": best_route}
+    # 차로 빨리 닿는 순서 (경로를 못 구한 곳은 직선거리 순으로 뒤에). 1·2순위를 돌려줌
+    order = sorted(zip(top, routes), key=lambda cr: (cr[1] is None or cr[1].get("duration") is None,
+                                                     (cr[1] or {}).get("duration") or 0, cr[0]["km"]))
+    ers = [{"er": {**c, **bedmap.get(reg(c["addr"]), {}).get(c["hpid"], {})}, "route": rt} for c, rt in order[:2]]
+    out = {"er": ers[0]["er"], "route": ers[0]["route"], "ers": ers}
     _CACHE[key] = (time.time(), out)
     if len(_CACHE) > 500:
         _CACHE.clear()
