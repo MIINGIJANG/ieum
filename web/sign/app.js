@@ -214,16 +214,17 @@ $("suggest").onclick = (e) => {
   $("q").focus();
 };
 // 팝업 열기·닫기 (애플 가이드: Designing Fluid Interfaces / HIG Motion)
-//  - 누른 카메라 버튼에서 커져 나오고, 닫을 때 같은 길로 그 버튼으로 들어감 (transform-origin = 버튼)
+//  - 카메라 버튼 아래(입력창 아랫면)에서 커져 나오고, 닫을 때 같은 길로 그리로 들어감
 //  - 튕김 없는 스프링 (damping 1.0, response 0.35초), 열기·닫기 같은 곡선
 //  - 움직이는 도중 다시 누르면 지금 위치·속도에서 그대로 되돌아감 (처음으로 튀지 않음)
 const SPRING = { response: 0.35, damping: 1 };
 const POP_SCALE = { from: 0.5, to: 0.2 };   // 나타날 때 50%에서 시작, 사라질 때는 20%까지 더 작아지며 버튼으로 들어감
 // 크기·투명도를 각각 스프링으로 (도중에 방향이 바뀌어도 둘 다 지금 값·속도에서 이어짐)
 let panelOpen = true, pop = { s: 1, sv: 0, o: 1, ov: 0, ts: 1, to: 1, raf: 0, last: 0 };
+// 나오고 들어가는 점: 카메라 버튼 바로 아래, 입력창 아랫면 (팝업이 입력창 안으로 겹쳐 들어가지 않게)
 function popOrigin() {   // 크기가 바뀌는 중에도 맞게: 화면 위치(getBoundingClientRect) 대신 배치 위치(offset)로
   const p = $("panel"), f = $("form"), b = $("camBtn");
-  return `${f.offsetLeft + b.offsetLeft + b.offsetWidth / 2 - p.offsetLeft}px ${f.offsetTop + f.offsetHeight / 2 - p.offsetTop}px`;
+  return `${f.offsetLeft + b.offsetLeft + b.offsetWidth / 2 - p.offsetLeft}px ${f.offsetTop + f.offsetHeight - p.offsetTop}px`;
 }
 function popRender() {
   const el = $("panel");
