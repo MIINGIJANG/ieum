@@ -61,15 +61,25 @@ async function startEngine() {
         worker.onerror = (e) => rej(new Error(e.message || "작업자 스레드 오류"));
         worker.postMessage({ type: "init", kind: opts.engine, base: BASE });
       });
+      // 첫 계산 미리 (처음 한 번은 그래픽 준비로 오래 걸림 → 로딩 화면에서 끝내 둠)
+      const blank = document.createElement("canvas"); blank.width = 640; blank.height = 480; blank.getContext("2d").fillRect(0, 0, 640, 480);
+      await new Promise((res) => {
+        worker.onmessage = (e) => { if (e.data.type === "frame" || e.data.type === "error") res(); };
+        createImageBitmap(blank).then((bm) => worker.postMessage({ type: "frame", bitmap: bm, ts: 1 }, [bm])).catch(res);
+        setTimeout(res, 15000);
+      });
       worker.onmessage = (e) => {
         workerBusy = false;
         if (e.data.type === "frame") onFrame(e.data.frame, e.data.ts);
         else if (e.data.type === "error") console.warn("작업자 스레드:", e.data.message);
       };
+      lastTs = 1;
       return;
     } catch (e) { console.warn("작업자 스레드를 못 써서 화면에서 계산", e); if (worker) worker.terminate(); worker = null; }
   }
   engine = await createEngine(opts.engine, BASE);
+  const blank = document.createElement("canvas"); blank.width = 640; blank.height = 480; blank.getContext("2d").fillRect(0, 0, 640, 480);
+  try { engine.detect(blank, 1); lastTs = 1; } catch { /* 첫 계산 미리 — 실패해도 그냥 진행 */ }
 }
 
 // ---------------- 프레임마다 ----------------
@@ -328,12 +338,13 @@ const SPRING = { response: 0.35, damping: 1 };
 const POP_SCALE = { from: 0.5, to: 0.2 };   // 나타날 때 50%에서 시작, 사라질 때는 20%까지 더 작아지며 버튼으로 들어감
 // 크기·투명도를 각각 스프링으로 (도중에 방향이 바뀌어도 둘 다 지금 값·속도에서 이어짐)
 let panelOpen = false, pop = { s: 1, sv: 0, o: 1, ov: 0, ts: 1, to: 1, raf: 0, last: 0 };
-// 팝업 자리: 입력창 아래 12px, 오른쪽 끝을 입력창 오른쪽 끝에 맞춤 (카메라 버튼 쪽)
+// 팝업 자리·크기: 입력창 아래 12px, 가로 길이와 왼쪽·오른쪽 끝을 입력창과 똑같이
 function placePanel() {
   const p = $("panel"), f = $("form");
   const par = p.offsetParent || document.body, pr = par.getBoundingClientRect(), fr = f.getBoundingClientRect();
+  p.style.width = `${fr.width}px`;
   p.style.top = `${fr.bottom - pr.top + 12}px`;
-  p.style.left = `${Math.max(fr.left, fr.right - p.offsetWidth) - pr.left}px`;
+  p.style.left = `${fr.left - pr.left}px`;
 }
 addEventListener("resize", () => { if (!$("panel").hidden) placePanel(); });
 // 나오고 들어가는 점: 카메라 버튼 바로 아래, 입력창 아랫면 (팝업이 입력창 안으로 겹쳐 들어가지 않게)
