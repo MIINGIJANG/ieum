@@ -15,10 +15,6 @@ def test_ending_variants():
 
 
 def test_voice_like_queries(pipe):
-    clean = pipe.query("위험한 곳에서는 작업을 중지하세요.")
-    for v in ("어 위험한 음 곳에서는 작업을 중지하세요", "위험한 곳에서는 작업을 중지해야 돼"):
-        r = pipe.query(v)
-        assert r["mode"] == "translate" and r["sentences"][0]["gloss"] == clean["sentences"][0]["gloss"]
     assert pipe.query("정전기 안전화는 어떤 역할을 해요")["mode"] == "ask"   # 문서는 '정전기안전화' 로 붙여 씀
 
 

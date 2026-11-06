@@ -562,7 +562,7 @@ async function run() {
       } catch { d = null; }
     }
     if (!d) {
-      // 서버가 질문인지(문서 검색) 문장인지(바로 번역) 판단 → data.mode
+      // 서버가 문서 검색 후 답변 (답하지 않으면 data.mode 가 none)
       const res = await fetch(`${API}/query`, {
         method: "POST", headers: {"Content-Type": "application/json"},
         body: JSON.stringify({text: q}),
@@ -735,9 +735,6 @@ function render() {
 `;
     $("sources").innerHTML = src ? `<h2>출처</h2><ul>${src}</ul>` : "";
     $("sources").hidden = !src;
-  } else {
-    $("sources").hidden = true;
-    a.innerHTML = `<h2>번역한 문장</h2><p class="text">${sents.map(s => esc(s.korean)).join(" ")}</p>`;
   }
   // 결과가 다 올라온 뒤 재생 (아바타가 아직이면 준비되는 대로)
   const start = () => setTimeout(play, reduce ? 0 : 650);
