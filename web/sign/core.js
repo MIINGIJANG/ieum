@@ -294,4 +294,5 @@ export class WindowCommitter {
 }
 
 /** 기본 설정 (화면의 '설정' 과 평가 페이지가 같이 씀) */
-export const DEFAULTS = { engine: "holistic", worker: true, segment: "motion", domain: true, calibrate: true, smooth: true, useZ: true, rerank: true, custom: true, customSim: 0.85 };
+// 관절 인식 기본은 가벼운 모드 (Holistic 은 얼굴 점까지 계산해 느려서 점이 손을 늦게 따라감)
+export const DEFAULTS = { engine: "light", worker: true, segment: "motion", domain: true, calibrate: true, smooth: true, useZ: true, rerank: true, custom: true, customSim: 0.85 };
