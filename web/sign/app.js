@@ -210,26 +210,48 @@ $("suggest").onclick = (e) => {
   closePanel();
   $("q").focus();
 };
-// 팝업 열기·닫기: 입력창 쪽(위)에서 살짝 내려오며 나타나고, 닫을 때는 반대로 (본 화면과 같은 움직임 곡선)
-const POP = { duration: 260, easing: "cubic-bezier(.2,.8,.2,1)" };
-const POP_FRAMES = [{ opacity: 0, transform: "translateY(-12px) scale(.97)" }, { opacity: 1, transform: "none" }];
-let popAnim = null, panelOpen = true;
-function openPanel() {
-  const p = $("panel");
-  panelOpen = true; $("camBtn").classList.add("on");
-  if (popAnim) popAnim.cancel();
-  p.hidden = false;
-  p.style.transformOrigin = "top center";
-  popAnim = p.animate(POP_FRAMES, POP);
+// 팝업 열기·닫기 (애플 가이드: Designing Fluid Interfaces / HIG Motion)
+//  - 누른 카메라 버튼에서 커져 나오고, 닫을 때 같은 길로 그 버튼으로 들어감 (transform-origin = 버튼)
+//  - 튕김 없는 스프링 (damping 1.0, response 0.35초), 열기·닫기 같은 곡선
+//  - 움직이는 도중 다시 누르면 지금 위치·속도에서 그대로 되돌아감 (처음으로 튀지 않음)
+const SPRING = { response: 0.35, damping: 1 };
+let panelOpen = true, pop = { x: 1, v: 0, target: 1, raf: 0, last: 0 };
+function popOrigin() {   // 크기가 바뀌는 중에도 맞게: 화면 위치(getBoundingClientRect) 대신 배치 위치(offset)로
+  const p = $("panel"), f = $("form"), b = $("camBtn");
+  return `${f.offsetLeft + b.offsetLeft + b.offsetWidth / 2 - p.offsetLeft}px ${f.offsetTop + f.offsetHeight / 2 - p.offsetTop}px`;
 }
+function popRender() {
+  const el = $("panel"), x = Math.min(1, Math.max(0, pop.x));
+  el.style.opacity = String(Math.min(1, x * 1.4));
+  el.style.transform = pop.x >= 0.999 ? "" : `scale(${0.5 + 0.5 * pop.x})`;
+  el.style.pointerEvents = pop.target ? "" : "none";
+}
+function popStep(t) {
+  const dt = Math.min(0.032, (t - pop.last) / 1000 || 0.016); pop.last = t;
+  const w = (2 * Math.PI) / SPRING.response;                 // 애플의 response → 고유 진동수
+  const a = -w * w * (pop.x - pop.target) - 2 * SPRING.damping * w * pop.v;
+  pop.v += a * dt; pop.x += pop.v * dt;
+  if (Math.abs(pop.x - pop.target) < 0.001 && Math.abs(pop.v) < 0.01) {
+    pop.x = pop.target; pop.v = 0; pop.raf = 0; popRender();
+    if (!pop.target) $("panel").hidden = true;
+    return;
+  }
+  popRender();
+  pop.raf = requestAnimationFrame(popStep);
+}
+function popTo(target) {
+  const el = $("panel");
+  pop.target = target;
+  if (target) { el.hidden = false; }
+  el.style.transformOrigin = popOrigin();
+  if (!pop.raf) { pop.last = performance.now(); pop.raf = requestAnimationFrame(popStep); }   // 움직이는 중이면 지금 값·속도 그대로 목표만 바꿈
+}
+function openPanel() { panelOpen = true; $("camBtn").classList.add("on"); popTo(1); }
 function closePanel() {
   if (stream) stopCamera();
-  const p = $("panel");
   if (!panelOpen) return;
   panelOpen = false; $("camBtn").classList.remove("on");
-  if (popAnim) popAnim.cancel();
-  popAnim = p.animate([...POP_FRAMES].reverse(), { duration: 200, easing: "cubic-bezier(.4,0,1,1)", fill: "forwards" });
-  popAnim.onfinish = () => { p.hidden = true; popAnim.cancel(); popAnim = null; };
+  popTo(0);
 }
 $("camBtn").onclick = () => (panelOpen ? closePanel() : openPanel());
 
