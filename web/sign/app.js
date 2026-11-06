@@ -374,7 +374,7 @@ $("suggest").onclick = (e) => {
 const SPRING = { response: 0.35, damping: 1 };
 const POP_SCALE = { from: 0.5, to: 0.2 };   // 나타날 때 50%에서 시작, 사라질 때는 20%까지 더 작아지며 버튼으로 들어감
 // 크기·투명도를 각각 스프링으로 (도중에 방향이 바뀌어도 둘 다 지금 값·속도에서 이어짐)
-let panelOpen = false, pop = { s: 1, sv: 0, o: 1, ov: 0, ts: 1, to: 1, raf: 0, last: 0, after: null };
+let panelOpen = false, pop = { s: 1, sv: 0, o: 1, ov: 0, ts: 1, to: 1, raf: 0, last: 0 };
 // 팝업 자리·크기: 입력창 아래 12px, 가운데. 가로 길이는 카메라 칸에 맞춰 (입력창보다 넓지 않게)
 let panelGap = null;   // 입력창 아랫면 ~ 팝업 윗면
 function placePanel() {
@@ -429,7 +429,6 @@ function popStep(t) {
     pop.s = pop.ts; pop.o = pop.to; pop.sv = pop.ov = 0; pop.raf = 0; popRender();
     if (!pop.to) {
       $("panel").hidden = true; document.body.classList.remove("sign-open"); document.body.style.minHeight = "";
-      if (pop.after) pop.after();   // 다 닫힌 뒤 할 일 (뒤의 질문 누르기 등). 할 일이 스스로 pop.after 를 비움
     }
     return;
   }
@@ -440,7 +439,6 @@ function popTo(open) {
   const el = $("panel");
   if (open && el.hidden) { el.hidden = false; placePanel(); pop.s = POP_SCALE.from; pop.o = 0; pop.sv = pop.ov = 0; }   // 완전히 사라진 뒤 다시 열 때만 50%에서 시작
   pop.ts = open ? 1 : POP_SCALE.to; pop.to = open ? 1 : 0;
-  if (open) pop.after = null;                                     // 닫히는 도중에 다시 열면 닫힌 뒤 할 일은 취소
   el.style.transformOrigin = popOrigin();
   if (!pop.raf) { pop.last = performance.now(); pop.raf = requestAnimationFrame(popStep); }   // 움직이는 중이면 지금 값·속도 그대로 목표만 바꿈
 }
@@ -502,16 +500,12 @@ $("camBtn").onclick = async () => {
   if (panelOpen) return closePanel();
   if (await cameraUsable()) openPanel();
 };
-// 팝업이 떠 있을 때 팝업 밖(뒷 배경)을 누르면 먼저 팝업을 닫음. 누른 곳이 버튼(예시 질문 등)이면 다 닫힌 뒤 그 버튼을 누름
+// 팝업이 떠 있을 때 팝업 밖을 누르면 그 순간 팝업이 닫히기 시작함.
+//  누른 곳이 버튼(예시 질문 등)이면 그 버튼도 그 순간 그대로 눌림 (예시 질문이 바로 입력창에 들어감), 빈 배경이면 닫기만
 document.addEventListener("click", (e) => {
   if (!panelOpen || $("panel").contains(e.target) || $("camBtn").contains(e.target)) return;
-  e.preventDefault(); e.stopPropagation();
-  const btn = e.target.closest?.("button, a, [role=button]");
   closePanel();
-  if (!btn) return;
-  const go = () => { if (pop.after !== go) return; pop.after = null; btn.click(); };
-  pop.after = go;
-  setTimeout(go, 700);   // 닫히는 움직임이 늦어져도(탭이 느릴 때 등) 0.7초 뒤에는 넘어감
+  if (!e.target.closest?.("button, a, [role=button]")) { e.preventDefault(); e.stopPropagation(); }
 }, true);
 
 // 단어 칸(안내 문구 포함): 처음 나타날 때 질문 칸처럼 아래로 늘어나며 내려옴
