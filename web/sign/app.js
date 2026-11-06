@@ -104,6 +104,7 @@ function loop() {
 }
 
 function onFrame(raw, t) {
+  if (!stream) return;   // 카메라를 끈 뒤에 늦게 도착한 계산 결과는 버림 (흰 선이 남지 않게)
   draw(raw);
   const frame = opts.smooth ? cleaner.clean(raw, t) : raw;
   const feat = frameToFeatures(frame, opts.useZ);
@@ -161,6 +162,7 @@ let starting = false;
 async function startCamera() {
   if (stream || starting) return;
   starting = true; $("loadBox").hidden = true; $("start").disabled = true;
+  clearOverlay();   // 다시 켤 때도 처음처럼 빈 화면에서
   try {
     // 카메라 화면은 받는 즉시 보여 줌 (인식 모델 준비를 기다리지 않음). 손 인식은 모델이 준비되면 시작
     const s = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: "user" }, audio: false });
@@ -178,11 +180,12 @@ async function startCamera() {
     if (panelOpen) $("loadBox").hidden = false;
   } finally { starting = false; $("start").disabled = false; }
 }
+function clearOverlay() { const cv = $("overlay"); cv.getContext("2d").clearRect(0, 0, cv.width, cv.height); }
 function stopCamera() {
   cancelAnimationFrame(raf);
   if (stream) stream.getTracks().forEach((t) => t.stop());
   stream = null; $("video").srcObject = null;
-  const cv = $("overlay"); cv.getContext("2d").clearRect(0, 0, cv.width, cv.height);   // 꺼지면 손 선도 지움
+  clearOverlay(); workerBusy = false;   // 꺼지면 손 선도 지움
   $("loadBox").hidden = false; $("start").disabled = false;
 }
 
