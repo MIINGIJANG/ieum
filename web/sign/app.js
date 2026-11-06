@@ -172,12 +172,14 @@ function chosen() {
   }
   return items.map((it) => it.label);
 }
-// 고른 낱말은 고른 순서대로 앞에, 나머지는 알아들은 순서대로 뒤에. 자리가 바뀌면 스르륵 미끄러져 옮겨감
+// 고른 낱말은 고른 순서대로 앞에, 풀린 낱말은 맨 뒤에. 자리가 바뀌면 스르륵 미끄러져 옮겨감
 let chipSeq = 0;
 function renderWords() {
   const ch = chosen(), box = $("words");
   const before = new Map([...box.querySelectorAll(".chip")].map((c) => [c.dataset.k, c.getBoundingClientRect()]));
-  const order = items.map((it, i) => i).sort((a, b) => (items[a].sel && items[b].sel ? items[a].sel - items[b].sel : !!items[b].sel - !!items[a].sel || a - b));
+  // 고른 낱말(고른 순서) → 한 번도 안 고른 낱말(알아들은 순서) → 풀린 낱말(푼 순서, 항상 맨 뒤)
+  const key = (i) => { const it = items[i]; return it.sel ? [0, it.sel] : [1, it.tail || 0, i]; };
+  const order = items.map((it, i) => i).sort((a, b) => { const x = key(a), y = key(b); for (let j = 0; j < 3; j++) if ((x[j] ?? 0) !== (y[j] ?? 0)) return (x[j] ?? 0) - (y[j] ?? 0); return 0; });
   box.innerHTML = order.map((i) => {
     const it = items[i];
     it.k ??= ++chipSeq;
@@ -198,7 +200,8 @@ $("words").onclick = (e) => {
   if (w) {
     const i = +w.dataset.i, it = items[i];
     if (!it.sel) { it.label = chosen()[i]; it.locked = true; }   // 고른 낱말은 뒤에 낱말이 더 들어와도 바뀌지 않게
-    it.sel = it.sel ? 0 : ++selOrder; renderWords();
+    if (it.sel) { it.sel = 0; it.tail = ++selOrder; } else it.sel = ++selOrder;   // 풀면 맨 뒤로
+    renderWords();
   }
 };
 
