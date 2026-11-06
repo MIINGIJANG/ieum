@@ -19,7 +19,7 @@
   small { opacity: .7; }
   a { color: inherit; }
   .box { background: var(--box); border-radius: 14px; padding: 16px; display: grid; gap: 10px; }
-  button, select, input[type=text] { font: inherit; color: var(--ink); background: var(--bg); border: 0; border-radius: 8px; padding: 6px 12px; }
+  button { font: inherit; color: var(--ink); background: var(--bg); border: 0; border-radius: 8px; padding: 6px 12px; }
   button { cursor: pointer; }
   button:hover { background: var(--hover); }
   button:disabled { opacity: .5; cursor: default; }
@@ -34,7 +34,7 @@
   .chip .w { border-radius: 0; font-weight: 500; padding: 6px 12px; }
   .chip .x { border-radius: 0; opacity: .6; padding: 6px 8px; }
   .chip.unsure .w { opacity: .7; }
-  #words, #protoList { display: flex; flex-wrap: wrap; gap: 6px; min-height: 2.2em; align-items: center; }
+  #words { display: flex; flex-wrap: wrap; gap: 6px; min-height: 2.2em; align-items: center; }
   .empty { opacity: .6; }
   #alts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
   #suggest { display: grid; gap: 6px; }
@@ -42,12 +42,7 @@
   #suggest .direct { opacity: .8; }
   #answer .q { font-weight: 500; }
   #answer .blocks { opacity: .8; font-size: .95rem; }
-  label { display: flex; gap: 8px; align-items: flex-start; }
-  label input { margin-top: .35em; }
   #run { display: grid; gap: 12px; }
-  details summary { cursor: pointer; font-weight: 500; }
-  details .opts { display: grid; gap: 6px; margin-top: 10px; }
-  select, input[type=text] { max-width: 100%; }
 </style>
 </head>
 <body>
@@ -82,48 +77,6 @@
   </section>
 
   <section class="box" id="answer" hidden></section>
-
-  <section class="box">
-    <details>
-      <summary>설정 (비교용)</summary>
-      <div class="opts">
-        <label><span>관절 인식</span> <select id="optEngine"><option value="light">가벼운 모드 (몸 + 손만, 빠름)</option><option value="holistic">Holistic (팀원 모델과 같음, 느림)</option></select></label>
-        <label><input type="checkbox" id="optWorker"><span>작업자 스레드에서 계산 <small id="engineInfo"></small></span></label>
-        <label><span>낱말 끊기</span> <select id="optSegment"><option value="motion">손 움직임으로 (손 올림 → 내림·멈춤)</option><option value="window">예전 방식 (최근 48프레임)</option></select></label>
-        <label><input type="checkbox" id="domainOnly"><span>산업안전 단어만<br><small id="vocabInfo"></small></span></label>
-        <label><input type="checkbox" id="optCalibrate"><span>확신 판단 (전체 단어 기준 확률 + 1·2위 차이)</span></label>
-        <label><input type="checkbox" id="optSmooth"><span>떨림 줄이기 · 손 끊김 메우기</span></label>
-        <label><input type="checkbox" id="optZ"><span>깊이(z) 사용</span></label>
-        <label><input type="checkbox" id="optRerank"><span>질문 흐름으로 후보 다시 고르기</span></label>
-        <label><input type="checkbox" id="optCustom"><span>새 낱말 사용</span></label>
-      </div>
-    </details>
-  </section>
-
-  <section class="box">
-    <details>
-      <summary>새 낱말 가르치기 (모델에 없는 말)</summary>
-      <div class="opts">
-        <p><small>예: 안전모·장갑·귀마개·정화통. 낱말을 적고 '예시 모으기'를 누른 뒤 그 수어를 5번 하세요 (한 번 하고 손을 내리기). 이 기기에 저장됩니다.</small></p>
-        <div class="row"><input type="text" id="teachWord" placeholder="낱말"><button id="teachBtn">예시 모으기</button></div>
-        <p id="teachMsg"></p>
-        <div id="protoList"></div>
-        <div class="row"><button id="protoExport">파일로 내보내기</button><label><span>파일 불러오기</span> <input type="file" id="protoImport" accept=".json"></label></div>
-      </div>
-    </details>
-  </section>
-
-  <section class="box">
-    <details>
-      <summary>정확도 평가용 녹화</summary>
-      <div class="opts">
-        <p><small>영상이 아니라 관절 점 숫자만 파일로 저장합니다. 녹화한 파일은 <a href="./eval.html">평가 페이지</a>에 넣으면 설정별 정확도를 비교합니다.</small></p>
-        <select id="recQ"><option value="">(어떤 질문을 수어로 하는지 고르면 맞았는지 셉니다)</option></select>
-        <input type="text" id="recWords" placeholder="한 낱말들 (예: 머리 보호 언제) — 선택">
-        <div class="row"><button id="recBtn">녹화 시작</button> <span id="recMsg"></span></div>
-      </div>
-    </details>
-  </section>
 </main>
 <script type="module" src="./app.js"></script>
 </body>
