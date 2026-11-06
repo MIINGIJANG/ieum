@@ -368,7 +368,10 @@ let panelOpen = false, pop = { s: 1, sv: 0, o: 1, ov: 0, ts: 1, to: 1, raf: 0, l
 function placePanel() {
   const p = $("panel"), f = $("form");
   const par = p.offsetParent || document.body, pr = par.getBoundingClientRect(), fr = f.getBoundingClientRect();
-  p.style.top = `${fr.bottom - pr.top + 12}px`;
+  // 위쪽: 입력창 아래 예시 질문 블럭의 윗면과 맞춤 (예시 질문이 없으면 입력창 아래 12px)
+  const ex = [...document.querySelectorAll("#examples button")].find(b => b.offsetParent);
+  const top = ex ? ex.getBoundingClientRect().top : fr.bottom + 12;
+  p.style.top = `${top - pr.top}px`;
   const cam = fitCam(fr);
   const w = Math.min(fr.width, cam + 24);                                // 팝업도 카메라·단어·질문 칸에 맞춰 같이 줄임 (양옆 여백 12px)
   p.style.width = `${w}px`;
