@@ -210,8 +210,28 @@ $("suggest").onclick = (e) => {
   closePanel();
   $("q").focus();
 };
-function closePanel() { if (stream) stopCamera(); $("panel").hidden = true; }
-$("camBtn").onclick = () => { if ($("panel").hidden) $("panel").hidden = false; else closePanel(); };
+// 팝업 열기·닫기: 입력창 쪽(위)에서 살짝 내려오며 나타나고, 닫을 때는 반대로 (본 화면과 같은 움직임 곡선)
+const POP = { duration: 260, easing: "cubic-bezier(.2,.8,.2,1)" };
+const POP_FRAMES = [{ opacity: 0, transform: "translateY(-12px) scale(.97)" }, { opacity: 1, transform: "none" }];
+let popAnim = null, panelOpen = true;
+function openPanel() {
+  const p = $("panel");
+  panelOpen = true;
+  if (popAnim) popAnim.cancel();
+  p.hidden = false;
+  p.style.transformOrigin = "top center";
+  popAnim = p.animate(POP_FRAMES, POP);
+}
+function closePanel() {
+  if (stream) stopCamera();
+  const p = $("panel");
+  if (!panelOpen) return;
+  panelOpen = false;
+  if (popAnim) popAnim.cancel();
+  popAnim = p.animate([...POP_FRAMES].reverse(), { duration: 200, easing: "cubic-bezier(.4,0,1,1)", fill: "forwards" });
+  popAnim.onfinish = () => { p.hidden = true; popAnim.cancel(); popAnim = null; };
+}
+$("camBtn").onclick = () => (panelOpen ? closePanel() : openPanel());
 
 $("start").onclick = startCamera;
 $("stop").onclick = stopCamera;
