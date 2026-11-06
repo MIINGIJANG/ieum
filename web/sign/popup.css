@@ -34,7 +34,7 @@
 #panel .cam .off { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 10px; padding: 16px; text-align: center; color: #fff; }
 
 /* 단어 칸·질문 칸: 흰색 (다크 모드는 배경색). 칸 안 위·아래·블럭 사이 간격 모두 8px */
-#panel .box { background: var(--bg); border-radius: 12px; padding: 8px; display: grid; }
+#panel .box { background: var(--bg); border-radius: 12px; padding: 8px; display: grid; width: var(--cam, 100%); max-width: 100%; margin: 0 auto; }   /* 카메라 칸과 같은 가로 길이, 가운데 */
 #panel .chip { display: inline-flex; border-radius: 8px; overflow: hidden; }
 #panel .chip .w { border-radius: 0; font-weight: 500; padding: 4px 10px; }
 #panel #words { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; }

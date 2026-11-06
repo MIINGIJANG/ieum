@@ -378,12 +378,23 @@ function fitCam(fr) {
   const p = $("panel"), pad = 12, gap = 12;
   const probe = (html) => { const d = document.createElement("div"); d.style.cssText = "position:absolute;visibility:hidden"; d.innerHTML = html; p.appendChild(d); const h = d.firstElementChild.getBoundingClientRect().height; d.remove(); return h; };
   const noteH = probe('<p class="notice">가</p>'), chipH = probe('<span class="chip"><button class="w">가</button></span>');
-  const rows = fr.width - 24 < 400 ? 3 : 2;                              // 좁은 화면(휴대폰)은 단어가 세 줄까지 나올 수 있음
-  const wordsBox = 8 + chipH * rows + 8 * (rows - 1) + 8, questBox = 8 + chipH * 4 + 8 * 3 + 8;
-  const others = pad * 2 + noteH * 3 + gap * 5 + wordsBox + questBox;
+  const chipW = probe('<span class="chip" style="display:inline-flex"><button class="w">가나</button></span>') || 50;   // 보통 낱말(두 글자) 블럭 폭
+  const qW = 360;                                                        // 긴 질문 한 줄 폭 (예: '2미터 넘는 높은 곳에서는 어떤 보호구를 착용해요?')
   const avail = innerHeight - (16 + fr.height + 12) - 12;               // 팝업을 열면 입력창이 화면 위 16px 로 올라옴 → 그 아래 12px 부터 화면 아래 12px 까지
   const full = fr.width - pad * 2;
-  p.style.setProperty("--cam", `${Math.round(Math.max(160, Math.min(full, avail - others)))}px`);
+  // 단어 칸·질문 칸도 카메라 칸과 같은 가로 길이 → 칸이 좁을수록 단어 줄·질문 줄이 늘어나므로, 크기를 몇 번 다시 맞춰 봄
+  // (기준: 단어 12개, 질문 3개 + 이어 붙인 블럭)
+  const height = (cam) => {                                             // 카메라 칸이 cam 일 때 팝업 전체 높이 (어림)
+    const inner = cam - 16;
+    const rows = Math.max(1, Math.ceil((12 * (chipW + 8) - 8) / inner));
+    const qLines = 3 * Math.ceil(qW / inner) + 1;
+    const wordsBox = 8 + chipH * rows + 8 * (rows - 1) + 8, questBox = 8 + chipH * qLines + 8 * 3 + 8;
+    return cam + pad * 2 + noteH * 3 + gap * 5 + wordsBox + questBox;
+  };
+  let lo = 220, hi = Math.max(220, full);                                // 화면에 들어가는 가장 큰 카메라 칸 (둘로 나눠 찾기)
+  while (hi - lo > 2) { const mid = (lo + hi) / 2; if (height(mid) <= avail) lo = mid; else hi = mid; }
+  const cam = Math.round(height(hi) <= avail ? hi : lo);
+  p.style.setProperty("--cam", `${cam}px`);
 }
 addEventListener("resize", () => { if (!$("panel").hidden) placePanel(); });
 // 나오고 들어가는 점: 카메라 버튼 바로 아래, 입력창 아랫면 (팝업이 입력창 안으로 겹쳐 들어가지 않게)
