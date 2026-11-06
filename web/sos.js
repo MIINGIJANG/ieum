@@ -74,7 +74,7 @@ function drawMap(p, d) {
     bounds.extend(at);
     const path = (d.route && d.route.path || []).map(([la, lo]) => new K.LatLng(la, lo));
     if (path.length) {
-      layers.push(new K.Polyline({ path, map, strokeWeight: 6, strokeColor: "#ff3b30", strokeOpacity: 0.75, strokeStyle: "solid" }));
+      layers.push(new K.Polyline({ path, map, strokeWeight: 6, strokeColor: "#ff3b30", strokeOpacity: 1, strokeStyle: "solid" }));
       path.forEach((x) => bounds.extend(x));
     }
     map.setBounds(bounds, 24, 24, 24, 24);
