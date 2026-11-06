@@ -18,6 +18,9 @@
   small { opacity: .7; }
   a { color: inherit; }
   .box { background: var(--box); border-radius: 14px; padding: 16px; display: grid; gap: 10px; }
+  /* 본 화면에서 카메라 버튼을 누르면 뜰 큰 박스 (기존 박스 색), 안쪽 박스는 마우스 올림 색 */
+  .panel { background: var(--box); border-radius: 14px; padding: 16px; display: grid; gap: 16px; }
+  .panel .box { background: var(--hover); }
   button { font: inherit; color: var(--ink); background: var(--bg); border: 0; border-radius: 8px; padding: 6px 12px; }
   button { cursor: pointer; }
   button:hover { background: var(--hover); }
@@ -46,6 +49,7 @@
 </head>
 <body>
 <main>
+<div class="panel">
   <section class="box" id="loadBox">
     <p id="loadMsg">처음 한 번 인식 모델(약 60MB)을 받습니다.</p>
     <div class="bar"><i id="loadBar"></i></div>
@@ -73,6 +77,7 @@
   </section>
 
   <section class="box" id="answer" hidden></section>
+</div>
 </main>
 <script type="module" src="./app.js"></script>
 </body>
