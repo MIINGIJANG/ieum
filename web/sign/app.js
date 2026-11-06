@@ -1,7 +1,7 @@
 // 카메라 수어 입력 화면 (시험판, 본 화면과 따로). 공통 부분은 core.js, 관절 점 엔진은 engines.js.
 // 영상은 기기 밖으로 나가지 않음 (서버에는 고른 질문 글자만).
-import { DEFAULTS, FrameCleaner, Recognizer, Segmenter, WindowCommitter, base, classify, docWords, embed, fromB64,
-  frameToFeatures, rankQuestions, rerank, resampleSequence, toB64 } from "./core.js";
+import { DEFAULTS, FrameCleaner, Recognizer, Segmenter, WindowCommitter, base, classify, docWords, fromB64,
+  frameToFeatures, rankQuestions, rerank } from "./core.js";
 import { createEngine } from "./engines.js";
 
 const $ = (id) => document.getElementById(id);
@@ -9,23 +9,8 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<
 const API = new URL("../", location.href).href;
 const BASE = "./";
 
-// ---------------- 설정 (기기에 기억) ----------------
+// ---------------- 설정 (기본값 고정, 평가 페이지 eval.html 에서만 바꿔 비교) ----------------
 const opts = { ...DEFAULTS };
-try { Object.assign(opts, JSON.parse(localStorage.getItem("ieum-sign-opts") || "{}")); } catch { /* 저장 못 해도 기본값 */ }
-const OPT_IDS = { engine: "optEngine", worker: "optWorker", segment: "optSegment", domain: "domainOnly", calibrate: "optCalibrate",
-  smooth: "optSmooth", useZ: "optZ", rerank: "optRerank", custom: "optCustom" };
-for (const [k, id] of Object.entries(OPT_IDS)) {
-  const el = $(id);
-  if (!el) continue;
-  if (el.type === "checkbox") el.checked = !!opts[k]; else el.value = opts[k];
-  el.onchange = () => {
-    opts[k] = el.type === "checkbox" ? el.checked : el.value;
-    try { localStorage.setItem("ieum-sign-opts", JSON.stringify(opts)); } catch { /* 무시 */ }
-    if (k === "engine" || k === "worker") restartEngine();
-    if (k === "segment") { seg.reset(); win.reset(); }
-    if (k === "rerank") renderWords();
-  };
-}
 
 // ---------------- 상태 ----------------
 const rec = new Recognizer();
@@ -33,12 +18,11 @@ let domain = null, domainIdx = null, engine = null, worker = null, workerBusy = 
 const cleaner = new FrameCleaner(), seg = new Segmenter(), win = new WindowCommitter();
 const recent = [];                                      // 미리 보기용 최근 1.5초 특징
 const items = [];                                       // 알아들은 낱말 [{label, cands, confident, locked, custom}]
-let recording = null, teaching = null, classifying = false, lastPreview = 0;
+let classifying = false, lastPreview = 0;
 const fpsTimes = [];
 
-// 새 낱말 (기기에 저장 + web/sign/custom_words.json 기본값)
+// 새 낱말 (web/sign/custom_words.json + 예전에 이 기기에서 가르친 것)
 let protos = [];
-function saveProtos() { try { localStorage.setItem("ieum-sign-protos", JSON.stringify(protos.map((p) => ({ word: p.word, samples: p.samples.map(toB64) })))); } catch { /* 무시 */ } renderProtos(); }
 function loadProtosFrom(list) { return (list || []).map((p) => ({ word: p.word, samples: p.samples.map(fromB64) })); }
 
 const domainReady = fetch(BASE + "domain.json").then((r) => r.json()).then((d) => { domain = d; renderWords(); }).catch(() => null);
@@ -48,7 +32,6 @@ fetch(BASE + "custom_words.json").then((r) => (r.ok ? r.json() : null)).catch(()
   const map = new Map();
   for (const p of [...loadProtosFrom(d && d.words), ...loadProtosFrom(mine)]) map.set(p.word, p);
   protos = [...map.values()];
-  renderProtos();
 });
 const word = (l) => (domain && domain.words[l]) || base(l);
 
@@ -59,7 +42,6 @@ async function loadModels() {
   setLoad("수어 단어 인식 모델 불러오는 중…", 5);
   await rec.load(BASE, (g, t) => t && setLoad("수어 단어 인식 모델 불러오는 중…", 5 + 60 * g / t));
   if (domain) { const s = new Set(domain.labels); domainIdx = rec.labels.map((l, i) => (s.has(l) ? i : -1)).filter((i) => i >= 0); }
-  $("vocabInfo").textContent = `전체 ${rec.meta.num_classes.toLocaleString()}개 · 산업안전 ${domainIdx ? domainIdx.length : 0}개 (검증 정확도 ${(rec.meta.val_top1 * 100).toFixed(1)}%, 전체 단어 기준)`;
   await startEngine();
   setLoad("준비 완료", 100);
 }
@@ -78,19 +60,10 @@ async function startEngine() {
         if (e.data.type === "frame") onFrame(e.data.frame, e.data.ts);
         else if (e.data.type === "error") console.warn("작업자 스레드:", e.data.message);
       };
-      $("engineInfo").textContent = `${opts.engine === "light" ? "가벼운 모드" : "Holistic"} · 작업자 스레드`;
       return;
     } catch (e) { console.warn("작업자 스레드를 못 써서 화면에서 계산", e); if (worker) worker.terminate(); worker = null; }
   }
   engine = await createEngine(opts.engine, BASE);
-  $("engineInfo").textContent = `${opts.engine === "light" ? "가벼운 모드" : "Holistic"} · 화면 스레드`;
-}
-async function restartEngine() {
-  if (!rec.session) return;
-  if (worker) { worker.terminate(); worker = null; }
-  if (engine) { engine.close(); engine = null; }
-  cleaner.reset(); seg.reset(); win.reset();
-  await startEngine();
 }
 
 // ---------------- 프레임마다 ----------------
@@ -114,10 +87,7 @@ function loop() {
   onFrame(frame, ts);
 }
 
-const r4 = (v) => Math.round(v * 1e4) / 1e4;
 function onFrame(raw, t) {
-  if (recording) recording.frames.push({ t: Math.round(t - recording.t0), pose: raw.pose.map((p) => [r4(p.x), r4(p.y), r4(p.z), r4(p.visibility ?? 1)]),
-    lh: raw.leftHand.length ? raw.leftHand.map((p) => [r4(p.x), r4(p.y), r4(p.z)]) : null, rh: raw.rightHand.length ? raw.rightHand.map((p) => [r4(p.x), r4(p.y), r4(p.z)]) : null });
   draw(raw);
   const frame = opts.smooth ? cleaner.clean(raw, t) : raw;
   const feat = frameToFeatures(frame, opts.useZ);
@@ -145,17 +115,6 @@ function onFrame(raw, t) {
 }
 
 async function onSegment(feats) {
-  if (teaching) {                                        // 새 낱말 가르치기: 예시로 저장
-    const logits = await rec.logits(resampleSequence(feats));
-    teaching.samples.push(embed(logits));
-    $("teachMsg").textContent = `'${teaching.word}' 예시 ${teaching.samples.length}/5`;
-    if (teaching.samples.length >= 5) {
-      protos = protos.filter((p) => p.word !== teaching.word).concat([{ word: teaching.word, samples: teaching.samples }]);
-      $("teachMsg").textContent = `'${teaching.word}' 를 배웠습니다 (예시 5개)`;
-      teaching = null; saveProtos();
-    }
-    return;
-  }
   addItem(await classify(rec, feats, opts, domainIdx, protos));
 }
 function addItem(r) {
@@ -268,49 +227,6 @@ $("suggest").onclick = async (e) => {
   } catch { a.innerHTML = `<p>서버에 묻지 못했습니다.</p>`; }
 };
 
-// ---------------- 녹화 (관절 점만, 평가용) ----------------
-domainReady.then(() => { for (const q of (domain && domain.questions) || []) $("recQ").insertAdjacentHTML("beforeend", `<option>${esc(q)}</option>`); });
-$("recBtn").onclick = () => {
-  if (!recording) {
-    recording = { version: 1, engine: opts.engine, created: new Date().toISOString(),
-      label: { question: $("recQ").value, words: $("recWords").value.trim() }, t0: performance.now(), frames: [] };
-    $("recBtn").textContent = "녹화 끝"; $("recMsg").textContent = "녹화 중… (영상은 저장하지 않고 관절 점 숫자만)";
-    return;
-  }
-  const r = recording; recording = null; delete r.t0;
-  $("recBtn").textContent = "녹화 시작";
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([JSON.stringify(r)], { type: "application/json" }));
-  a.download = `sign_${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
-  a.click();
-  $("recMsg").textContent = `${r.frames.length}프레임 저장 → 평가 페이지(eval.html)에 넣으세요`;
-};
-
-// ---------------- 새 낱말 가르치기 ----------------
-function renderProtos() {
-  $("protoList").innerHTML = protos.length
-    ? protos.map((p) => `<span class="chip"><span class="w">${esc(p.word)} <small>${p.samples.length}</small></span><button class="x" data-del="${esc(p.word)}">✕</button></span>`).join("")
-    : `<span class="empty">아직 없음</span>`;
-}
-$("protoList").onclick = (e) => { const b = e.target.closest("[data-del]"); if (b) { protos = protos.filter((p) => p.word !== b.dataset.del); saveProtos(); } };
-$("teachBtn").onclick = () => {
-  const w = $("teachWord").value.trim();
-  if (!w) { $("teachMsg").textContent = "낱말을 먼저 적으세요"; return; }
-  if (opts.segment !== "motion") { $("teachMsg").textContent = "'손 움직임으로 끊기'를 켜야 예시를 모을 수 있어요"; return; }
-  teaching = { word: w, samples: [] };
-  $("teachMsg").textContent = `'${w}' 수어를 5번 하세요 (한 번 하고 손을 내리기)`;
-};
-$("protoExport").onclick = () => {
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([JSON.stringify({ words: protos.map((p) => ({ word: p.word, samples: p.samples.map(toB64) })) })], { type: "application/json" }));
-  a.download = "custom_words.json"; a.click();
-};
-$("protoImport").onchange = async (e) => {
-  const f = e.target.files[0]; if (!f) return;
-  const d = JSON.parse(await f.text());
-  for (const p of loadProtosFrom(d.words)) protos = protos.filter((x) => x.word !== p.word).concat([p]);
-  saveProtos();
-};
 
 $("start").onclick = startCamera;
 $("stop").onclick = stopCamera;
