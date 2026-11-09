@@ -86,17 +86,19 @@ function drawMap(p, d) {
   // 경로가 있으면 출발·도착 표시를 경로의 처음·끝에 둠 (경로는 길 위에서 시작·끝나서, 내 위치·병원 위치에 두면 선과 표시 사이가 뜸)
   //  경로가 없으면(아직 안 왔거나 못 구함) 내 위치·병원 위치에
   const from = path.length ? path[0] : here, to = path.length ? path[path.length - 1] : er && new K.LatLng(er.lat, er.lng);
+  // 지도 범위를 먼저 옮긴 뒤 선·표시를 그림. 선을 먼저 그리고 범위를 옮기면(다른 병원을 고를 때) 선이 예전 화면 범위에서 잘린 채 남음
   const bounds = new K.LatLngBounds(); bounds.extend(from);
+  path.forEach((x) => bounds.extend(x));
+  if (to) { bounds.extend(to); map.setBounds(bounds, 24, 24, 24, 24); } else map.setCenter(here);
   if (path.length) {
-    layers.push(new K.Polyline({ path, map, strokeWeight: 6, strokeColor: "#007aff", strokeOpacity: 1, strokeStyle: "solid" }));
-    path.forEach((x) => bounds.extend(x));
+    const line = new K.Polyline({ path, map, strokeWeight: 6, strokeColor: "#007aff", strokeOpacity: 1, strokeStyle: "solid" });
+    layers.push(line);
+    // 지도가 다 움직인 뒤 선을 한 번 더 그려 잘린 부분이 없게
+    const again = () => { K.event.removeListener(map, "idle", again); if (layers.includes(line)) { line.setMap(null); line.setMap(map); } };
+    K.event.addListener(map, "idle", again);
   }
   layers.push(new K.Marker({ position: from, map, image: pin(K, "출발"), zIndex: 2 }));
-  if (to) {
-    layers.push(new K.Marker({ position: to, map, title: er.name, image: pin(K, "도착"), zIndex: 2 }));
-    bounds.extend(to);
-    map.setBounds(bounds, 24, 24, 24, 24);
-  } else map.setCenter(here);
+  if (to) layers.push(new K.Marker({ position: to, map, title: er.name, image: pin(K, "도착"), zIndex: 2 }));
 }
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 let shown = null, sel = 0, lastPos = null;   // 지금 보이는 결과, 지도에 경로를 그린 병원(0: 1순위, 1: 2순위)
