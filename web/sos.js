@@ -110,10 +110,14 @@ function erBox(x, i) {
   const chip = (t, c) => `<span class="chip ${c}">${esc(t)}</span>`;
   // 길찾기: 카카오맵에서 출발 = 지금 위치, 도착 = 이 병원 (휴대폰은 카카오맵 앱으로 이어짐)
   const enc = encodeURIComponent, here = lastPos ? `from/${enc("현재 위치")},${lastPos.lat},${lastPos.lng}/` : "";
-  const nav = `<a class="chip r1" href="https://map.kakao.com/link/${here}to/${enc(er.name)},${er.lat},${er.lng}" target="_blank" rel="noopener">길찾기</a>`;
-  // 첫 줄: [자동차 n분] [n km] [길찾기], 둘째 줄: [응급실 병상] [전화]
-  const cells = [rt && rt.duration != null ? chip(`자동차 ${Math.max(1, Math.round(rt.duration / 60))}분`, "r1") : "", chip(`${km}km`, "r1"), nav,
-    chip(bed, "r2"), tel ? `<a class="chip r2" href="tel:${esc(tel.replace(/[^0-9+]/g, ""))}">${esc(tel)}</a>` : ""].filter(Boolean);
+  const nav = `<a class="chip" href="https://map.kakao.com/link/${here}to/${enc(er.name)},${er.lat},${er.lng}" target="_blank" rel="noopener">길찾기</a>`;
+  // 두 칸씩 한 줄: [응급의료기관 등급] [응급실 병상] / [자동차 n분] [n km] / [길찾기] [전화]. 한쪽이 없으면 남은 칸이 한 줄 전체
+  const pair = (a, b) => [a, b].filter(Boolean).map((x) => x.replace('class="chip', `class="chip ${a && b ? "half" : "full"}`)).join("");
+  const cells = [
+    pair(er.grade ? chip(er.grade, "") : "", chip(bed, "")),
+    pair(rt && rt.duration != null ? chip(`자동차 ${Math.max(1, Math.round(rt.duration / 60))}분`, "") : "", chip(`${km}km`, "")),
+    pair(nav, tel ? `<a class="chip" href="tel:${esc(tel.replace(/[^0-9+]/g, ""))}">${esc(tel)}</a>` : ""),
+  ];
   // 병원이 올린 진료 제한 메시지 (예: '정형외과 전문의 부재로 수지접합 불가'): 블럭 아래 한 줄씩
   const msg = (er.msgs || []).map((m) => `<span class="chip msg">${esc(m)}</span>`).join("");
   // 항목 안 '(' 바로 뒤에서는 줄이 안 바뀌게(\u2060), 괄호 부분이 통째로 다음 줄로
@@ -121,8 +125,7 @@ function erBox(x, i) {
   const sv = er.serious, sevList = (t, xs) => `<p class="sub">${t}</p><div class="row">${xs.length ? xs.map((x) => `<span class="chip">${esc(x).replace(/\(/g, "(\u2060")}</span>`).join("") : `<span class="chip">없음</span>`}</div>`;
   const sev = sv && (sv["가능"].length || sv["불가"].length)
     ? `<div class="sevbox"><button type="button" class="chip tog" data-tog aria-expanded="false">중증질환 수용 정보</button><div class="sev" hidden>${sevList("가능", sv["가능"])}${sevList("불가", sv["불가"])}</div></div>` : "";
-  const grade = er.grade ? `<p class="grade">${esc(er.grade)}</p>` : "";   // 권역·지역응급의료센터, 지역응급의료기관
-  return `<section class="box info${i === sel ? " sel" : ""}" data-i="${i}">${grade}<p class="name">${esc(er.name)}</p><div class="grid">${cells.join("")}${msg}${sev}</div></section>`;
+  return `<section class="box info${i === sel ? " sel" : ""}" data-i="${i}"><p class="name">${esc(er.name)}</p><div class="grid">${cells.join("")}${msg}${sev}</div></section>`;
 }
 function showInfo(d, err) {
   const wrap = $("sosInfo");
