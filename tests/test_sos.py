@@ -25,6 +25,10 @@ def fake_get(url, headers=None):
         return SER.encode()
     if "getEmrrmSrsillDissMsgInqire" in url:   # 진료 제한 메시지: 가까운병원(A2)만
         return (MSG if "HPID=A2" in url else EMPTY).encode()
+    if "getEgytListInfoInqire" in url:   # 응급의료기관 목록: 먼병원만 등급
+        assert "Q0=%EB%8C%80%EA%B5%AC%EA%B4%91%EC%97%AD%EC%8B%9C" in url and "Q1=%EB%82%A8%EA%B5%AC" in url
+        return """<response><header><resultCode>00</resultCode></header><body><items>
+<item><hpid>A1</hpid><dutyEmclsName>권역응급의료센터</dutyEmclsName></item></items></body></response>""".encode()
     if "getEmrrmRltmUsefulSckbdInfoInqire" in url:
         assert "STAGE1=%EB%8C%80%EA%B5%AC%EA%B4%91%EC%97%AD%EC%8B%9C" in url and "STAGE2=%EB%82%A8%EA%B5%AC" in url
         return BEDS.encode()
@@ -48,7 +52,9 @@ def test_nearest(monkeypatch):
     monkeypatch.setenv("KAKAO_REST_KEY", "rest")
     monkeypatch.setattr(sos, "_get", fake_get)
     sos._CACHE.clear()
+    sos._GRADES.clear()
     out = sos.nearest(35.84, 128.58)
+    assert out["ers"][1]["er"]["grade"] == "권역응급의료센터" and out["er"]["grade"] is None
     assert out["er"]["name"] == "가까운병원" and out["er"]["beds"] == 4 and out["er"]["ct"] == "Y"
     assert out["er"]["kakao_id"] == "777" and out["er"]["lat"] == 35.8402          # 장례식장은 빼고 같은 이름 병원
     assert "kakao_id" not in out["ers"][1]["er"]                                     # 이름이 안 맞으면 원래 그대로
