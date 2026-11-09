@@ -60,19 +60,21 @@
 #sosPanel .info .chip { text-align: center; background: var(--box); color: var(--ink); border-radius: 8px; padding: 4px 10px; font-weight: 500; text-decoration: none; }
 #sosPanel .info .chip:hover { background: var(--hover); }
 #sosPanel .info .grade { font-size: .8rem; opacity: .7; margin-bottom: -6px; }   /* 응급의료기관 등급 (병원 이름 위) */
-#sosPanel .info[data-i]:hover .grade { color: #ffffff; opacity: .9; }
+#sosPanel .info[data-i]:hover .grade, #sosPanel .info.sel .grade { color: #ffffff; opacity: .9; }
 #sosPanel .info .chip.tog { grid-column: 1 / -1; font: inherit; font-weight: 500; border: 0; cursor: pointer; }   /* 중증질환 수용 정보 펼치기 */
 #sosPanel .info .chip.tog::after { content: " ▾"; }
 #sosPanel .info .chip.tog[aria-expanded="true"]::after { content: " ▴"; }
 #sosPanel .info .sev { grid-column: 1 / -1; display: grid; gap: 6px; justify-items: center; }
 #sosPanel .info .sev .sub { font-size: .8rem; opacity: .7; }
-#sosPanel .info[data-i]:hover .sev .sub { color: #ffffff; opacity: .9; }
+#sosPanel .info[data-i]:hover .sev .sub, #sosPanel .info.sel .sev .sub { color: #ffffff; opacity: .9; }
 #sosPanel .info .sev .row { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
 #sosPanel .info .sev .chip { font-weight: 400; font-size: .85rem; }
 #sosPanel .info .chip.msg { grid-column: 1 / -1; font-weight: 400; font-size: .85rem; }   /* 진료 제한 메시지: 한 줄 전체, 보통 굵기 */
 /* 응급실 정보 칸에 마우스를 올리면 큰 칸만 빨간 배경·흰 글씨(병원 이름). 안의 블럭 4개는 그대로 */
-#sosPanel .info[data-i]:hover { background: #ff3b30; }
-#sosPanel .info[data-i]:hover .name { color: #ffffff; }
+/* 마우스를 올리면 표현 중 수어 블럭 색, 지금 지도에 도착으로 그린 병원은 빨강 (둘 다 병원 이름 흰색) */
+#sosPanel .info[data-i]:hover { background: var(--strong); }
+#sosPanel .info.sel, #sosPanel .info.sel:hover { background: #ff3b30; }
+#sosPanel .info[data-i]:hover .name, #sosPanel .info.sel .name { color: #ffffff; }
 /* 다크 모드 지도: 카카오 지도는 어두운 지도를 따로 주지 않으므로 지도 바탕 그림(타일)만 밝기를 뒤집어 어둡게.
    색은 hue-rotate 로 원래 색 쪽으로 되돌림. 빨간 핀(data: 그림)과 경로 선(SVG)은 그대로 */
 @media (prefers-color-scheme: dark) {
