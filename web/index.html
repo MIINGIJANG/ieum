@@ -128,6 +128,7 @@
   form.query.listening input { padding-right: 184px; }
   /* 예시 질문 2개: 휴대폰은 한 줄에 1개씩 2줄, PC 는 한 줄에 2개. 버튼 폭은 질문 길이에 맞춤 */
   .examples { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; }
+  .hero > .examples { margin-top: calc(8.3px - var(--block-gap)); }   /* 입력창~예시 질문 = 입력창~SOS 간격(8.3px). 예시 질문~카메라·SOS 팝업도 같은 간격 (app.js 가 이 간격을 그대로 씀) */
   @media (min-width: 761px) { .examples { flex-direction: row; flex-wrap: wrap; justify-content: center; } }   /* PC: 한 줄에 2개 */
   .examples button {
     max-width: 100%; text-align: center;
