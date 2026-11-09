@@ -102,12 +102,11 @@ function drawMap(p, d) {
 }
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 let shown = null, sel = 0, lastPos = null;   // 지금 보이는 결과, 지도에 경로를 그린 병원(0: 1순위, 1: 2순위)
-// 병원이 응급실 병상 정보를 올린 때 (공공데이터 hvidate, 예: 20261109175700) → ['11월 9일', '오후 5:57']
+// 병원이 응급실 병상 정보를 올린 때 (공공데이터 hvidate, 예: 20261109175700) → ['11월 9일', '17:57']
 function when(v) {
   const m = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})/.exec(v || "");
   if (!m) return "";
-  const h = +m[4];
-  return [`${+m[2]}월 ${+m[3]}일`, `${h < 12 ? "오전" : "오후"} ${h % 12 || 12}:${m[5]}`];
+  return [`${+m[2]}월 ${+m[3]}일`, `${m[4]}:${m[5]}`];   // 24시간제
 }
 function erBox(x, i) {
   const er = x.er, rt = x.route;
