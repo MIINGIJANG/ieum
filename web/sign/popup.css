@@ -58,6 +58,16 @@
 #sosPanel .info .chip { text-align: center; background: var(--box); color: var(--ink); border-radius: 8px; padding: 4px 10px; font-weight: 500; text-decoration: none; }
 #sosPanel .info .chip:hover { background: var(--hover); }
 #sosPanel .info .chip.nav { grid-column: 1 / -1; }
+#sosPanel .info .grade { font-size: .8rem; opacity: .7; margin-bottom: -6px; }   /* 응급의료기관 등급 (병원 이름 위) */
+#sosPanel .info[data-i]:hover .grade { color: #ffffff; opacity: .9; }
+#sosPanel .info .chip.tog { grid-column: 1 / -1; font: inherit; font-weight: 500; border: 0; cursor: pointer; }   /* 중증질환 수용 정보 펼치기 */
+#sosPanel .info .chip.tog::after { content: " ▾"; }
+#sosPanel .info .chip.tog[aria-expanded="true"]::after { content: " ▴"; }
+#sosPanel .info .sev { grid-column: 1 / -1; display: grid; gap: 6px; justify-items: center; }
+#sosPanel .info .sev .sub { font-size: .8rem; opacity: .7; }
+#sosPanel .info[data-i]:hover .sev .sub { color: #ffffff; opacity: .9; }
+#sosPanel .info .sev .row { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+#sosPanel .info .sev .chip { font-weight: 400; font-size: .85rem; }
 #sosPanel .info .chip.msg { grid-column: 1 / -1; font-weight: 400; font-size: .85rem; }   /* 진료 제한 메시지: 한 줄 전체, 보통 굵기 */   /* 길 안내: 블럭 4개 아래 한 줄 전체 */
 /* 응급실 정보 칸에 마우스를 올리면 큰 칸만 빨간 배경·흰 글씨(병원 이름). 안의 블럭 4개는 그대로 */
 #sosPanel .info[data-i]:hover { background: #ff3b30; }
