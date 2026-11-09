@@ -57,10 +57,10 @@ if (window.ResizeObserver) new ResizeObserver(fitBtn).observe($("form"));
 // 내 위치·도착 위치 표시: 빨간 핀 (경로 선과 같은 색)
 // 출발·도착 표시: 말풍선 핀에 흰 글씨, 테두리 없음 (출발 파랑, 도착 빨강)
 const PIN_COLOR = { 출발: "#007aff", 도착: "#ff3b30" };
-const tagPin = (t) => "data:image/svg+xml;charset=utf-8," + encodeURIComponent(
-  `<svg xmlns="http://www.w3.org/2000/svg" width="52" height="38" viewBox="0 0 52 38"><path d="M9 1.5h34a7.5 7.5 0 0 1 7.5 7.5v12a7.5 7.5 0 0 1-7.5 7.5H32L26 36l-6-7.5H9A7.5 7.5 0 0 1 1.5 21V9A7.5 7.5 0 0 1 9 1.5Z" fill="${PIN_COLOR[t]}"/><text x="26" y="20.5" text-anchor="middle" font-family="-apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif" font-size="14" font-weight="700" fill="#ffffff">${t}</text></svg>`);
+const tagPin = (t) => "data:image/svg+xml;charset=utf-8," + encodeURIComponent(   // 물방울 모양 핀 안에 '출발'·'도착'
+  `<svg xmlns="http://www.w3.org/2000/svg" width="44" height="54" viewBox="0 0 44 54"><path d="M22 53C22 53 2 32.5 2 21a20 20 0 0 1 40 0c0 11.5-20 32-20 32Z" fill="${PIN_COLOR[t]}"/><text x="22" y="25.5" text-anchor="middle" font-family="-apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif" font-size="13" font-weight="700" fill="#ffffff">${t}</text></svg>`);
 const pins = {};
-const pin = (K, t) => (pins[t] ??= new K.MarkerImage(tagPin(t), new K.Size(52, 38), { offset: new K.Point(26, 36) }));
+const pin = (K, t) => (pins[t] ??= new K.MarkerImage(tagPin(t), new K.Size(44, 54), { offset: new K.Point(22, 53) }));
 // 첫 로딩 때 지도 준비가 실패했으면(서버가 다시 시작하는 중 등) 버튼을 누를 때 다시 준비
 let mapLoading = null;
 function ensureMap() {
