@@ -7,6 +7,9 @@ LOC = """<response><header><resultCode>00</resultCode></header><body><items>
 <item><hpid>A1</hpid><dutyName>먼병원</dutyName><dutyAddr>대구광역시 남구 현충로 170</dutyAddr><dutyTel1>053-1</dutyTel1><latitude>35.846</latitude><longitude>128.584</longitude></item>
 <item><hpid>A2</hpid><dutyName>가까운병원</dutyName><dutyAddr>대구광역시 남구 어딘가 1</dutyAddr><dutyTel1>053-2</dutyTel1><latitude>35.8401</latitude><longitude>128.5801</longitude></item>
 </items></body></response>"""
+MSG = """<response><header><resultCode>00</resultCode></header><body><items>
+<item><hpid>A2</hpid><symBlkMsg>정형외과 전문의 부재로 수지접합 불가</symBlkMsg></item>
+<item><hpid>A2</hpid><symBlkMsg>정형외과 전문의 부재로 수지접합 불가</symBlkMsg></item></items></body></response>"""
 EMPTY = """<response><header><resultCode>00</resultCode></header><body><items></items></body></response>"""
 BEDS = """<response><header><resultCode>00</resultCode></header><body><items>
 <item><hpid>A2</hpid><hvec>4</hvec><dutyTel3>053-119</dutyTel3><hvctayn>Y</hvctayn><hvidate>20261106163000</hvidate></item>
@@ -16,8 +19,8 @@ BEDS = """<response><header><resultCode>00</resultCode></header><body><items>
 def fake_get(url, headers=None):
     if "getEgytLcinfoInqire" in url:
         return LOC.encode()
-    if "getStrmLcinfoInqire" in url:      # 외상센터: 이 테스트들에서는 없음
-        return EMPTY.encode()
+    if "getEmrrmSrsillDissMsgInqire" in url:   # 진료 제한 메시지: 가까운병원(A2)만
+        return (MSG if "HPID=A2" in url else EMPTY).encode()
     if "getEmrrmRltmUsefulSckbdInfoInqire" in url:
         assert "STAGE1=%EB%8C%80%EA%B5%AC%EA%B4%91%EC%97%AD%EC%8B%9C" in url and "STAGE2=%EB%82%A8%EA%B5%AC" in url
         return BEDS.encode()
@@ -36,6 +39,7 @@ def test_nearest(monkeypatch):
     sos._CACHE.clear()
     out = sos.nearest(35.84, 128.58)
     assert out["er"]["name"] == "가까운병원" and out["er"]["beds"] == 4 and out["er"]["ct"] == "Y"
+    assert out["er"]["msgs"] == ["정형외과 전문의 부재로 수지접합 불가"] and out["ers"][1]["er"]["msgs"] == []
     assert out["route"]["duration"] == 120 and out["route"]["path"][0] == [35.84, 128.58]
     assert [x["er"]["name"] for x in out["ers"]] == ["가까운병원", "먼병원"] and out["ers"][1]["route"]["duration"] == 300
 
@@ -101,24 +105,6 @@ def test_tie_more_beds_first(monkeypatch):
     monkeypatch.setattr(sos, "_get", g)
     sos._CACHE.clear()
     assert [x["er"]["name"] for x in sos.nearest(35.84, 128.58)["ers"]] == ["먼많은병상", "가까운적은병상"]
-
-
-def test_trauma_center_added(monkeypatch):
-    """가장 가까운 권역외상센터: 보이는 병원에 없으면 맨 뒤에 칸을 더하고 trauma 표시."""
-    trauma = """<response><header><resultCode>00</resultCode></header><body><items>
-<item><hpid>T1</hpid><dutyName>권역외상센터병원</dutyName><dutyAddr>대구광역시 중구 c</dutyAddr><dutyTel1>053-9</dutyTel1><latitude>35.87</latitude><longitude>128.60</longitude></item>
-</items></body></response>"""
-    def g(url, headers=None):
-        if "getStrmLcinfoInqire" in url:
-            return trauma.encode()
-        return fake_get(url, headers)
-    monkeypatch.setenv("DATA_GO_KR_KEY", "k")
-    monkeypatch.setenv("KAKAO_REST_KEY", "rest")
-    monkeypatch.setattr(sos, "_get", g)
-    sos._CACHE.clear()
-    ers = sos.nearest(35.84, 128.58)["ers"]
-    assert ers[-1]["er"]["name"] == "권역외상센터병원" and ers[-1]["er"]["trauma"] and ers[-1]["route"]
-    assert not any(x["er"].get("trauma") for x in ers[:-1])
 
 
 def test_error_log_hides_query():
