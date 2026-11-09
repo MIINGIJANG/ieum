@@ -57,10 +57,10 @@ if (window.ResizeObserver) new ResizeObserver(fitBtn).observe($("form"));
 // 내 위치·도착 위치 표시: 빨간 핀 (경로 선과 같은 색)
 // 출발·도착 표시: 말풍선 핀에 흰 글씨, 테두리 없음 (출발 파랑, 도착 빨강)
 const PIN_COLOR = { 출발: "#007aff", 도착: "#ff3b30" };
-const tagPin = (t) => "data:image/svg+xml;charset=utf-8," + encodeURIComponent(
-  `<svg xmlns="http://www.w3.org/2000/svg" width="52" height="38" viewBox="0 0 52 38"><path d="M9 1.5h34a7.5 7.5 0 0 1 7.5 7.5v12a7.5 7.5 0 0 1-7.5 7.5H32L26 36l-6-7.5H9A7.5 7.5 0 0 1 1.5 21V9A7.5 7.5 0 0 1 9 1.5Z" fill="${PIN_COLOR[t]}"/><text x="26" y="20.5" text-anchor="middle" font-family="-apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif" font-size="14" font-weight="700" fill="#ffffff">${t}</text></svg>`);
+const tagPin = (t) => "data:image/svg+xml;charset=utf-8," + encodeURIComponent(   // 물방울 모양 핀 안에 '출발'·'도착'
+  `<svg xmlns="http://www.w3.org/2000/svg" width="44" height="54" viewBox="0 0 44 54"><path d="M22 53C22 53 2 32.5 2 21a20 20 0 0 1 40 0c0 11.5-20 32-20 32Z" fill="${PIN_COLOR[t]}"/><text x="22" y="25.5" text-anchor="middle" font-family="-apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif" font-size="13" font-weight="700" fill="#ffffff">${t}</text></svg>`);
 const pins = {};
-const pin = (K, t) => (pins[t] ??= new K.MarkerImage(tagPin(t), new K.Size(52, 38), { offset: new K.Point(26, 36) }));
+const pin = (K, t) => (pins[t] ??= new K.MarkerImage(tagPin(t), new K.Size(44, 54), { offset: new K.Point(22, 53) }));
 // 첫 로딩 때 지도 준비가 실패했으면(서버가 다시 시작하는 중 등) 버튼을 누를 때 다시 준비
 let mapLoading = null;
 function ensureMap() {
@@ -156,7 +156,8 @@ async function refresh(p) {
   const same = result && resultFor === `${p.lat.toFixed(3)},${p.lng.toFixed(3)}`;
   drawMap(p, same ? (shown === result && (result.ers || [])[sel]) || result : null);   // 닫히는 도중에 다시 열면 고른 병원 그대로
   lastPos = p;
-  const mapP = ensureMap().then(() => { if (open && !map) drawMap(p, null); });   // 지도가 아직 없으면 먼저 내 위치만
+  // 지도가 아직 없으면 먼저 내 위치만. 카카오 지도가 끝까지 안 불러와져도 응급실 정보는 4초 뒤 보여 줌
+  const mapP = Promise.race([ensureMap().then(() => { if (open && !map) drawMap(p, null); }), new Promise((r) => setTimeout(r, 4000))]);
   try { const d = await fetchNearest(p); await mapP; if (open) { showInfo(d); drawMap(p, (d.ers || [])[sel] || d); } }
   catch { await mapP; if (open) showInfo(null, true); }
 }
