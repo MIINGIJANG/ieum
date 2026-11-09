@@ -347,7 +347,10 @@ def sos_raw(lat: float, lng: float):
     addr = loc[0].get("dutyAddr") if loc else ""
     ser = sos._ermct("getSrsillDissAceptncPosblInfoInqire", **(sos._region(addr) or {}))
     basic = sos._ermct("getEgytBassInfoInqire", HPID=loc[0].get("hpid"), pageNo=1, numOfRows=1) if loc else []
-    return {"location_item": loc[:1], "basic_item": basic[:1], "serious_items": ser[:1]}
+    reg = sos._region(addr) or {}
+    lst = sos._ermct("getEgytListInfoInqire", Q0=reg.get("STAGE1"), **({"Q1": reg["STAGE2"]} if "STAGE2" in reg else {}), pageNo=1, numOfRows=100) if loc else []
+    mine = [x for x in lst if x.get("hpid") == loc[0].get("hpid")] if loc else []
+    return {"location_item": loc[:1], "basic_item": basic[:1], "serious_items": ser[:1], "list_item": (mine or lst)[:1]}
 
 
 @app.get("/sos/status")
