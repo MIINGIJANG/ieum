@@ -63,3 +63,20 @@ def test_status_counts_failures(monkeypatch):
     assert out["er"] and out["route"] is None
     assert st["route_fail"] - before["route_fail"] == 2 and st["ok"] - before["ok"] == 1
     assert st["recent_errors"][0]["stage"] == "route" and "35.84" not in str(st)
+
+
+def test_more_until_bed(monkeypatch):
+    """기본 2곳, 2곳 모두 병상이 없으면 병상 있는 곳이 나올 때까지 더 보여 줌."""
+    loc = """<response><header><resultCode>00</resultCode></header><body><items>""" + "".join(
+        f"<item><hpid>H{i}</hpid><dutyName>병원{i}</dutyName><dutyAddr>대구광역시 중구 길 {i}</dutyAddr><dutyTel1>053</dutyTel1>"
+        f"<latitude>{35.84 + i * 0.001}</latitude><longitude>128.58</longitude></item>" for i in range(1, 6)) + "</items></body></response>"
+    bed = """<response><header><resultCode>00</resultCode></header><body><items>
+<item><hpid>H1</hpid><hvec>0</hvec></item><item><hpid>H4</hpid><hvec>3</hvec></item></items></body></response>"""
+    def g(url, headers=None):
+        return (loc if "Lcinfo" in url else bed).encode()
+    monkeypatch.setenv("DATA_GO_KR_KEY", "k")
+    monkeypatch.delenv("KAKAO_REST_KEY", raising=False)
+    monkeypatch.setattr(sos, "_get", g)
+    sos._CACHE.clear()
+    names = [x["er"]["name"] for x in sos.nearest(35.84, 128.58)["ers"]]
+    assert names == ["병원1", "병원2", "병원3", "병원4"]   # 병원4 에 병상이 있어 거기까지

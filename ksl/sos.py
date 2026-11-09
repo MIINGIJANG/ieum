@@ -146,7 +146,7 @@ def nearest(lat, lng):
         return hit[1]
     t0 = time.time()
     try:
-        cands = nearby(lat, lng)
+        cands = nearby(lat, lng, n=8)
     except Exception as e:
         log_error("nearby", e)
         raise
@@ -154,7 +154,7 @@ def nearest(lat, lng):
         STATS["no_er"] += 1
         STATS["ms_total"] += int((time.time() - t0) * 1000)
         return {"er": None, "route": None, "ers": []}
-    top = cands[:3]                           # 가까운 3곳은 차로 걸리는 시간으로 비교
+    top = cands[:6]                           # 가까운 6곳은 차로 걸리는 시간으로 비교 (병상 있는 곳이 나올 때까지 더 보여 줄 수 있게)
     reg = lambda a: " ".join((a or "").split()[:2])          # 병상은 지역(시·도 + 시·군·구)마다 한 번에 받음
     regions = list(dict.fromkeys(reg(c["addr"]) for c in top))
 
@@ -164,16 +164,22 @@ def nearest(lat, lng):
         except Exception as e:
             log_error(stage, e)
             return None
-    # 경로 3개·병상 지역별 요청을 한꺼번에 (차례로 하면 몇 초씩 더 걸림)
+    # 경로·병상 지역별 요청을 한꺼번에 (차례로 하면 몇 초씩 더 걸림)
     with ThreadPoolExecutor(max_workers=len(top) + len(regions)) as ex:
         routes = [ex.submit(safe, "route", route, lat, lng, c["lat"], c["lng"]) for c in top]
         bedf = {r: ex.submit(safe, "beds", beds, r) for r in regions}
         routes = [f.result() for f in routes]
         bedmap = {r: (f.result() or {}) for r, f in bedf.items()}
-    # 차로 빨리 닿는 순서 (경로를 못 구한 곳은 직선거리 순으로 뒤에). 1·2순위를 돌려줌
+    # 차로 빨리 닿는 순서 (경로를 못 구한 곳은 직선거리 순으로 뒤에). 기본 2곳, 그 2곳 모두 응급실 병상이 없으면
+    #  (병상 0 이하 또는 실시간 병상 정보에 없음) 병상 있는 곳이 나올 때까지 이어서 보여 줌
     order = sorted(zip(top, routes), key=lambda cr: (cr[1] is None or cr[1].get("duration") is None,
                                                      (cr[1] or {}).get("duration") or 0, cr[0]["km"]))
-    ers = [{"er": {**c, **bedmap.get(reg(c["addr"]), {}).get(c["hpid"], {})}, "route": rt} for c, rt in order[:2]]
+    allers = [{"er": {**c, **bedmap.get(reg(c["addr"]), {}).get(c["hpid"], {})}, "route": rt} for c, rt in order]
+    has_bed = lambda x: (x["er"].get("beds") or 0) > 0
+    n = 2
+    while n < len(allers) and not any(has_bed(x) for x in allers[:n]):
+        n += 1
+    ers = allers[:n]
     out = {"er": ers[0]["er"], "route": ers[0]["route"], "ers": ers}
     STATS["ok"] += 1
     STATS["last_ok"] = _now()

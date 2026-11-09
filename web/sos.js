@@ -85,7 +85,7 @@ let shown = null, sel = 0, lastPos = null;   // 지금 보이는 결과, 지도�
 function erBox(x, i) {
   const er = x.er, rt = x.route;
   const km = ((rt && rt.distance != null ? rt.distance / 1000 : er.km) || 0).toFixed(1);
-  const bed = er.beds == null ? "" : er.beds > 0 ? `응급실 남은 병상 ${er.beds}` : "응급실 병상 없음";
+  const bed = er.beds > 0 ? `응급실 남은 병상 ${er.beds}` : "응급실 병상 없음";   // 병상 정보가 없어도 '없음'으로
   const tel = er.er_tel || er.tel;
   // 병원 이름 아래 블럭 4개를 2×2 로: 같은 폭의 두 칸이라 블럭 사이 빈 여백이 한가운데에서 십자가 모양
   const chip = (t) => `<span class="chip">${esc(t)}</span>`;
