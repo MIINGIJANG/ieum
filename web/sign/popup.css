@@ -55,9 +55,10 @@
 #sosPanel .info * { font-family: inherit; font-size: inherit; font-weight: 500; }   /* SOS 칸 안 글씨는 모두 같은 글꼴·크기(14px)·굵기(500) */
 #sosPanel .info .name { font-size: 20px; line-height: 1.15; word-break: keep-all; text-wrap: balance; }   /* 병원 이름만 20px */
 /* 응급실 정보 블럭: 낱말 블럭과 같은 모양·색 (박스 색 → 마우스 올리면 마우스 올림 색) */
-#sosPanel .info .grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; width: 100%; }   /* 줄마다 2칸: 등급·병상 / 자동차·거리 / 길찾기·전화 */
-#sosPanel .info .chip.half { grid-column: span 3; }   /* 한 줄에 두 칸 */
-#sosPanel .info .chip.full { grid-column: 1 / -1; }
+#sosPanel .info .grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; width: 100%; }   /* 등급 / 자동차·거리·길찾기 / 병상·전화 */
+#sosPanel .info .chip.c1 { grid-column: 1 / -1; }   /* 한 줄에 한 칸 */
+#sosPanel .info .chip.c2 { grid-column: span 3; }   /* 두 칸 */
+#sosPanel .info .chip.c3 { grid-column: span 2; }   /* 세 칸 */
 #sosPanel .info .chip { text-align: center; background: var(--box); color: var(--ink); border-radius: 8px; padding: 4px 10px; font-weight: 500; text-decoration: none; }
 #sosPanel .info .chip:hover { background: var(--hover); }
 #sosPanel .info .sevbox { grid-column: 1 / -1; display: grid; background: var(--box); border-radius: 8px; }   /* 중증질환 수용 정보: 버튼과 펼친 목록을 한 박스에 */
