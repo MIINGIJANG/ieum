@@ -7,6 +7,7 @@
 import json
 import math
 import os
+import re
 import time
 import urllib.parse
 import urllib.request
@@ -30,7 +31,7 @@ ERRORS = deque(maxlen=30)
 
 def log_error(stage, err):
     """단계(nearby·route·beds·config)별 실패를 세고 최근 30건을 남김 (서버 로그에도 한 줄)."""
-    msg = str(err)[:200]
+    msg = re.sub(r"\?\S*", "?…", str(err))[:200]   # 주소 뒤 ?… (키·좌표) 는 지우고 남김
     ERRORS.appendleft({"time": _now(), "stage": stage, "error": msg})
     if stage == "route":
         STATS["route_fail"] += 1
@@ -90,16 +91,22 @@ def _km(a_lat, a_lng, b_lat, b_lng):
     return 6371 * 2 * math.asin(math.sqrt(d))
 
 
-def nearby(lat, lng, n=5):
-    """가까운 응급의료기관 n곳 (직선거리 순)."""
+def nearby(lat, lng, n=5, op="getEgytLcinfoInqire"):
+    """가까운 응급의료기관 n곳 (직선거리 순). op 를 바꾸면 외상센터 위치 조회 (trauma)."""
     out = []
-    for it in _ermct("getEgytLcinfoInqire", WGS84_LAT=lat, WGS84_LON=lng, pageNo=1, numOfRows=n):
+    for it in _ermct(op, WGS84_LAT=lat, WGS84_LON=lng, pageNo=1, numOfRows=n):
         la, lo = _num(it.get("latitude")), _num(it.get("longitude"))
         if la is None or lo is None:
             continue
         out.append({"hpid": it.get("hpid"), "name": it.get("dutyName"), "addr": it.get("dutyAddr"),
                     "tel": it.get("dutyTel1"), "lat": la, "lng": lo, "km": round(_km(lat, lng, la, lo), 2)})
     return sorted(out, key=lambda x: x["km"])
+
+
+def trauma(lat, lng):
+    """가장 가까운 권역외상센터 (중증외상: 추락·끼임·절단 등). 없으면 None."""
+    got = nearby(lat, lng, n=3, op="getStrmLcinfoInqire")
+    return got[0] if got else None
 
 
 def beds(addr):
@@ -145,18 +152,6 @@ def nearest(lat, lng):
         STATS["cache_hits"] += 1
         return hit[1]
     t0 = time.time()
-    try:
-        cands = nearby(lat, lng, n=8)
-    except Exception as e:
-        log_error("nearby", e)
-        raise
-    if not cands:
-        STATS["no_er"] += 1
-        STATS["ms_total"] += int((time.time() - t0) * 1000)
-        return {"er": None, "route": None, "ers": []}
-    top = cands[:6]                           # 가까운 6곳은 차로 걸리는 시간으로 비교 (병상 있는 곳이 나올 때까지 더 보여 줄 수 있게)
-    reg = lambda a: " ".join((a or "").split()[:2])          # 병상은 지역(시·도 + 시·군·구)마다 한 번에 받음
-    regions = list(dict.fromkeys(reg(c["addr"]) for c in top))
 
     def safe(stage, f, *a):
         try:
@@ -164,12 +159,30 @@ def nearest(lat, lng):
         except Exception as e:
             log_error(stage, e)
             return None
+    with ThreadPoolExecutor(max_workers=2) as ex:      # 응급실 후보와 가장 가까운 권역외상센터를 같이 찾음
+        tf = ex.submit(safe, "trauma", trauma, lat, lng)
+        try:
+            cands = nearby(lat, lng, n=8)
+        except Exception as e:
+            log_error("nearby", e)
+            raise
+        tc = tf.result()
+    if not cands:
+        STATS["no_er"] += 1
+        STATS["ms_total"] += int((time.time() - t0) * 1000)
+        return {"er": None, "route": None, "ers": []}
+    top = cands[:6]                           # 가까운 6곳은 차로 걸리는 시간으로 비교 (병상 있는 곳이 나올 때까지 더 보여 줄 수 있게)
+    reg = lambda a: " ".join((a or "").split()[:2])          # 병상은 지역(시·도 + 시·군·구)마다 한 번에 받음
+    regions = list(dict.fromkeys(reg(c["addr"]) for c in top + ([tc] if tc else [])))
+    tc_in = tc and next((c for c in top if c["hpid"] == tc["hpid"]), None)   # 외상센터가 응급실 후보 안에 있으면 따로 경로를 안 구함
     # 경로·병상 지역별 요청을 한꺼번에 (차례로 하면 몇 초씩 더 걸림)
-    with ThreadPoolExecutor(max_workers=len(top) + len(regions)) as ex:
+    with ThreadPoolExecutor(max_workers=len(top) + len(regions) + 1) as ex:
         routes = [ex.submit(safe, "route", route, lat, lng, c["lat"], c["lng"]) for c in top]
+        tr = ex.submit(safe, "route", route, lat, lng, tc["lat"], tc["lng"]) if tc and not tc_in else None
         bedf = {r: ex.submit(safe, "beds", beds, r) for r in regions}
         routes = [f.result() for f in routes]
         bedmap = {r: (f.result() or {}) for r, f in bedf.items()}
+        trauma_route = tr.result() if tr else None
     # 차로 빨리 닿는 순서 (경로를 못 구한 곳은 직선거리 순으로 뒤에). 기본 2곳, 그 2곳 모두 응급실 병상이 없으면
     #  (병상 0 이하 또는 실시간 병상 정보에 없음) 병상 있는 곳이 나올 때까지 이어서 보여 줌
     #  시간·거리(경로)가 같으면 응급실 남은 병상이 많은 곳 먼저, 그것도 같으면 직선거리 가까운 곳 먼저
@@ -186,6 +199,15 @@ def nearest(lat, lng):
     while n < len(allers) and not any(has_bed(x) for x in allers[:n]):
         n += 1
     ers = allers[:n]
+    # 가장 가까운 권역외상센터: 보이는 병원 중에 있으면 그 칸에 표시, 없으면 맨 뒤에 칸을 하나 더 (중증외상이면 여기로)
+    if tc:
+        shown = next((x for x in ers if x["er"]["hpid"] == tc["hpid"]), None)
+        if shown:
+            shown["er"]["trauma"] = True
+        else:
+            hit = next((x for x in allers if x["er"]["hpid"] == tc["hpid"]), None)
+            ers.append(hit if hit else {"er": {**tc, **bedmap.get(reg(tc["addr"]), {}).get(tc["hpid"], {})}, "route": trauma_route})
+            ers[-1]["er"]["trauma"] = True
     out = {"er": ers[0]["er"], "route": ers[0]["route"], "ers": ers}
     STATS["ok"] += 1
     STATS["last_ok"] = _now()
