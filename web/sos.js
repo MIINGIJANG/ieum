@@ -108,7 +108,8 @@ function erBox(x, i) {
   // 병원이 올린 진료 제한 메시지 (예: '정형외과 전문의 부재로 수지접합 불가'): 블럭 4개 아래 한 줄씩
   const msg = (er.msgs || []).map((m) => `<span class="chip msg">${esc(m)}</span>`).join("");
   // 길 안내: 카카오맵에서 지금 위치 → 이 병원 길찾기 (휴대폰은 카카오맵 앱으로 이어짐). 2×2 블럭 아래 한 줄 전체
-  const nav = `<a class="chip nav" href="https://map.kakao.com/link/to/${encodeURIComponent(er.name)},${er.lat},${er.lng}" target="_blank" rel="noopener">길 안내</a>`;
+  const navTo = er.kakao_id ? er.kakao_id : `${encodeURIComponent(er.name)},${er.lat},${er.lng}`;   // 카카오맵 장소를 찾았으면 그 장소로 바로
+  const nav = `<a class="chip nav" href="https://map.kakao.com/link/to/${navTo}" target="_blank" rel="noopener">길 안내</a>`;
   // 중증질환 수용 정보: 누르면 펼쳐져 가능·불가 항목을 모두 보여 줌 (다시 누르면 접힘)
   const sv = er.serious, sevList = (t, xs) => `<p class="sub">${t}</p><div class="row">${xs.length ? xs.map((x) => `<span class="chip">${esc(x)}</span>`).join("") : `<span class="chip">없음</span>`}</div>`;
   const sev = sv && (sv["가능"].length || sv["불가"].length)

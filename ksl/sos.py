@@ -18,6 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 ERMCT = "https://apis.data.go.kr/B552657/ErmctInfoInqireService"
 KAKAO_ROUTE = "https://apis-navi.kakaomobility.com/v1/directions"
+KAKAO_PLACE = "https://dapi.kakao.com/v2/local/search/category.json"
 TIMEOUT = 8
 _CACHE, _TTL = {}, 60
 
@@ -173,6 +174,38 @@ def beds(addr):
     return res
 
 
+_PLACES = {}   # hpid → 카카오 장소 (병원 위치·이름은 잘 안 바뀌므로 서버가 켜져 있는 동안 기억)
+_squash = lambda t: "".join(ch for ch in (t or "") if ch.isalnum())
+
+
+def place(c):
+    """공공데이터포털 병원과 같은 카카오맵 장소 {name, id, lat, lng} (확실하지 않으면 None).
+    그 좌표 200m 안의 '병원'(HP8) 장소 중 이름이 공식 이름 안에 들어 있거나(예: 바로본병원 ⊂ 의료법인백천의료재단바로본병원)
+    공식 이름을 담은 것만 같은 병원으로 봄. 장례식장·주차장은 뺌."""
+    if c["hpid"] in _PLACES:
+        return _PLACES[c["hpid"]]
+    key = os.environ.get("KAKAO_REST_KEY")
+    if not key:
+        return None
+    q = urllib.parse.urlencode({"category_group_code": "HP8", "x": c["lng"], "y": c["lat"], "radius": 200, "sort": "distance"})
+    docs = json.loads(_get(f"{KAKAO_PLACE}?{q}", {"Authorization": f"KakaoAK {key}"})).get("documents", [])
+    raw, best = _squash(c["name"]), None
+    for d in docs:
+        nm, cat = d.get("place_name", ""), d.get("category_name", "")
+        if any(w in nm + cat for w in ("장례식장", "주차장")):
+            continue
+        k = _squash(nm)
+        if not k:
+            continue
+        # 같음 > 카카오 이름 ⊂ 공식 이름(긴 것) > 공식 이름 ⊂ 카카오 이름(짧은 것)
+        score = (3, 0) if k == raw else (2, len(k)) if k in raw else (1, -len(k)) if raw in k else None
+        if score and (best is None or score > best[0]):
+            best = (score, {"name": nm, "id": d.get("id"), "lat": _num(d.get("y")), "lng": _num(d.get("x"))})
+    out = best[1] if best and best[1]["lat"] is not None and best[1]["lng"] is not None else None
+    _PLACES[c["hpid"]] = out
+    return out
+
+
 def route(lat, lng, to_lat, to_lng):
     """카카오모빌리티 자동차 경로: 거리(m)·시간(초)·경로 좌표 [[lat, lng], ...]"""
     key = os.environ.get("KAKAO_REST_KEY")
@@ -220,9 +253,15 @@ def nearest(lat, lng):
     top = cands[:6]                           # 가까운 6곳은 차로 걸리는 시간으로 비교 (병상 있는 곳이 나올 때까지 더 보여 줄 수 있게)
     reg = lambda a: " ".join((a or "").split()[:2])          # 병상은 지역(시·도 + 시·군·구)마다 한 번에 받음
     regions = list(dict.fromkeys(reg(c["addr"]) for c in top))
-    # 경로·병상 지역별·진료 제한 메시지 요청을 한꺼번에 (차례로 하면 몇 초씩 더 걸림)
+    def placed_route(c):
+        """카카오맵 장소를 찾아 이름·위치를 맞춘 뒤(못 찾으면 원래 그대로) 그 위치까지 자동차 경로"""
+        pl = safe("place", place, c)
+        if pl:
+            c.update({"official": c["name"], "name": pl["name"], "kakao_id": pl["id"], "lat": pl["lat"], "lng": pl["lng"]})
+        return route(lat, lng, c["lat"], c["lng"])
+    # 카카오 장소·경로, 병상 지역별, 진료 제한 메시지 요청을 한꺼번에 (차례로 하면 몇 초씩 더 걸림)
     with ThreadPoolExecutor(max_workers=2 * len(top) + 2 * len(regions)) as ex:
-        routes = [ex.submit(safe, "route", route, lat, lng, c["lat"], c["lng"]) for c in top]
+        routes = [ex.submit(safe, "route", placed_route, c) for c in top]
         bedf = {r: ex.submit(safe, "beds", beds, r) for r in regions}
         serf = {r: ex.submit(safe, "serious", serious, r) for r in regions}
         msgf = {c["hpid"]: ex.submit(safe, "messages", messages, c["hpid"]) for c in top}
