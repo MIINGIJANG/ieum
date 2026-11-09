@@ -60,3 +60,8 @@
 /* 응급실 정보 칸에 마우스를 올리면 큰 칸만 빨간 배경·흰 글씨(병원 이름). 안의 블럭 4개는 그대로 */
 #sosPanel .info[data-i]:hover { background: #ff3b30; }
 #sosPanel .info[data-i]:hover .name { color: #ffffff; }
+/* 다크 모드 지도: 카카오 지도는 어두운 지도를 따로 주지 않으므로 지도 바탕 그림(타일)만 밝기를 뒤집어 어둡게.
+   색은 hue-rotate 로 원래 색 쪽으로 되돌림. 빨간 핀(data: 그림)과 경로 선(SVG)은 그대로 */
+@media (prefers-color-scheme: dark) {
+  #sosPanel .map img:not([src^="data:"]) { filter: invert(1) hue-rotate(180deg) brightness(.9) contrast(.9); }
+}
