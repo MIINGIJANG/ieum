@@ -81,18 +81,20 @@ function drawMap(p, d) {
   if (!map) map = new K.Map($("sosMap"), { center: here, level: 4 });
   else map.relayout();
   layers.forEach((l) => l.setMap(null)); layers = [];
-  layers.push(new K.Marker({ position: here, map, image: pin(K, "출발") }));
-  const bounds = new K.LatLngBounds(); bounds.extend(here);
   const er = d && d.er;
-  if (er) {
-    const at = new K.LatLng(er.lat, er.lng);
-    layers.push(new K.Marker({ position: at, map, title: er.name, image: pin(K, "도착") }));
-    bounds.extend(at);
-    const path = (d.route && d.route.path || []).map(([la, lo]) => new K.LatLng(la, lo));
-    if (path.length) {
-      layers.push(new K.Polyline({ path, map, strokeWeight: 6, strokeColor: "#007aff", strokeOpacity: 1, strokeStyle: "solid" }));
-      path.forEach((x) => bounds.extend(x));
-    }
+  const path = er ? (d.route && d.route.path || []).map(([la, lo]) => new K.LatLng(la, lo)) : [];
+  // 경로가 있으면 출발·도착 표시를 경로의 처음·끝에 둠 (경로는 길 위에서 시작·끝나서, 내 위치·병원 위치에 두면 선과 표시 사이가 뜸)
+  //  경로가 없으면(아직 안 왔거나 못 구함) 내 위치·병원 위치에
+  const from = path.length ? path[0] : here, to = path.length ? path[path.length - 1] : er && new K.LatLng(er.lat, er.lng);
+  const bounds = new K.LatLngBounds(); bounds.extend(from);
+  if (path.length) {
+    layers.push(new K.Polyline({ path, map, strokeWeight: 6, strokeColor: "#007aff", strokeOpacity: 1, strokeStyle: "solid" }));
+    path.forEach((x) => bounds.extend(x));
+  }
+  layers.push(new K.Marker({ position: from, map, image: pin(K, "출발"), zIndex: 2 }));
+  if (to) {
+    layers.push(new K.Marker({ position: to, map, title: er.name, image: pin(K, "도착"), zIndex: 2 }));
+    bounds.extend(to);
     map.setBounds(bounds, 24, 24, 24, 24);
   } else map.setCenter(here);
 }
