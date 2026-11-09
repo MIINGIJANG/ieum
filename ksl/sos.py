@@ -92,6 +92,9 @@ def _km(a_lat, a_lng, b_lat, b_lng):
     return 6371 * 2 * math.asin(math.sqrt(d))
 
 
+# 지정 응급의료기관 등급 (이 등급만 목록에 보여 줌)
+DESIGNATED = {"권역응급의료센터", "전문응급의료센터", "지역응급의료센터", "지역응급의료기관"}
+
 # 목록에서 빼는 병원 (이름, 띄어쓰기·기호 무시하고 비교)
 EXCLUDE = {"MS재건병원", "바로본병원"}
 
@@ -267,16 +270,28 @@ def nearest(lat, lng, fresh=False):
             log_error(stage, e)
             return None
     try:
-        cands = nearby(lat, lng, n=8)
+        cands = nearby(lat, lng, n=16)       # 지정 응급의료기관만 남기므로 넉넉히 받음
     except Exception as e:
         log_error("nearby", e)
         raise
+    reg = lambda a: " ".join((a or "").split()[:2])          # 병상·등급은 지역(시·도 + 시·군·구)마다 한 번에 받음
+    # 지정 응급의료기관(권역·전문·지역응급의료센터, 지역응급의료기관)만. 응급실운영신고기관(정형외과 전문병원 등)은 뺌
+    #  그 지역 등급 정보를 아예 못 받았으면(조회 실패·빈 응답) 그 지역은 거르지 않음
+    cregions = list(dict.fromkeys(reg(c["addr"]) for c in cands))
+    with ThreadPoolExecutor(max_workers=max(1, len(cregions))) as ex:
+        grdmap = dict(zip(cregions, ex.map(lambda r: safe("grades", grades, r) or {}, cregions)))
+    def designated(c):
+        g = grdmap.get(reg(c["addr"])) or {}
+        if not g:
+            return True
+        c["grade"] = c.get("grade") or g.get(c["hpid"]) or None
+        return c["grade"] in DESIGNATED
+    cands = [c for c in cands if designated(c)]
     if not cands:
         STATS["no_er"] += 1
         STATS["ms_total"] += int((time.time() - t0) * 1000)
         return {"er": None, "route": None, "ers": []}
     top = cands[:6]                           # 가까운 6곳은 차로 걸리는 시간으로 비교 (병상 있는 곳이 나올 때까지 더 보여 줄 수 있게)
-    reg = lambda a: " ".join((a or "").split()[:2])          # 병상은 지역(시·도 + 시·군·구)마다 한 번에 받음
     regions = list(dict.fromkeys(reg(c["addr"]) for c in top))
     def placed_route(c):
         """카카오맵 장소를 찾아 이름·위치를 맞춘 뒤(못 찾으면 원래 그대로) 그 위치까지 자동차 경로"""
@@ -285,19 +300,15 @@ def nearest(lat, lng, fresh=False):
             c.update({"official": c["name"], "name": pl["name"], "kakao_id": pl["id"], "lat": pl["lat"], "lng": pl["lng"]})
         return route(lat, lng, c["lat"], c["lng"])
     # 카카오 장소·경로, 병상 지역별, 진료 제한 메시지 요청을 한꺼번에 (차례로 하면 몇 초씩 더 걸림)
-    with ThreadPoolExecutor(max_workers=2 * len(top) + 3 * len(regions)) as ex:
+    with ThreadPoolExecutor(max_workers=2 * len(top) + 2 * len(regions)) as ex:
         routes = [ex.submit(safe, "route", placed_route, c) for c in top]
         bedf = {r: ex.submit(safe, "beds", beds, r) for r in regions}
         serf = {r: ex.submit(safe, "serious", serious, r) for r in regions}
-        grdf = {r: ex.submit(safe, "grades", grades, r) for r in regions}
         msgf = {c["hpid"]: ex.submit(safe, "messages", messages, c["hpid"]) for c in top}
         routes = [f.result() for f in routes]
         bedmap = {r: (f.result() or {}) for r, f in bedf.items()}
         msgs = {h: (f.result() or []) for h, f in msgf.items()}
         sermap = {r: (f.result() or {}) for r, f in serf.items()}
-        grdmap = {r: (f.result() or {}) for r, f in grdf.items()}
-    for c in top:   # 위치 조회에는 등급이 없어서 목록정보 조회에서 채움
-        c["grade"] = c.get("grade") or grdmap.get(reg(c["addr"]), {}).get(c["hpid"]) or None
     # 차로 빨리 닿는 순서 (경로를 못 구한 곳은 직선거리 순으로 뒤에). 기본 2곳, 그 2곳 모두 응급실 병상이 없으면
     #  (병상 0 이하 또는 실시간 병상 정보에 없음) 병상 있는 곳이 나올 때까지 이어서 보여 줌
     #  시간·거리(경로)가 같으면 응급실 남은 병상이 많은 곳 먼저, 그것도 같으면 직선거리 가까운 곳 먼저
