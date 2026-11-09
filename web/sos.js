@@ -144,8 +144,19 @@ function roll(el) {
 $("sosInfo").addEventListener("click", (e) => {
   const t = e.target.closest?.("[data-tog]");
   if (t) {                                       // 중증질환 수용 정보 펼치기·접기 (지도 경로는 바꾸지 않음)
-    const box = t.nextElementSibling, open1 = box.hidden;
-    box.hidden = !open1; t.setAttribute("aria-expanded", String(open1));
+    // 응급실 정보 칸이 처음 나올 때와 같은 효과: 펼칠 때 아래로 늘어나고, 접을 때 위로 줄어든 뒤 숨김
+    const box = t.nextElementSibling, open1 = box.hidden || box.dataset.closing === "1";
+    t.setAttribute("aria-expanded", String(open1));
+    box.getAnimations().forEach((a) => a.cancel());
+    box.hidden = false; box.dataset.closing = "";
+    const cs = getComputedStyle(box), h = box.getBoundingClientRect().height;
+    const full = { height: `${h}px`, paddingTop: cs.paddingTop, paddingBottom: cs.paddingBottom }, zero = { height: "0px", paddingTop: "0px", paddingBottom: "0px" };
+    box.style.overflow = "hidden";
+    if (!open1) box.dataset.closing = "1";
+    box.animate(open1 ? [zero, full] : [full, zero], ROLL).onfinish = () => {
+      box.style.overflow = "";
+      if (!open1) { box.hidden = true; box.dataset.closing = ""; }
+    };
     return;
   }
   const b = e.target.closest?.(".info[data-i]");

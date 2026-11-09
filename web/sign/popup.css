@@ -67,7 +67,7 @@
 #sosPanel .info .chip.tog::after { content: " ▾"; }
 #sosPanel .info .chip.tog[aria-expanded="true"]::after { content: " ▴"; }
 #sosPanel .info .sev { display: grid; gap: 6px; justify-items: center; padding: 2px 10px 10px; }
-#sosPanel .info .sev .chip { background: var(--bg); }   /* 박스 안 항목: 페이지 배경색으로 구분 */
+#sosPanel .info .sev .chip { background: var(--bg); text-wrap: balance; word-break: keep-all; }   /* 박스 안 항목: 페이지 배경색으로 구분. 줄이 넘치면 진료 제한 메시지처럼 줄마다 고르게, 낱말 중간에서 끊지 않음 */
 #sosPanel .info .sev .chip:hover { background: var(--hover); }
 #sosPanel .info .sev .row { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
 #sosPanel .info .chip.msg { grid-column: 1 / -1; text-wrap: balance; word-break: keep-all; }   /* 여러 줄이면 줄마다 글자 수를 고르게, 낱말 중간에서 끊지 않음 */   /* 진료 제한 메시지: 한 줄 전체, 보통 굵기 */
