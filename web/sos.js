@@ -119,7 +119,7 @@ function erBox(x, i) {
   const sev = sv && (sv["가능"].length || sv["불가"].length)
     ? `<button type="button" class="chip tog" data-tog aria-expanded="false">중증질환 수용 정보</button><div class="sev" hidden>${sevList("가능", sv["가능"])}${sevList("불가", sv["불가"])}</div>` : "";
   const grade = er.grade ? `<p class="grade">${esc(er.grade)}</p>` : "";   // 권역·지역응급의료센터, 지역응급의료기관
-  return `<section class="box info" data-i="${i}">${grade}<p class="name">${esc(er.name)}</p><div class="grid">${cells.join("")}${sev}${msg}</div></section>`;
+  return `<section class="box info${i === sel ? " sel" : ""}" data-i="${i}">${grade}<p class="name">${esc(er.name)}</p><div class="grid">${cells.join("")}${sev}${msg}</div></section>`;
 }
 function showInfo(d, err) {
   const wrap = $("sosInfo");
@@ -151,6 +151,7 @@ $("sosInfo").addEventListener("click", (e) => {
   const i = +b.dataset.i, list = shown.ers || [];
   if (!list[i] || i === sel) return;
   sel = i;
+  for (const x of $("sosInfo").querySelectorAll(".info[data-i]")) x.classList.toggle("sel", +x.dataset.i === sel);   // 도착 병원 칸 빨강
   drawMap(lastPos, list[i]);
 });
 async function refresh(p) {
