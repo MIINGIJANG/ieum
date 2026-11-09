@@ -68,6 +68,11 @@ function ensureMap() {
     if (cfg.kakao_js) { kakaoReady = loadKakao(cfg.kakao_js); await kakaoReady; }
   })().catch(() => { kakaoReady = null; }).finally(() => { mapLoading = null; }));
 }
+function redrawMap() {
+  if (!map || !lastPos) return;
+  map.relayout();
+  drawMap(lastPos, shown ? (shown.ers || [])[sel] || shown : null);
+}
 function drawMap(p, d) {
   if (!kakaoReady || !window.kakao?.maps) return;
   const K = window.kakao.maps, here = new K.LatLng(p.lat, p.lng);
@@ -174,6 +179,7 @@ function step(t) {
   if (Math.abs(pop.s - pop.ts) < 0.001 && Math.abs(pop.sv) < 0.01 && Math.abs(pop.o - pop.to) < 0.001 && Math.abs(pop.ov) < 0.01) {
     pop.s = pop.ts; pop.o = pop.to; pop.sv = pop.ov = 0; pop.raf = 0; render();
     if (!pop.to) { $("sosPanel").hidden = true; document.body.classList.remove("sos-open"); document.documentElement.style.minHeight = ""; }
+    else redrawMap();   // 커지는 중(축소된 상태)에 그린 경로는 잘린 채 남아 끊겨 보임 → 다 커진 뒤 지도 크기를 다시 재고 다시 그림
     return;
   }
   render();
