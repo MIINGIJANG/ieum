@@ -244,7 +244,7 @@ function popTo(show) {
   if (!pop.raf) { pop.last = performance.now(); pop.raf = requestAnimationFrame(step); }
 }
 function openPanel(p) {
-  open = true;
+  open = true; $("sosBtn").classList.add("on");
   document.body.classList.add("sos-open");
   popTo(true);
   const top = $("form").getBoundingClientRect().top;   // 카메라 팝업처럼 입력창이 화면 위쪽(16px)에 오도록
@@ -257,7 +257,7 @@ function openPanel(p) {
 }
 function closePanel() {
   if (!open) return;
-  open = false;
+  open = false; $("sosBtn").classList.remove("on");
   popTo(false);
   if (scrollBack != null) { window.__sign?.springScroll?.(scrollBack); scrollBack = null; }
 }
