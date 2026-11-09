@@ -131,3 +131,16 @@ def test_error_log_hides_query():
     sos.ERRORS.clear()
     sos.log_error("beds", "fail https://apis.data.go.kr/x?serviceKey=SECRET&WGS84_LAT=35.1")
     assert "SECRET" not in str(sos.ERRORS) and "35.1" not in str(sos.ERRORS)
+
+
+def test_excluded_hospital(monkeypatch):
+    """MS재건병원은 목록에서 뺌 (가장 가까워도)."""
+    loc = """<response><header><resultCode>00</resultCode></header><body><items>
+<item><hpid>M</hpid><dutyName>MS재건병원</dutyName><dutyAddr>대구광역시 중구 a</dutyAddr><latitude>35.8401</latitude><longitude>128.58</longitude></item>
+<item><hpid>K</hpid><dutyName>경북대학교병원</dutyName><dutyAddr>대구광역시 중구 b</dutyAddr><latitude>35.845</latitude><longitude>128.58</longitude></item>
+</items></body></response>"""
+    monkeypatch.setenv("DATA_GO_KR_KEY", "k")
+    monkeypatch.delenv("KAKAO_REST_KEY", raising=False)
+    monkeypatch.setattr(sos, "_get", lambda url, headers=None: (loc if "Lcinfo" in url else EMPTY).encode())
+    sos._CACHE.clear()
+    assert [x["er"]["name"] for x in sos.nearest(35.84, 128.58)["ers"]] == ["경북대학교병원"]
