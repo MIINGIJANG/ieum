@@ -172,8 +172,14 @@ def nearest(lat, lng):
         bedmap = {r: (f.result() or {}) for r, f in bedf.items()}
     # 차로 빨리 닿는 순서 (경로를 못 구한 곳은 직선거리 순으로 뒤에). 기본 2곳, 그 2곳 모두 응급실 병상이 없으면
     #  (병상 0 이하 또는 실시간 병상 정보에 없음) 병상 있는 곳이 나올 때까지 이어서 보여 줌
-    order = sorted(zip(top, routes), key=lambda cr: (cr[1] is None or cr[1].get("duration") is None,
-                                                     (cr[1] or {}).get("duration") or 0, cr[0]["km"]))
+    #  시간·거리(경로)가 같으면 응급실 남은 병상이 많은 곳 먼저, 그것도 같으면 직선거리 가까운 곳 먼저
+    bed_of = lambda c: bedmap.get(reg(c["addr"]), {}).get(c["hpid"], {}).get("beds") or 0
+    def rank(cr):
+        c, rt = cr
+        if not rt or rt.get("duration") is None:   # 경로를 못 구한 곳: 뒤로, 직선거리 순
+            return (1, c["km"], 0, 0, 0)
+        return (0, rt["duration"], rt.get("distance") or 0, -bed_of(c), c["km"])
+    order = sorted(zip(top, routes), key=rank)
     allers = [{"er": {**c, **bedmap.get(reg(c["addr"]), {}).get(c["hpid"], {})}, "route": rt} for c, rt in order]
     has_bed = lambda x: (x["er"].get("beds") or 0) > 0
     n = 2

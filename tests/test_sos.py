@@ -80,3 +80,21 @@ def test_more_until_bed(monkeypatch):
     sos._CACHE.clear()
     names = [x["er"]["name"] for x in sos.nearest(35.84, 128.58)["ers"]]
     assert names == ["병원1", "병원2", "병원3", "병원4"]   # 병원4 에 병상이 있어 거기까지
+
+
+def test_tie_more_beds_first(monkeypatch):
+    """차로 걸리는 시간·거리가 같으면 병상이 많은 곳이 먼저."""
+    loc = """<response><header><resultCode>00</resultCode></header><body><items>
+<item><hpid>X</hpid><dutyName>가까운적은병상</dutyName><dutyAddr>대구광역시 중구 a</dutyAddr><latitude>35.841</latitude><longitude>128.58</longitude></item>
+<item><hpid>Y</hpid><dutyName>먼많은병상</dutyName><dutyAddr>대구광역시 중구 b</dutyAddr><latitude>35.845</latitude><longitude>128.58</longitude></item>
+</items></body></response>"""
+    bed = """<response><header><resultCode>00</resultCode></header><body><items>
+<item><hpid>X</hpid><hvec>2</hvec></item><item><hpid>Y</hpid><hvec>9</hvec></item></items></body></response>"""
+    same = json.dumps({"routes": [{"result_code": 0, "summary": {"distance": 1000, "duration": 300}, "sections": []}]})
+    def g(url, headers=None):
+        return (same if "kakaomobility" in url else loc if "Lcinfo" in url else bed).encode()
+    monkeypatch.setenv("DATA_GO_KR_KEY", "k")
+    monkeypatch.setenv("KAKAO_REST_KEY", "rest")
+    monkeypatch.setattr(sos, "_get", g)
+    sos._CACHE.clear()
+    assert [x["er"]["name"] for x in sos.nearest(35.84, 128.58)["ers"]] == ["먼많은병상", "가까운적은병상"]
