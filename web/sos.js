@@ -111,12 +111,12 @@ function erBox(x, i) {
   // 길찾기: 카카오맵에서 출발 = 지금 위치, 도착 = 이 병원 (휴대폰은 카카오맵 앱으로 이어짐)
   const enc = encodeURIComponent, here = lastPos ? `from/${enc("현재 위치")},${lastPos.lat},${lastPos.lng}/` : "";
   const nav = `<a class="chip" href="https://map.kakao.com/link/${here}to/${enc(er.name)},${er.lat},${er.lng}" target="_blank" rel="noopener">길찾기</a>`;
-  // 두 칸씩 한 줄: [응급의료기관 등급] [응급실 병상] / [자동차 n분] [n km] / [길찾기] [전화]. 한쪽이 없으면 남은 칸이 한 줄 전체
-  const pair = (a, b) => [a, b].filter(Boolean).map((x) => x.replace('class="chip', `class="chip ${a && b ? "half" : "full"}`)).join("");
+  // 줄 구성: [응급의료기관 등급] / [자동차 n분] [n km] [길찾기] / [응급실 병상] [전화]. 줄 안의 칸은 같은 너비, 없는 칸은 빼고 남은 칸이 나눠 씀
+  const row = (...xs) => { xs = xs.filter(Boolean); return xs.map((x) => x.replace('class="chip', `class="chip c${xs.length}`)).join(""); };
   const cells = [
-    pair(er.grade ? chip(er.grade, "") : "", chip(bed, "")),
-    pair(rt && rt.duration != null ? chip(`자동차 ${Math.max(1, Math.round(rt.duration / 60))}분`, "") : "", chip(`${km}km`, "")),
-    pair(nav, tel ? `<a class="chip" href="tel:${esc(tel.replace(/[^0-9+]/g, ""))}">${esc(tel)}</a>` : ""),
+    row(er.grade ? chip(er.grade, "") : ""),
+    row(rt && rt.duration != null ? chip(`자동차 ${Math.max(1, Math.round(rt.duration / 60))}분`, "") : "", chip(`${km}km`, ""), nav),
+    row(chip(bed, ""), tel ? `<a class="chip" href="tel:${esc(tel.replace(/[^0-9+]/g, ""))}">${esc(tel)}</a>` : ""),
   ];
   // 병원이 올린 진료 제한 메시지 (예: '정형외과 전문의 부재로 수지접합 불가'): 블럭 아래 한 줄씩
   const msg = (er.msgs || []).map((m) => `<span class="chip msg">${esc(m)}</span>`).join("");
