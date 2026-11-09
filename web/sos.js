@@ -103,7 +103,7 @@ let shown = null, sel = 0, lastPos = null;   // 지금 보이는 결과, 지도�
 function erBox(x, i) {
   const er = x.er, rt = x.route;
   const km = ((rt && rt.distance != null ? rt.distance / 1000 : er.km) || 0).toFixed(1);
-  const bed = er.beds > 0 ? `응급실 남은 병상 ${er.beds}` : "응급실 병상 없음";   // 병상 정보가 없어도 '없음'으로
+  const bed = er.beds > 0 ? `응급실 남은 병상 ${er.beds}` : "응급실 남은 병상 없음";   // 병상 정보가 없어도 '없음'으로
   const tel = er.er_tel || er.tel;
   const chip = (t, c) => `<span class="chip ${c}">${esc(t)}</span>`;
   // 길찾기: 카카오맵에서 출발 = 지금 위치, 도착 = 이 병원 (휴대폰은 카카오맵 앱으로 이어짐)
