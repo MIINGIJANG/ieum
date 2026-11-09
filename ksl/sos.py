@@ -93,7 +93,7 @@ def _km(a_lat, a_lng, b_lat, b_lng):
 
 
 # 목록에서 빼는 병원 (이름, 띄어쓰기·기호 무시하고 비교)
-EXCLUDE = {"MS재건병원"}
+EXCLUDE = {"MS재건병원", "바로본병원"}
 
 
 def nearby(lat, lng, n=5):
