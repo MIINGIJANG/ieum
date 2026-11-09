@@ -53,7 +53,7 @@
 #sosPanel #sosInfo { display: grid; gap: 12px; }   /* 1순위·2순위 칸 사이 12px (지도 칸과도 12px) */
 #sosPanel .info { gap: 8px; text-align: center; justify-items: center; cursor: pointer; }
 #sosPanel .info * { font-family: inherit; font-size: inherit; font-weight: 500; }   /* SOS 칸 안 글씨는 모두 같은 글꼴·크기(14px)·굵기(500) */
-#sosPanel .info .name { font-size: 30px; line-height: 1.15; word-break: keep-all; text-wrap: balance; }   /* 병원 이름만 30px */
+#sosPanel .info .name { font-size: 20px; line-height: 1.15; word-break: keep-all; text-wrap: balance; }   /* 병원 이름만 20px */
 /* 응급실 정보 블럭: 낱말 블럭과 같은 모양·색 (박스 색 → 마우스 올리면 마우스 올림 색) */
 #sosPanel .info .grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; width: 100%; }   /* 첫 줄 3칸(자동차·거리·길찾기), 둘째 줄 2칸(병상·전화) */
 #sosPanel .info .chip.r1 { grid-column: span 2; }
