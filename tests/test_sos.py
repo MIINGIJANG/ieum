@@ -28,6 +28,12 @@ def fake_get(url, headers=None):
     if "getEmrrmRltmUsefulSckbdInfoInqire" in url:
         assert "STAGE1=%EB%8C%80%EA%B5%AC%EA%B4%91%EC%97%AD%EC%8B%9C" in url and "STAGE2=%EB%82%A8%EA%B5%AC" in url
         return BEDS.encode()
+    if "local/search/category" in url:   # 카카오 장소: 가까운병원 자리에 장례식장 + '가까운' 병원
+        if "35.8401" in url:
+            return json.dumps({"documents": [
+                {"place_name": "가까운병원 장례식장", "category_name": "서비스 > 장례식장", "id": "9", "x": "128.5801", "y": "35.8401"},
+                {"place_name": "가까운병원", "category_name": "의료,건강 > 병원", "id": "777", "x": "128.5802", "y": "35.8402"}]}).encode()
+        return json.dumps({"documents": [{"place_name": "엉뚱한의원", "category_name": "의료,건강 > 병원", "id": "1", "x": "1", "y": "1"}]}).encode()
     if "kakaomobility" in url:
         assert headers["Authorization"] == "KakaoAK rest"
         far = "128.584" in url
@@ -37,12 +43,15 @@ def fake_get(url, headers=None):
 
 
 def test_nearest(monkeypatch):
+    sos._PLACES.clear()
     monkeypatch.setenv("DATA_GO_KR_KEY", "k")
     monkeypatch.setenv("KAKAO_REST_KEY", "rest")
     monkeypatch.setattr(sos, "_get", fake_get)
     sos._CACHE.clear()
     out = sos.nearest(35.84, 128.58)
     assert out["er"]["name"] == "가까운병원" and out["er"]["beds"] == 4 and out["er"]["ct"] == "Y"
+    assert out["er"]["kakao_id"] == "777" and out["er"]["lat"] == 35.8402          # 장례식장은 빼고 같은 이름 병원
+    assert "kakao_id" not in out["ers"][1]["er"]                                     # 이름이 안 맞으면 원래 그대로
     assert out["er"]["msgs"] == ["정형외과 전문의 부재로 수지접합 불가"] and out["ers"][1]["er"]["msgs"] == []
     assert out["er"]["serious"] == {"가능": ["저체중출생아 집중치료 (1500g 이상)", "수족지접합"], "불가": ["중증화상 전문치료"]} and out["ers"][1]["er"]["serious"] is None
     assert out["route"]["duration"] == 120 and out["route"]["path"][0] == [35.84, 128.58]
