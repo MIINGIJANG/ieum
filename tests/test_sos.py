@@ -7,6 +7,8 @@ LOC = """<response><header><resultCode>00</resultCode></header><body><items>
 <item><hpid>A1</hpid><dutyName>먼병원</dutyName><dutyAddr>대구광역시 남구 현충로 170</dutyAddr><dutyTel1>053-1</dutyTel1><latitude>35.846</latitude><longitude>128.584</longitude></item>
 <item><hpid>A2</hpid><dutyName>가까운병원</dutyName><dutyAddr>대구광역시 남구 어딘가 1</dutyAddr><dutyTel1>053-2</dutyTel1><latitude>35.8401</latitude><longitude>128.5801</longitude></item>
 </items></body></response>"""
+SER = """<response><header><resultCode>00</resultCode></header><body><items>
+<item><hpid>A2</hpid><MKioskTy5>Y</MKioskTy5><MKioskTy11>N1</MKioskTy11><MKioskTy1>정보미제공</MKioskTy1></item></items></body></response>"""
 MSG = """<response><header><resultCode>00</resultCode></header><body><items>
 <item><hpid>A2</hpid><symBlkMsg>정형외과 전문의 부재로 수지접합 불가</symBlkMsg></item>
 <item><hpid>A2</hpid><symBlkMsg>정형외과 전문의 부재로 수지접합 불가</symBlkMsg></item></items></body></response>"""
@@ -19,6 +21,8 @@ BEDS = """<response><header><resultCode>00</resultCode></header><body><items>
 def fake_get(url, headers=None):
     if "getEgytLcinfoInqire" in url:
         return LOC.encode()
+    if "getSrsillDissAceptncPosblInfoInqire" in url:   # 중증질환 수용: 가까운병원(A2) 사지접합 가능·중증화상 불가
+        return SER.encode()
     if "getEmrrmSrsillDissMsgInqire" in url:   # 진료 제한 메시지: 가까운병원(A2)만
         return (MSG if "HPID=A2" in url else EMPTY).encode()
     if "getEmrrmRltmUsefulSckbdInfoInqire" in url:
@@ -40,6 +44,7 @@ def test_nearest(monkeypatch):
     out = sos.nearest(35.84, 128.58)
     assert out["er"]["name"] == "가까운병원" and out["er"]["beds"] == 4 and out["er"]["ct"] == "Y"
     assert out["er"]["msgs"] == ["정형외과 전문의 부재로 수지접합 불가"] and out["ers"][1]["er"]["msgs"] == []
+    assert out["er"]["serious"] == {"가능": ["사지 접합 수술"], "불가": ["중증 화상"]} and out["ers"][1]["er"]["serious"] is None
     assert out["route"]["duration"] == 120 and out["route"]["path"][0] == [35.84, 128.58]
     assert [x["er"]["name"] for x in out["ers"]] == ["가까운병원", "먼병원"] and out["ers"][1]["route"]["duration"] == 300
 

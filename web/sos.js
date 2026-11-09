@@ -95,7 +95,12 @@ function erBox(x, i) {
   const msg = (er.msgs || []).map((m) => `<span class="chip msg">${esc(m)}</span>`).join("");
   // 길 안내: 카카오맵에서 지금 위치 → 이 병원 길찾기 (휴대폰은 카카오맵 앱으로 이어짐). 2×2 블럭 아래 한 줄 전체
   const nav = `<a class="chip nav" href="https://map.kakao.com/link/to/${encodeURIComponent(er.name)},${er.lat},${er.lng}" target="_blank" rel="noopener">길 안내</a>`;
-  return `<section class="box info" data-i="${i}"><p class="name">${esc(er.name)}</p><div class="grid">${chips.join("")}${msg}${nav}</div></section>`;
+  // 중증질환 수용 정보: 누르면 펼쳐져 가능·불가 항목을 모두 보여 줌 (다시 누르면 접힘)
+  const sv = er.serious, sevList = (t, xs) => `<p class="sub">${t}</p><div class="row">${xs.length ? xs.map((x) => `<span class="chip">${esc(x)}</span>`).join("") : `<span class="chip">없음</span>`}</div>`;
+  const sev = sv && (sv["가능"].length || sv["불가"].length)
+    ? `<button type="button" class="chip tog" data-tog aria-expanded="false">중증질환 수용 정보</button><div class="sev" hidden>${sevList("가능", sv["가능"])}${sevList("불가", sv["불가"])}</div>` : "";
+  const grade = er.grade ? `<p class="grade">${esc(er.grade)}</p>` : "";   // 권역·지역응급의료센터, 지역응급의료기관
+  return `<section class="box info" data-i="${i}">${grade}<p class="name">${esc(er.name)}</p><div class="grid">${chips.join("")}${sev}${msg}${nav}</div></section>`;
 }
 function showInfo(d, err) {
   const wrap = $("sosInfo");
@@ -116,6 +121,12 @@ function roll(el) {
 }
 // 응급실 칸을 누르면 위 지도의 경로가 그 병원으로 (1순위 ↔ 2순위)
 $("sosInfo").addEventListener("click", (e) => {
+  const t = e.target.closest?.("[data-tog]");
+  if (t) {                                       // 중증질환 수용 정보 펼치기·접기 (지도 경로는 바꾸지 않음)
+    const box = t.nextElementSibling, open1 = box.hidden;
+    box.hidden = !open1; t.setAttribute("aria-expanded", String(open1));
+    return;
+  }
   const b = e.target.closest?.(".info[data-i]");
   if (!b || !shown || !lastPos) return;
   const i = +b.dataset.i, list = shown.ers || [];

@@ -99,7 +99,8 @@ def nearby(lat, lng, n=5):
         if la is None or lo is None:
             continue
         out.append({"hpid": it.get("hpid"), "name": it.get("dutyName"), "addr": it.get("dutyAddr"),
-                    "tel": it.get("dutyTel1"), "lat": la, "lng": lo, "km": round(_km(lat, lng, la, lo), 2)})
+                    "tel": it.get("dutyTel1"), "grade": it.get("dutyEmclsName") or None,   # 권역·지역응급의료센터, 지역응급의료기관
+                    "lat": la, "lng": lo, "km": round(_km(lat, lng, la, lo), 2)})
     return sorted(out, key=lambda x: x["km"])
 
 
@@ -111,6 +112,45 @@ def messages(hpid):
         if m and m not in out:
             out.append(m)
     return out[:3]
+
+
+def _region(addr):
+    parts = (addr or "").split()
+    if not parts:
+        return None
+    params = {"STAGE1": parts[0], "pageNo": 1, "numOfRows": 100}
+    if len(parts) > 1 and parts[1][-1:] in ("시", "군", "구"):
+        params["STAGE2"] = parts[1]
+    return params
+
+
+# 중증질환자 수용 가능 정보 (getSrsillDissAceptncPosblInfoInqire) 항목 → 화면 이름
+SERIOUS = {"MKioskTy1": "뇌출혈 수술", "MKioskTy2": "뇌경색 재관류", "MKioskTy3": "심근경색 재관류", "MKioskTy4": "복부 손상 수술",
+           "MKioskTy5": "사지 접합 수술", "MKioskTy6": "응급 내시경", "MKioskTy7": "응급 투석", "MKioskTy8": "조산 산모",
+           "MKioskTy9": "정신질환자", "MKioskTy10": "신생아", "MKioskTy11": "중증 화상"}
+
+
+def serious(addr):
+    """그 시·군·구 응급실들의 중증질환 수용 가능 여부 {hpid: {"가능": [...], "불가": [...]}} (Y… 가능, N… 불가, 그 밖은 정보 없음)"""
+    params = _region(addr)
+    if not params:
+        return {}
+    res, seen, keys = {}, False, None
+    for it in _ermct("getSrsillDissAceptncPosblInfoInqire", **params):
+        keys = keys or sorted(it)
+        ok, no = [], []
+        for k, name in SERIOUS.items():
+            v = (it.get(k) or "").strip().upper()
+            if v:
+                seen = True
+            if v.startswith("Y"):
+                ok.append(name)
+            elif v.startswith("N"):
+                no.append(name)
+        res[it.get("hpid")] = {"가능": ok, "불가": no}
+    if res and not seen:   # 항목 이름이 예상과 다르면 기록 (어떤 항목이 왔는지만, 값·좌표 없이)
+        log_error("serious", "예상한 MKioskTy 항목 없음, 받은 항목: " + ",".join(keys or []))
+    return res
 
 
 def beds(addr):
@@ -176,13 +216,15 @@ def nearest(lat, lng):
     reg = lambda a: " ".join((a or "").split()[:2])          # 병상은 지역(시·도 + 시·군·구)마다 한 번에 받음
     regions = list(dict.fromkeys(reg(c["addr"]) for c in top))
     # 경로·병상 지역별·진료 제한 메시지 요청을 한꺼번에 (차례로 하면 몇 초씩 더 걸림)
-    with ThreadPoolExecutor(max_workers=2 * len(top) + len(regions)) as ex:
+    with ThreadPoolExecutor(max_workers=2 * len(top) + 2 * len(regions)) as ex:
         routes = [ex.submit(safe, "route", route, lat, lng, c["lat"], c["lng"]) for c in top]
         bedf = {r: ex.submit(safe, "beds", beds, r) for r in regions}
+        serf = {r: ex.submit(safe, "serious", serious, r) for r in regions}
         msgf = {c["hpid"]: ex.submit(safe, "messages", messages, c["hpid"]) for c in top}
         routes = [f.result() for f in routes]
         bedmap = {r: (f.result() or {}) for r, f in bedf.items()}
         msgs = {h: (f.result() or []) for h, f in msgf.items()}
+        sermap = {r: (f.result() or {}) for r, f in serf.items()}
     # 차로 빨리 닿는 순서 (경로를 못 구한 곳은 직선거리 순으로 뒤에). 기본 2곳, 그 2곳 모두 응급실 병상이 없으면
     #  (병상 0 이하 또는 실시간 병상 정보에 없음) 병상 있는 곳이 나올 때까지 이어서 보여 줌
     #  시간·거리(경로)가 같으면 응급실 남은 병상이 많은 곳 먼저, 그것도 같으면 직선거리 가까운 곳 먼저
@@ -193,7 +235,8 @@ def nearest(lat, lng):
             return (1, c["km"], 0, 0, 0)
         return (0, rt["duration"], rt.get("distance") or 0, -bed_of(c), c["km"])
     order = sorted(zip(top, routes), key=rank)
-    allers = [{"er": {**c, **bedmap.get(reg(c["addr"]), {}).get(c["hpid"], {}), "msgs": msgs.get(c["hpid"], [])}, "route": rt}
+    allers = [{"er": {**c, **bedmap.get(reg(c["addr"]), {}).get(c["hpid"], {}), "msgs": msgs.get(c["hpid"], []),
+                      "serious": sermap.get(reg(c["addr"]), {}).get(c["hpid"])}, "route": rt}
               for c, rt in order]
     has_bed = lambda x: (x["er"].get("beds") or 0) > 0
     n = 2
