@@ -45,3 +45,21 @@ def test_without_route_key(monkeypatch):
     out = sos.nearest(35.84, 128.58)
     assert out["er"]["name"] == "가까운병원" and out["route"] is None   # 직선거리로 가장 가까운 곳
 
+
+
+def test_status_counts_failures(monkeypatch):
+    """경로 요청이 실패하면 단계별로 세고 최근 오류에 남김 (좌표는 남기지 않음)."""
+    monkeypatch.setenv("DATA_GO_KR_KEY", "k")
+    monkeypatch.setenv("KAKAO_REST_KEY", "rest")
+    def bad_route(url, headers=None):
+        if "kakaomobility" in url:
+            raise OSError("timeout")
+        return fake_get(url, headers)
+    monkeypatch.setattr(sos, "_get", bad_route)
+    sos._CACHE.clear(); sos.ERRORS.clear()
+    before = dict(sos.STATS)
+    out = sos.nearest(35.84, 128.58)
+    st = sos.status()
+    assert out["er"] and out["route"] is None
+    assert st["route_fail"] - before["route_fail"] == 2 and st["ok"] - before["ok"] == 1
+    assert st["recent_errors"][0]["stage"] == "route" and "35.84" not in str(st)

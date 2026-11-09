@@ -330,12 +330,20 @@ def sos_nearest(lat: float, lng: float):
     """지금 위치에서 가장 가까운 응급실 + 자동차 경로 + 실시간 병상 (ksl/sos.py). 위치는 저장하지 않음."""
     from ksl import sos
     if not sos.configured()["er"]:
+        sos.log_error("config", "DATA_GO_KR_KEY 없음")
         return JSONResponse({"error": "not_configured"}, status_code=503)
     try:
         return sos.nearest(lat, lng)
-    except Exception as e:
-        print("[이음] SOS 응급실 조회 실패:", e)
+    except Exception:            # 실패 내용은 sos.log_error 가 기록함 (/sos/status)
         return JSONResponse({"error": "failed"}, status_code=502)
+
+
+@app.get("/sos/status")
+def sos_status():
+    """SOS 사용 기록·오류 확인용 (서버가 다시 시작하면 처음부터): 요청 수·성공·실패·단계별 실패·평균 시간·최근 오류 30건.
+    위치·좌표는 남기지 않음. 브라우저로 이 주소를 열면 됨."""
+    from ksl import sos
+    return sos.status()
 
 
 app.mount("/", StaticFiles(directory=ROOT / "web", html=True), name="web")

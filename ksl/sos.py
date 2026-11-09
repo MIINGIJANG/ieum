@@ -11,12 +11,42 @@ import time
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+from collections import deque
+from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor
 
 ERMCT = "https://apis.data.go.kr/B552657/ErmctInfoInqireService"
 KAKAO_ROUTE = "https://apis-navi.kakaomobility.com/v1/directions"
 TIMEOUT = 8
 _CACHE, _TTL = {}, 60
+
+# ---------- 사용 기록·오류 (서버 메모리, /sos/status 로 봄). 위치·좌표는 남기지 않음 ----------
+KST = timezone(timedelta(hours=9))
+_now = lambda: datetime.now(KST).strftime("%Y-%m-%d %H:%M:%S")
+STATS = {"since": _now(), "requests": 0, "cache_hits": 0, "ok": 0, "no_er": 0, "failed": 0,
+         "route_fail": 0, "beds_fail": 0, "last_ok": None, "last_fail": None, "ms_total": 0}
+ERRORS = deque(maxlen=30)
+
+
+def log_error(stage, err):
+    """단계(nearby·route·beds·config)별 실패를 세고 최근 30건을 남김 (서버 로그에도 한 줄)."""
+    msg = str(err)[:200]
+    ERRORS.appendleft({"time": _now(), "stage": stage, "error": msg})
+    if stage == "route":
+        STATS["route_fail"] += 1
+    elif stage == "beds":
+        STATS["beds_fail"] += 1
+    else:
+        STATS["failed"] += 1
+        STATS["last_fail"] = _now()
+    print(f"[이음] SOS {stage} 실패: {msg}")
+
+
+def status():
+    done = STATS["ok"] + STATS["no_er"]
+    return {**{k: v for k, v in STATS.items() if k != "ms_total"},
+            "avg_ms": round(STATS["ms_total"] / done) if done else None,
+            "configured": {k: bool(v) for k, v in configured().items()}, "recent_errors": list(ERRORS)}
 
 
 def configured():
@@ -108,26 +138,36 @@ def route(lat, lng, to_lat, to_lng):
 
 def nearest(lat, lng):
     """가까운 응급실 1·2순위(차로 빨리 닿는 순, 경로를 못 구하면 직선거리 순) + 경로 + 병상."""
+    STATS["requests"] += 1
     key = (round(lat, 3), round(lng, 3))   # 약 100m 안의 같은 자리는 1분 동안 같은 답
     hit = _CACHE.get(key)
     if hit and time.time() - hit[0] < _TTL:
+        STATS["cache_hits"] += 1
         return hit[1]
-    cands = nearby(lat, lng)
+    t0 = time.time()
+    try:
+        cands = nearby(lat, lng)
+    except Exception as e:
+        log_error("nearby", e)
+        raise
     if not cands:
+        STATS["no_er"] += 1
+        STATS["ms_total"] += int((time.time() - t0) * 1000)
         return {"er": None, "route": None, "ers": []}
     top = cands[:3]                           # 가까운 3곳은 차로 걸리는 시간으로 비교
     reg = lambda a: " ".join((a or "").split()[:2])          # 병상은 지역(시·도 + 시·군·구)마다 한 번에 받음
     regions = list(dict.fromkeys(reg(c["addr"]) for c in top))
 
-    def safe(f, *a):
+    def safe(stage, f, *a):
         try:
             return f(*a)
-        except Exception:
+        except Exception as e:
+            log_error(stage, e)
             return None
     # 경로 3개·병상 지역별 요청을 한꺼번에 (차례로 하면 몇 초씩 더 걸림)
     with ThreadPoolExecutor(max_workers=len(top) + len(regions)) as ex:
-        routes = [ex.submit(safe, route, lat, lng, c["lat"], c["lng"]) for c in top]
-        bedf = {r: ex.submit(safe, beds, r) for r in regions}
+        routes = [ex.submit(safe, "route", route, lat, lng, c["lat"], c["lng"]) for c in top]
+        bedf = {r: ex.submit(safe, "beds", beds, r) for r in regions}
         routes = [f.result() for f in routes]
         bedmap = {r: (f.result() or {}) for r, f in bedf.items()}
     # 차로 빨리 닿는 순서 (경로를 못 구한 곳은 직선거리 순으로 뒤에). 1·2순위를 돌려줌
@@ -135,6 +175,9 @@ def nearest(lat, lng):
                                                      (cr[1] or {}).get("duration") or 0, cr[0]["km"]))
     ers = [{"er": {**c, **bedmap.get(reg(c["addr"]), {}).get(c["hpid"], {})}, "route": rt} for c, rt in order[:2]]
     out = {"er": ers[0]["er"], "route": ers[0]["route"], "ers": ers}
+    STATS["ok"] += 1
+    STATS["last_ok"] = _now()
+    STATS["ms_total"] += int((time.time() - t0) * 1000)
     _CACHE[key] = (time.time(), out)
     if len(_CACHE) > 500:
         _CACHE.clear()
