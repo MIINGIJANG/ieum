@@ -28,7 +28,8 @@ def fake_get(url, headers=None):
     if "getEgytListInfoInqire" in url:   # 응급의료기관 목록: 먼병원만 등급
         assert "Q0=%EB%8C%80%EA%B5%AC%EA%B4%91%EC%97%AD%EC%8B%9C" in url and "Q1=%EB%82%A8%EA%B5%AC" in url
         return """<response><header><resultCode>00</resultCode></header><body><items>
-<item><hpid>A1</hpid><dutyEmclsName>권역응급의료센터</dutyEmclsName></item></items></body></response>""".encode()
+<item><hpid>A1</hpid><dutyEmclsName>권역응급의료센터</dutyEmclsName></item>
+<item><hpid>A2</hpid><dutyEmclsName>지역응급의료기관</dutyEmclsName></item></items></body></response>""".encode()
     if "getEmrrmRltmUsefulSckbdInfoInqire" in url:
         assert "STAGE1=%EB%8C%80%EA%B5%AC%EA%B4%91%EC%97%AD%EC%8B%9C" in url and "STAGE2=%EB%82%A8%EA%B5%AC" in url
         return BEDS.encode()
@@ -54,7 +55,7 @@ def test_nearest(monkeypatch):
     sos._CACHE.clear()
     sos._GRADES.clear()
     out = sos.nearest(35.84, 128.58)
-    assert out["ers"][1]["er"]["grade"] == "권역응급의료센터" and out["er"]["grade"] is None
+    assert out["ers"][1]["er"]["grade"] == "권역응급의료센터" and out["er"]["grade"] == "지역응급의료기관"
     assert out["er"]["name"] == "가까운병원" and out["er"]["beds"] == 4 and out["er"]["ct"] == "Y"
     assert out["er"]["kakao_id"] == "777" and out["er"]["lat"] == 35.8402          # 장례식장은 빼고 같은 이름 병원
     assert "kakao_id" not in out["ers"][1]["er"]                                     # 이름이 안 맞으면 원래 그대로
@@ -144,3 +145,20 @@ def test_excluded_hospital(monkeypatch):
     monkeypatch.setattr(sos, "_get", lambda url, headers=None: (loc if "Lcinfo" in url else EMPTY).encode())
     sos._CACHE.clear()
     assert [x["er"]["name"] for x in sos.nearest(35.84, 128.58)["ers"]] == ["경북대학교병원"]
+
+
+def test_only_designated(monkeypatch):
+    """응급실운영신고기관은 빼고 지정 응급의료기관만 (가장 가까워도)."""
+    loc = """<response><header><resultCode>00</resultCode></header><body><items>
+<item><hpid>S</hpid><dutyName>정형외과병원</dutyName><dutyAddr>대구광역시 중구 a</dutyAddr><latitude>35.8401</latitude><longitude>128.58</longitude></item>
+<item><hpid>K</hpid><dutyName>경북대학교병원</dutyName><dutyAddr>대구광역시 중구 b</dutyAddr><latitude>35.845</latitude><longitude>128.58</longitude></item>
+</items></body></response>"""
+    grd = """<response><header><resultCode>00</resultCode></header><body><items>
+<item><hpid>S</hpid><dutyEmclsName>응급실운영신고기관</dutyEmclsName></item>
+<item><hpid>K</hpid><dutyEmclsName>권역응급의료센터</dutyEmclsName></item></items></body></response>"""
+    monkeypatch.setenv("DATA_GO_KR_KEY", "k")
+    monkeypatch.delenv("KAKAO_REST_KEY", raising=False)
+    monkeypatch.setattr(sos, "_get", lambda url, headers=None: (loc if "Lcinfo" in url else grd if "ListInfo" in url else EMPTY).encode())
+    sos._CACHE.clear(); sos._GRADES.clear()
+    ers = sos.nearest(35.84, 128.58)["ers"]
+    assert [x["er"]["name"] for x in ers] == ["경북대학교병원"] and ers[0]["er"]["grade"] == "권역응급의료센터"
