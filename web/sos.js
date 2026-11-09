@@ -181,10 +181,10 @@ $("sosInfo").addEventListener("click", (e) => {
     if (open1 && over > 0) scrollInto(over);   // 펼친 목록이 화면 아래로 넘치면 그만큼 같이 내려 줌
     const full = { height: `${h}px`, paddingTop: cs.paddingTop, paddingBottom: cs.paddingBottom }, zero = { height: "0px", paddingTop: "0px", paddingBottom: "0px" };
     box.style.overflow = "hidden";
-    if (!open1) box.dataset.closing = "1";
+    if (!open1) { box.dataset.closing = "1"; shrinkPage(h); }
     box.animate(open1 ? [zero, full] : [full, zero], ROLL).onfinish = () => {
       box.style.overflow = "";
-      if (!open1) { box.hidden = true; box.dataset.closing = ""; }
+      if (!open1) { box.hidden = true; box.dataset.closing = ""; document.documentElement.style.minHeight = baseMin; }
     };
     return;
   }
@@ -199,7 +199,17 @@ $("sosInfo").addEventListener("click", (e) => {
   const m = $("sosMap").getBoundingClientRect();
   if (m.top < 0 || m.bottom > innerHeight) scrollInto($("form").getBoundingClientRect().top - 16);
 });
+let baseMin = "";   // 팝업을 열 때 잡아 둔 페이지 최소 높이 (토글로 늘렸다가 접으면 여기로 되돌림)
 // 화면을 by 만큼(+ 아래, - 위) 팝업과 같은 스프링으로 움직임. 아래로 내릴 자리가 모자라면 페이지 최소 높이를 늘려 둠 (닫히면 풂)
+// 토글을 접어 팝업이 h 만큼 줄어들 때: 늘려 둔 페이지 높이를 되돌리고, 그 때문에 화면 아래가 비면 접히는 동안 같이 올려 줌
+function shrinkPage(h) {
+  const de = document.documentElement, cur = de.style.minHeight;
+  de.style.minHeight = baseMin;
+  const after = Math.max(parseFloat(baseMin) || 0, de.scrollHeight - h);   // 다 접힌 뒤 페이지 높이
+  de.style.minHeight = cur;
+  const max = Math.max(0, after - innerHeight);
+  if (scrollY > max + 1) window.__sign?.springScroll?.(max);
+}
 function scrollInto(by) {
   if (Math.abs(by) < 1) return;
   if (by < 0 && scrollY + by < 0) by = -scrollY;
@@ -241,7 +251,7 @@ function step(t) {
   pop.ov += (-w * w * (pop.o - pop.to) - k * pop.ov) * dt; pop.o += pop.ov * dt;
   if (Math.abs(pop.s - pop.ts) < 0.001 && Math.abs(pop.sv) < 0.01 && Math.abs(pop.o - pop.to) < 0.001 && Math.abs(pop.ov) < 0.01) {
     pop.s = pop.ts; pop.o = pop.to; pop.sv = pop.ov = 0; pop.raf = 0; render();
-    if (!pop.to) { $("sosPanel").hidden = true; document.body.classList.remove("sos-open"); document.documentElement.style.minHeight = ""; }
+    if (!pop.to) { $("sosPanel").hidden = true; document.body.classList.remove("sos-open"); document.documentElement.style.minHeight = baseMin = ""; }
     else { redrawMap(); openWait.splice(0).forEach((f) => f()); }   // 커지는 중(축소된 상태)에 그린 경로는 잘린 채 남아 끊겨 보임 → 다 커진 뒤 지도 크기를 다시 재고 다시 그림
     return;
   }
@@ -270,7 +280,7 @@ function openPanel(p) {
   const top = $("form").getBoundingClientRect().top;   // 카메라 팝업처럼 입력창이 화면 위쪽(16px)에 오도록
   if (Math.abs(top - 16) > 2) {
     scrollBack ??= scrollY;
-    document.documentElement.style.minHeight = `${Math.ceil(scrollY + top - 16 + innerHeight)}px`;
+    document.documentElement.style.minHeight = baseMin = `${Math.ceil(scrollY + top - 16 + innerHeight)}px`;
     requestAnimationFrame(() => { if (open) window.__sign?.springScroll?.(scrollY + $("form").getBoundingClientRect().top - 16); });
   }
   refresh(p);
