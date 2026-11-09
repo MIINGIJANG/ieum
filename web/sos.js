@@ -177,6 +177,8 @@ $("sosInfo").addEventListener("click", (e) => {
     box.hidden = false; box.dataset.closing = "";
     fitChips(box);
     const cs = getComputedStyle(box), h = box.getBoundingClientRect().height;
+    const over = t.parentElement.getBoundingClientRect().bottom + 24 - innerHeight;
+    if (open1 && over > 0) scrollInto(over);   // 펼친 목록이 화면 아래로 넘치면 그만큼 같이 내려 줌
     const full = { height: `${h}px`, paddingTop: cs.paddingTop, paddingBottom: cs.paddingBottom }, zero = { height: "0px", paddingTop: "0px", paddingBottom: "0px" };
     box.style.overflow = "hidden";
     if (!open1) box.dataset.closing = "1";
@@ -193,7 +195,18 @@ $("sosInfo").addEventListener("click", (e) => {
   sel = i;
   for (const x of $("sosInfo").querySelectorAll(".info[data-i]")) x.classList.toggle("sel", +x.dataset.i === sel);   // 도착 병원 칸 빨강
   drawMap(lastPos, list[i]);
+  // 지도가 화면에서 다 안 보이면, 바뀐 경로를 바로 볼 수 있게 팝업을 열 때 자리(입력창이 화면 위쪽 16px)로 올림
+  const m = $("sosMap").getBoundingClientRect();
+  if (m.top < 0 || m.bottom > innerHeight) scrollInto($("form").getBoundingClientRect().top - 16);
 });
+// 화면을 by 만큼(+ 아래, - 위) 팝업과 같은 스프링으로 움직임. 아래로 내릴 자리가 모자라면 페이지 최소 높이를 늘려 둠 (닫히면 풂)
+function scrollInto(by) {
+  if (Math.abs(by) < 1) return;
+  if (by < 0 && scrollY + by < 0) by = -scrollY;
+  const to = scrollY + by, need = Math.ceil(to + innerHeight);
+  if (by > 0 && document.documentElement.scrollHeight < need) document.documentElement.style.minHeight = `${need}px`;
+  window.__sign?.springScroll?.(to);
+}
 async function refresh(p) {
   if (!p || $("sosPanel").hidden) return;     // 위치가 아직이면 지도·정보는 위치가 나오면 그림 (다 닫혔으면 그리지 않음)
   const my = gen;                              // 다 닫힌 뒤 새로 열었으면 이 결과는 버림
