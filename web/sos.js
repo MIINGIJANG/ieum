@@ -91,10 +91,11 @@ function erBox(x, i) {
   const chip = (t) => `<span class="chip">${esc(t)}</span>`;
   const chips = [rt && rt.duration != null ? chip(`자동차 ${Math.max(1, Math.round(rt.duration / 60))}분`) : "", chip(`${km}km`),
     bed ? chip(bed) : "", tel ? `<a class="chip" href="tel:${esc(tel.replace(/[^0-9+]/g, ""))}">${esc(tel)}</a>` : ""].filter(Boolean);
+  // 병원이 올린 진료 제한 메시지 (예: '정형외과 전문의 부재로 수지접합 불가'): 블럭 4개 아래 한 줄씩
+  const msg = (er.msgs || []).map((m) => `<span class="chip msg">${esc(m)}</span>`).join("");
   // 길 안내: 카카오맵에서 지금 위치 → 이 병원 길찾기 (휴대폰은 카카오맵 앱으로 이어짐). 2×2 블럭 아래 한 줄 전체
   const nav = `<a class="chip nav" href="https://map.kakao.com/link/to/${encodeURIComponent(er.name)},${er.lat},${er.lng}" target="_blank" rel="noopener">길 안내</a>`;
-  const tag = er.trauma ? `<p class="tag">권역외상센터</p>` : "";   // 가장 가까운 권역외상센터 (추락·끼임·절단 같은 중증외상)
-  return `<section class="box info" data-i="${i}">${tag}<p class="name">${esc(er.name)}</p><div class="grid">${chips.join("")}${nav}</div></section>`;
+  return `<section class="box info" data-i="${i}"><p class="name">${esc(er.name)}</p><div class="grid">${chips.join("")}${msg}${nav}</div></section>`;
 }
 function showInfo(d, err) {
   const wrap = $("sosInfo");
