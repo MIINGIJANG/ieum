@@ -105,21 +105,21 @@ function erBox(x, i) {
   const km = ((rt && rt.distance != null ? rt.distance / 1000 : er.km) || 0).toFixed(1);
   const bed = er.beds > 0 ? `응급실 남은 병상 ${er.beds}` : "응급실 병상 없음";   // 병상 정보가 없어도 '없음'으로
   const tel = er.er_tel || er.tel;
-  // 병원 이름 아래 블럭 4개를 2×2 로: 같은 폭의 두 칸이라 블럭 사이 빈 여백이 한가운데에서 십자가 모양
-  const chip = (t) => `<span class="chip">${esc(t)}</span>`;
-  const chips = [rt && rt.duration != null ? chip(`자동차 ${Math.max(1, Math.round(rt.duration / 60))}분`) : "", chip(`${km}km`),
-    bed ? chip(bed) : "", tel ? `<a class="chip" href="tel:${esc(tel.replace(/[^0-9+]/g, ""))}">${esc(tel)}</a>` : ""].filter(Boolean);
-  // 병원이 올린 진료 제한 메시지 (예: '정형외과 전문의 부재로 수지접합 불가'): 블럭 4개 아래 한 줄씩
+  const chip = (t, c) => `<span class="chip ${c}">${esc(t)}</span>`;
+  // 길찾기: 카카오맵에서 출발 = 지금 위치, 도착 = 이 병원 (휴대폰은 카카오맵 앱으로 이어짐)
+  const enc = encodeURIComponent, here = lastPos ? `from/${enc("현재 위치")},${lastPos.lat},${lastPos.lng}/` : "";
+  const nav = `<a class="chip r1" href="https://map.kakao.com/link/${here}to/${enc(er.name)},${er.lat},${er.lng}" target="_blank" rel="noopener">길찾기</a>`;
+  // 첫 줄: [자동차 n분] [n km] [길찾기], 둘째 줄: [응급실 병상] [전화]
+  const cells = [rt && rt.duration != null ? chip(`자동차 ${Math.max(1, Math.round(rt.duration / 60))}분`, "r1") : "", chip(`${km}km`, "r1"), nav,
+    chip(bed, "r2"), tel ? `<a class="chip r2" href="tel:${esc(tel.replace(/[^0-9+]/g, ""))}">${esc(tel)}</a>` : ""].filter(Boolean);
+  // 병원이 올린 진료 제한 메시지 (예: '정형외과 전문의 부재로 수지접합 불가'): 블럭 아래 한 줄씩
   const msg = (er.msgs || []).map((m) => `<span class="chip msg">${esc(m)}</span>`).join("");
-  // 길 안내: 카카오맵에서 지금 위치 → 이 병원 길찾기 (휴대폰은 카카오맵 앱으로 이어짐). 2×2 블럭 아래 한 줄 전체
-  const navTo = er.kakao_id ? er.kakao_id : `${encodeURIComponent(er.name)},${er.lat},${er.lng}`;   // 카카오맵 장소를 찾았으면 그 장소로 바로
-  const nav = `<a class="chip nav" href="https://map.kakao.com/link/to/${navTo}" target="_blank" rel="noopener">길 안내</a>`;
   // 중증질환 수용 정보: 누르면 펼쳐져 가능·불가 항목을 모두 보여 줌 (다시 누르면 접힘)
   const sv = er.serious, sevList = (t, xs) => `<p class="sub">${t}</p><div class="row">${xs.length ? xs.map((x) => `<span class="chip">${esc(x)}</span>`).join("") : `<span class="chip">없음</span>`}</div>`;
   const sev = sv && (sv["가능"].length || sv["불가"].length)
     ? `<button type="button" class="chip tog" data-tog aria-expanded="false">중증질환 수용 정보</button><div class="sev" hidden>${sevList("가능", sv["가능"])}${sevList("불가", sv["불가"])}</div>` : "";
   const grade = er.grade ? `<p class="grade">${esc(er.grade)}</p>` : "";   // 권역·지역응급의료센터, 지역응급의료기관
-  return `<section class="box info" data-i="${i}">${grade}<p class="name">${esc(er.name)}</p><div class="grid">${chips.join("")}${sev}${msg}${nav}</div></section>`;
+  return `<section class="box info" data-i="${i}">${grade}<p class="name">${esc(er.name)}</p><div class="grid">${cells.join("")}${sev}${msg}</div></section>`;
 }
 function showInfo(d, err) {
   const wrap = $("sosInfo");
