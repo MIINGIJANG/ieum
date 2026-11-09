@@ -194,10 +194,13 @@ function step(t) {
 }
 function popTo(show) {
   const el = $("sosPanel");
-  if (show && el.hidden) {
-    // 카메라 팝업과 같은 기준: 다 닫힌 뒤 다시 열면 처음 상태(1순위, 지도 표시 지움). 닫히는 도중에 다시 누르면 하던 그대로
-    el.hidden = false; $("sosInfo").hidden = true; shown = null; sel = 0;
+  if (show) {
+    // 열 때마다 처음 상태(1순위, 중증 정보 접힘, 지도 표시 지움). 닫히는 도중에 다시 눌러도 마찬가지
+    $("sosInfo").hidden = true; $("sosInfo").innerHTML = ""; shown = null; sel = 0;
     layers.forEach((l) => l.setMap(null)); layers = [];
+  }
+  if (show && el.hidden) {
+    el.hidden = false;
     window.__sign?.place?.(el);
     pop.s = POP_SCALE.from; pop.o = 0; pop.sv = pop.ov = 0;
   }
@@ -238,10 +241,9 @@ $("sosBtn").onclick = async () => {
   catch { if (open && !pos) showInfo(null, true); }
   finally { asking = false; }
 };
-// 팝업 밖을 누르면 그 순간 닫힘. 누른 곳이 버튼이면 그 버튼도 그대로 눌림 (카메라·마이크·예시 질문 등)
+// 팝업 밖의 버튼(카메라·마이크·예시 질문 등)을 누르면 닫히고 그 버튼도 그대로 눌림. 빈 배경을 누르면 닫히지 않음
 document.addEventListener("click", (e) => {
   if (!open || $("sosPanel").contains(e.target) || $("sosBtn").contains(e.target)) return;
-  closePanel();
-  if (!e.target.closest?.("button, a, [role=button]")) { e.preventDefault(); e.stopPropagation(); }
+  if (e.target.closest?.("button, a, [role=button]")) closePanel();
 }, true);
 addEventListener("resize", () => { if (open) { window.__sign?.place?.($("sosPanel")); map?.relayout(); } });
