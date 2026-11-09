@@ -156,7 +156,8 @@ async function refresh(p) {
   const same = result && resultFor === `${p.lat.toFixed(3)},${p.lng.toFixed(3)}`;
   drawMap(p, same ? (shown === result && (result.ers || [])[sel]) || result : null);   // 닫히는 도중에 다시 열면 고른 병원 그대로
   lastPos = p;
-  const mapP = ensureMap().then(() => { if (open && !map) drawMap(p, null); });   // 지도가 아직 없으면 먼저 내 위치만
+  // 지도가 아직 없으면 먼저 내 위치만. 카카오 지도가 끝까지 안 불러와져도 응급실 정보는 4초 뒤 보여 줌
+  const mapP = Promise.race([ensureMap().then(() => { if (open && !map) drawMap(p, null); }), new Promise((r) => setTimeout(r, 4000))]);
   try { const d = await fetchNearest(p); await mapP; if (open) { showInfo(d); drawMap(p, (d.ers || [])[sel] || d); } }
   catch { await mapP; if (open) showInfo(null, true); }
 }
