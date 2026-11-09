@@ -52,24 +52,25 @@
 #sosPanel .map { position: relative; width: var(--cam, 100%); max-width: 100%; justify-self: center; aspect-ratio: 4 / 3; border-radius: 12px; overflow: hidden; background: var(--bg); }
 #sosPanel #sosInfo { display: grid; gap: 12px; }   /* 1순위·2순위 칸 사이 12px (지도 칸과도 12px) */
 #sosPanel .info { gap: 8px; text-align: center; justify-items: center; cursor: pointer; }
-#sosPanel .info .name { font-size: 1rem; font-weight: 700; }
+#sosPanel .info * { font-family: inherit; font-size: inherit; }   /* SOS 칸 안 글씨는 모두 같은 글꼴·같은 크기 (팝업 글씨 14px) */
+#sosPanel .info .name { font-weight: 700; font-size: calc(1.5em + 8px); line-height: 1.15; word-break: keep-all; text-wrap: balance; }   /* 병원 이름만: 글씨 크기 = 자동차 블럭 높이 (줄 높이 1.5em + 위아래 여백 8px) */
 /* 응급실 정보 블럭: 낱말 블럭과 같은 모양·색 (박스 색 → 마우스 올리면 마우스 올림 색) */
 #sosPanel .info .grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; width: 100%; }   /* 첫 줄 3칸(자동차·거리·길찾기), 둘째 줄 2칸(병상·전화) */
 #sosPanel .info .chip.r1 { grid-column: span 2; }
 #sosPanel .info .chip.r2 { grid-column: span 3; }
 #sosPanel .info .chip { text-align: center; background: var(--box); color: var(--ink); border-radius: 8px; padding: 4px 10px; font-weight: 500; text-decoration: none; }
 #sosPanel .info .chip:hover { background: var(--hover); }
-#sosPanel .info .grade { font-size: .8rem; opacity: .7; margin-bottom: -6px; }   /* 응급의료기관 등급 (병원 이름 위) */
+#sosPanel .info .grade { opacity: .7; margin-bottom: -6px; }   /* 응급의료기관 등급 (병원 이름 위) */
 #sosPanel .info[data-i]:hover .grade, #sosPanel .info.sel .grade { color: #ffffff; opacity: .9; }
 #sosPanel .info .chip.tog { grid-column: 1 / -1; font: inherit; font-weight: 500; border: 0; cursor: pointer; }   /* 중증질환 수용 정보 펼치기 */
 #sosPanel .info .chip.tog::after { content: " ▾"; }
 #sosPanel .info .chip.tog[aria-expanded="true"]::after { content: " ▴"; }
 #sosPanel .info .sev { grid-column: 1 / -1; display: grid; gap: 6px; justify-items: center; }
-#sosPanel .info .sev .sub { font-size: .8rem; opacity: .7; }
+#sosPanel .info .sev .sub { opacity: .7; }
 #sosPanel .info[data-i]:hover .sev .sub, #sosPanel .info.sel .sev .sub { color: #ffffff; opacity: .9; }
 #sosPanel .info .sev .row { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
-#sosPanel .info .sev .chip { font-weight: 400; font-size: .85rem; }
-#sosPanel .info .chip.msg { grid-column: 1 / -1; font-weight: 400; font-size: .85rem; text-wrap: balance; word-break: keep-all; }   /* 여러 줄이면 줄마다 글자 수를 고르게, 낱말 중간에서 끊지 않음 */   /* 진료 제한 메시지: 한 줄 전체, 보통 굵기 */
+#sosPanel .info .sev .chip { font-weight: 400; }
+#sosPanel .info .chip.msg { grid-column: 1 / -1; font-weight: 400; text-wrap: balance; word-break: keep-all; }   /* 여러 줄이면 줄마다 글자 수를 고르게, 낱말 중간에서 끊지 않음 */   /* 진료 제한 메시지: 한 줄 전체, 보통 굵기 */
 /* 응급실 정보 칸에 마우스를 올리면 큰 칸만 빨간 배경·흰 글씨(병원 이름). 안의 블럭 4개는 그대로 */
 /* 마우스를 올리면 표현 중 수어 블럭 색, 지금 지도에 도착으로 그린 병원은 빨강 (둘 다 병원 이름 흰색) */
 #sosPanel .info[data-i]:hover { background: var(--strong); }
