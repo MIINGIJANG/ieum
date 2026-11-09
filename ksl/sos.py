@@ -92,17 +92,21 @@ def _km(a_lat, a_lng, b_lat, b_lng):
     return 6371 * 2 * math.asin(math.sqrt(d))
 
 
+# 목록에서 빼는 병원 (이름, 띄어쓰기·기호 무시하고 비교)
+EXCLUDE = {"MS재건병원"}
+
+
 def nearby(lat, lng, n=5):
-    """가까운 응급의료기관 n곳 (직선거리 순)."""
-    out = []
-    for it in _ermct("getEgytLcinfoInqire", WGS84_LAT=lat, WGS84_LON=lng, pageNo=1, numOfRows=n):
+    """가까운 응급의료기관 n곳 (직선거리 순). EXCLUDE 병원은 빼고 그만큼 더 받음."""
+    out, skip = [], {"".join(ch for ch in x if ch.isalnum()) for x in EXCLUDE}
+    for it in _ermct("getEgytLcinfoInqire", WGS84_LAT=lat, WGS84_LON=lng, pageNo=1, numOfRows=n + len(EXCLUDE)):
         la, lo = _num(it.get("latitude")), _num(it.get("longitude"))
-        if la is None or lo is None:
+        if la is None or lo is None or "".join(ch for ch in (it.get("dutyName") or "") if ch.isalnum()) in skip:
             continue
         out.append({"hpid": it.get("hpid"), "name": it.get("dutyName"), "addr": it.get("dutyAddr"),
                     "tel": it.get("dutyTel1"), "grade": it.get("dutyEmclsName") or None,   # 권역·지역응급의료센터, 지역응급의료기관
                     "lat": la, "lng": lo, "km": round(_km(lat, lng, la, lo), 2)})
-    return sorted(out, key=lambda x: x["km"])
+    return sorted(out, key=lambda x: x["km"])[:n]
 
 
 def messages(hpid):
