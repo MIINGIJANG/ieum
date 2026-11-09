@@ -190,6 +190,14 @@ async function startCamera() {
     if (panelOpen) closePanel();
   } finally { starting = false; }
 }
+// 카메라 칸 비율 = 실제 카메라 영상 비율 (휴대폰은 세로 영상이라 칸이 세로로 길어짐 → 좌우 검은 띠 없음).
+//  영상이 오기 전에는 지난번 비율(처음은 4:3) 그대로
+const fitCamBox = () => {
+  const v = $("video");
+  if (v.videoWidth && v.videoHeight) document.querySelector("#panel .cam").style.aspectRatio = `${v.videoWidth} / ${v.videoHeight}`;
+};
+$("video").addEventListener("loadedmetadata", fitCamBox);
+$("video").addEventListener("resize", fitCamBox);   // 휴대폰을 돌리는 등 영상 크기가 바뀔 때
 function clearOverlay() { const cv = $("overlay"); cv.getContext("2d").clearRect(0, 0, cv.width, cv.height); }
 function stopCamera() {
   cancelAnimationFrame(raf);
