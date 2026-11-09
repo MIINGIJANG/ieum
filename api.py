@@ -47,7 +47,8 @@ async def _sign_no_stale(request, call_next):
     바뀌지 않았으면 304 로 바로 끝나서 느려지지 않음. 큰 모델 파일(.onnx·.task·.wasm)은 그대로 둠."""
     res = await call_next(request)
     p = request.url.path
-    if p.startswith("/sign/") and (p.endswith("/") or p.rsplit(".", 1)[-1] in ("html", "js", "css", "json")):
+    if (p.startswith("/sign/") and (p.endswith("/") or p.rsplit(".", 1)[-1] in ("html", "js", "css", "json"))) \
+            or p in ("/", "/index.html", "/sos.js", "/sw.js"):   # 본 화면·SOS 도 (예전 sos.js 가 남아 새 화면과 섞이지 않게)
         res.headers["Cache-Control"] = "no-cache"
     return res
 
