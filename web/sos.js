@@ -114,10 +114,10 @@ function erBox(x, i) {
     chip(bed, "r2"), tel ? `<a class="chip r2" href="tel:${esc(tel.replace(/[^0-9+]/g, ""))}">${esc(tel)}</a>` : ""].filter(Boolean);
   // 병원이 올린 진료 제한 메시지 (예: '정형외과 전문의 부재로 수지접합 불가'): 블럭 아래 한 줄씩
   const msg = (er.msgs || []).map((m) => `<span class="chip msg">${esc(m)}</span>`).join("");
-  // 중증질환 수용 정보 (칸 맨 아래): 누르면 펼쳐져 가능·불가 항목을 모두 보여 줌 (다시 누르면 접힘)
+  // 중증질환 수용 정보 (칸 맨 아래): 누르면 같은 박스 안에서 펼쳐져 가능·불가 항목을 모두 보여 줌 (다시 누르면 접힘)
   const sv = er.serious, sevList = (t, xs) => `<p class="sub">${t}</p><div class="row">${xs.length ? xs.map((x) => `<span class="chip">${esc(x)}</span>`).join("") : `<span class="chip">없음</span>`}</div>`;
   const sev = sv && (sv["가능"].length || sv["불가"].length)
-    ? `<button type="button" class="chip tog" data-tog aria-expanded="false">중증질환 수용 정보</button><div class="sev" hidden>${sevList("가능", sv["가능"])}${sevList("불가", sv["불가"])}</div>` : "";
+    ? `<div class="sevbox"><button type="button" class="chip tog" data-tog aria-expanded="false">중증질환 수용 정보</button><div class="sev" hidden>${sevList("가능", sv["가능"])}${sevList("불가", sv["불가"])}</div></div>` : "";
   const grade = er.grade ? `<p class="grade">${esc(er.grade)}</p>` : "";   // 권역·지역응급의료센터, 지역응급의료기관
   return `<section class="box info${i === sel ? " sel" : ""}" data-i="${i}">${grade}<p class="name">${esc(er.name)}</p><div class="grid">${cells.join("")}${msg}${sev}</div></section>`;
 }
@@ -161,8 +161,8 @@ async function refresh(p) {
   lastPos = p;
   // 지도가 아직 없으면 먼저 내 위치만. 카카오 지도가 끝까지 안 불러와져도 응급실 정보는 4초 뒤 보여 줌
   const mapP = Promise.race([ensureMap().then(() => { if (open && !map) drawMap(p, null); }), new Promise((r) => setTimeout(r, 4000))]);
-  try { const d = await fetchNearest(p); await mapP; if (open) { showInfo(d); drawMap(p, (d.ers || [])[sel] || d); } }
-  catch { await mapP; if (open) showInfo(null, true); }
+  try { const d = await fetchNearest(p); await mapP; await opened(); if (open) { showInfo(d); drawMap(p, (d.ers || [])[sel] || d); } }
+  catch { await mapP; await opened(); if (open) showInfo(null, true); }
 }
 
 // ---------- 팝업 열기·닫기 (카메라 팝업과 같은 스프링) ----------
@@ -172,6 +172,9 @@ function origin() {
   const r = p.getBoundingClientRect(); p.style.transform = t;
   return `${b.left + b.width / 2 - r.left}px ${f.bottom - r.top}px`;
 }
+// 팝업(지도 칸)이 다 커진 뒤에 응급실 정보 칸이 아래로 늘어나며 나오도록 기다림 (껐다 켜도 처음 열 때와 같은 순서)
+let openWait = [];
+const opened = () => (pop.to === 1 && !pop.raf ? Promise.resolve() : new Promise((r) => openWait.push(r)));
 function render() {
   const el = $("sosPanel");
   el.style.opacity = String(Math.min(1, Math.max(0, pop.o)));
@@ -186,7 +189,7 @@ function step(t) {
   if (Math.abs(pop.s - pop.ts) < 0.001 && Math.abs(pop.sv) < 0.01 && Math.abs(pop.o - pop.to) < 0.001 && Math.abs(pop.ov) < 0.01) {
     pop.s = pop.ts; pop.o = pop.to; pop.sv = pop.ov = 0; pop.raf = 0; render();
     if (!pop.to) { $("sosPanel").hidden = true; document.body.classList.remove("sos-open"); document.documentElement.style.minHeight = ""; }
-    else redrawMap();   // 커지는 중(축소된 상태)에 그린 경로는 잘린 채 남아 끊겨 보임 → 다 커진 뒤 지도 크기를 다시 재고 다시 그림
+    else { redrawMap(); openWait.splice(0).forEach((f) => f()); }   // 커지는 중(축소된 상태)에 그린 경로는 잘린 채 남아 끊겨 보임 → 다 커진 뒤 지도 크기를 다시 재고 다시 그림
     return;
   }
   render();

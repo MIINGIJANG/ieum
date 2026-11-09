@@ -62,11 +62,13 @@
 #sosPanel .info .chip:hover { background: var(--hover); }
 #sosPanel .info .grade { margin-bottom: -6px; }   /* 응급의료기관 등급 (병원 이름 위) */
 #sosPanel .info[data-i]:hover .grade, #sosPanel .info.sel .grade { color: #ffffff; }
-#sosPanel .info .chip.tog { grid-column: 1 / -1; font: inherit; font-weight: 500; border: 0; cursor: pointer; }   /* 중증질환 수용 정보 펼치기 */
+#sosPanel .info .sevbox { grid-column: 1 / -1; display: grid; background: var(--box); border-radius: 8px; }   /* 중증질환 수용 정보: 버튼과 펼친 목록을 한 박스에 */
+#sosPanel .info .chip.tog { font: inherit; font-weight: 500; border: 0; cursor: pointer; }   /* 중증질환 수용 정보 펼치기 */
 #sosPanel .info .chip.tog::after { content: " ▾"; }
 #sosPanel .info .chip.tog[aria-expanded="true"]::after { content: " ▴"; }
-#sosPanel .info .sev { grid-column: 1 / -1; display: grid; gap: 6px; justify-items: center; }
-#sosPanel .info[data-i]:hover .sev .sub, #sosPanel .info.sel .sev .sub { color: #ffffff; }
+#sosPanel .info .sev { display: grid; gap: 6px; justify-items: center; padding: 2px 10px 10px; }
+#sosPanel .info .sev .chip { background: var(--bg); }   /* 박스 안 항목: 페이지 배경색으로 구분 */
+#sosPanel .info .sev .chip:hover { background: var(--hover); }
 #sosPanel .info .sev .row { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
 #sosPanel .info .chip.msg { grid-column: 1 / -1; text-wrap: balance; word-break: keep-all; }   /* 여러 줄이면 줄마다 글자 수를 고르게, 낱말 중간에서 끊지 않음 */   /* 진료 제한 메시지: 한 줄 전체, 보통 굵기 */
 /* 응급실 정보 칸에 마우스를 올리면 큰 칸만 빨간 배경·흰 글씨(병원 이름). 안의 블럭 4개는 그대로 */
