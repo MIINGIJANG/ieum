@@ -20,18 +20,18 @@ function loadKakao(key) {
   });
 }
 // 위치: 빠른 위치(와이파이·기지국)로 먼저. 정밀 GPS 는 몇~수십 초 걸려서 쓰지 않음 (응급실 찾기에는 충분)
-function getPos(timeout = 8000, precise = false) {
+function getPos(timeout = 8000, precise = false, fresh = false) {
   return new Promise((res, rej) => {
     if (!navigator.geolocation) return rej(new Error("no geolocation"));
     navigator.geolocation.getCurrentPosition((p) => {
       pos = { lat: p.coords.latitude, lng: p.coords.longitude }; posAt = Date.now(); res(pos);
-    }, rej, { enableHighAccuracy: precise, timeout, maximumAge: precise ? 0 : 300000 });
+    }, rej, { enableHighAccuracy: precise, timeout, maximumAge: precise || fresh ? 0 : 300000 });
   });
 }
-async function fetchNearest(p) {
+async function fetchNearest(p, fresh = false) {   // fresh: 저장해 둔 결과를 쓰지 않고 새로 (서버 1분 캐시도 건너뜀)
   const key = `${p.lat.toFixed(3)},${p.lng.toFixed(3)}`;
-  if (result && resultFor === key) return result;
-  const r = await fetch(`${API}sos/nearest?lat=${p.lat}&lng=${p.lng}`);
+  if (!fresh && result && resultFor === key) return result;
+  const r = await fetch(`${API}sos/nearest?lat=${p.lat}&lng=${p.lng}${fresh ? "&fresh=1" : ""}`);
   const d = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(d.error || r.status);
   result = d; resultFor = key;
@@ -188,13 +188,13 @@ $("sosInfo").addEventListener("click", (e) => {
 });
 async function refresh(p) {
   if (!p) return;                              // 위치가 아직이면 지도·정보는 위치가 나오면 그림
-  const same = result && resultFor === `${p.lat.toFixed(3)},${p.lng.toFixed(3)}`;
-  drawMap(p, same ? (shown === result && (result.ers || [])[sel]) || result : null);   // 닫히는 도중에 다시 열면 고른 병원 그대로
+  const my = gen;                              // 그 사이 닫았다 다시 열면 이 결과는 버림
+  drawMap(p, null);                            // 먼저 내 위치만
   lastPos = p;
   // 지도가 아직 없으면 먼저 내 위치만. 카카오 지도가 끝까지 안 불러와져도 응급실 정보는 4초 뒤 보여 줌
   const mapP = Promise.race([ensureMap().then(() => { if (open && !map) drawMap(p, null); }), new Promise((r) => setTimeout(r, 4000))]);
-  try { const d = await fetchNearest(p); await mapP; await opened(); if (open) { showInfo(d); drawMap(p, (d.ers || [])[sel] || d); } }
-  catch { await mapP; await opened(); if (open) showInfo(null, true); }
+  try { const d = await fetchNearest(p, true); await mapP; await opened(); if (open && my === gen) { showInfo(d); drawMap(p, (d.ers || [])[sel] || d); } }
+  catch { await mapP; await opened(); if (open && my === gen) showInfo(null, true); }
 }
 
 // ---------- 팝업 열기·닫기 (카메라 팝업과 같은 스프링) ----------
@@ -230,9 +230,10 @@ function step(t) {
 function popTo(show) {
   const el = $("sosPanel");
   if (show) {
-    // 열 때마다 처음 상태(1순위, 중증 정보 접힘, 지도 표시 지움). 닫히는 도중에 다시 눌러도 마찬가지
-    $("sosInfo").hidden = true; $("sosInfo").innerHTML = ""; shown = null; sel = 0;
+    // 열 때마다 완전히 처음부터: 정보 칸 비움, 지도도 새로 만듦 (위치 찾기·응급실 조회도 새로). 닫히는 도중에 다시 눌러도 마찬가지
+    $("sosInfo").hidden = true; $("sosInfo").innerHTML = ""; shown = null; sel = 0; lastPos = null;
     layers.forEach((l) => l.setMap(null)); layers = [];
+    if (map) { map = null; $("sosMap").innerHTML = ""; }
   }
   if (show && el.hidden) {
     el.hidden = false;
@@ -257,24 +258,23 @@ function openPanel(p) {
 }
 function closePanel() {
   if (!open) return;
-  open = false; $("sosBtn").classList.remove("on");
+  open = false; gen++; $("sosBtn").classList.remove("on");   // 아직 찾는 중인 위치·응급실 결과는 버림
   popTo(false);
   if (scrollBack != null) { window.__sign?.springScroll?.(scrollBack); scrollBack = null; }
 }
-let asking = false;
+let gen = 0;   // 누를 때마다 새로: 예전에 시작한 위치 찾기·조회 결과는 버림
 $("sosBtn").onclick = async () => {
   if (open) return closePanel();
-  if (asking) return;
-  if (pos && Date.now() - posAt < 120000) { openPanel(pos); getPos().catch(() => {}); return; }   // 방금 받은 위치가 있으면 바로
-  asking = true;
+  const my = ++gen;
+  // 매번 처음부터: 저장해 둔 위치를 쓰지 않고 지금 위치를 새로 찾음
   // 위치 권한을 묻고, 허락하는 순간 팝업을 엶 (위치가 나오기를 기다리지 않음). 거절하면 열지 않음
   const st = await navigator.permissions?.query({ name: "geolocation" }).catch(() => null);
+  if (my !== gen) return;
   if (st && st.state === "granted") openPanel(null);
-  else if (st) st.onchange = () => { if (st.state === "granted" && !open) openPanel(null); st.onchange = null; };
+  else if (st) st.onchange = () => { if (st.state === "granted" && !open && my === gen) openPanel(null); st.onchange = null; };
   // 위치: 빠른 위치(8초)로 먼저, 못 받으면 정밀 위치로 한 번 더 (20초)
-  try { const p = await getPos().catch(() => getPos(20000, true)); if (!open) openPanel(p); else refresh(p); }
-  catch { if (open && !pos) showInfo(null, true); }
-  finally { asking = false; }
+  try { const p = await getPos(8000, false, true).catch(() => getPos(20000, true)); if (my !== gen) return; if (!open) openPanel(p); else refresh(p); }
+  catch { if (my === gen && open) showInfo(null, true); }
 };
 // 팝업 밖의 버튼(카메라·마이크·예시 질문 등)을 누르면 닫히고 그 버튼도 그대로 눌림. 빈 배경을 누르면 닫히지 않음
 document.addEventListener("click", (e) => {

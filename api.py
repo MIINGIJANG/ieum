@@ -327,14 +327,14 @@ def sos_config():
 
 
 @app.get("/sos/nearest")
-def sos_nearest(lat: float, lng: float):
+def sos_nearest(lat: float, lng: float, fresh: int = 0):
     """지금 위치에서 가장 가까운 응급실 + 자동차 경로 + 실시간 병상 (ksl/sos.py). 위치는 저장하지 않음."""
     from ksl import sos
     if not sos.configured()["er"]:
         sos.log_error("config", "DATA_GO_KR_KEY 없음")
         return JSONResponse({"error": "not_configured"}, status_code=503)
     try:
-        return sos.nearest(lat, lng)
+        return sos.nearest(lat, lng, fresh=bool(fresh))
     except Exception:            # 실패 내용은 sos.log_error 가 기록함 (/sos/status)
         return JSONResponse({"error": "failed"}, status_code=502)
 
