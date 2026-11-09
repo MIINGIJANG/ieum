@@ -102,6 +102,13 @@ function drawMap(p, d) {
 }
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 let shown = null, sel = 0, lastPos = null;   // 지금 보이는 결과, 지도에 경로를 그린 병원(0: 1순위, 1: 2순위)
+// 병원이 응급실 병상 정보를 올린 때 (공공데이터 hvidate, 예: 20261109175700) → ['11월 9일 (월)', '오후 5:57']
+function when(v) {
+  const m = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})/.exec(v || "");
+  if (!m) return "";
+  const d = new Date(+m[1], +m[2] - 1, +m[3]), h = +m[4];
+  return [`${+m[2]}월 ${+m[3]}일 (${"일월화수목금토"[d.getDay()]})`, `${h < 12 ? "오전" : "오후"} ${h % 12 || 12}:${m[5]}`];
+}
 function erBox(x, i) {
   const er = x.er, rt = x.route;
   const km = ((rt && rt.distance != null ? rt.distance / 1000 : er.km) || 0).toFixed(1);
@@ -111,18 +118,20 @@ function erBox(x, i) {
   // 길찾기: 카카오맵에서 출발 = 지금 위치, 도착 = 이 병원 (휴대폰은 카카오맵 앱으로 이어짐)
   const enc = encodeURIComponent, here = lastPos ? `from/${enc("현재 위치")},${lastPos.lat},${lastPos.lng}/` : "";
   const nav = `<a class="chip" href="https://map.kakao.com/link/${here}to/${enc(er.name)},${er.lat},${er.lng}" target="_blank" rel="noopener">길찾기</a>`;
-  // 줄 구성: [응급의료기관 등급] / [자동차 n분] [n km] [길찾기] / [응급실 병상] [전화]. 줄 안의 칸은 같은 너비, 없는 칸은 빼고 남은 칸이 나눠 씀
+  // 줄 구성: [자동차 n분] [n km] [길찾기] / [응급의료기관 등급] [전화] / [응급실 병상] [병원이 병상 정보를 올린 때]. 줄 안의 칸은 같은 너비, 없는 칸은 빼고 남은 칸이 나눠 씀
   const row = (...xs) => { xs = xs.filter(Boolean); return xs.map((x) => x.replace('class="chip', `class="chip c${xs.length}`)).join(""); };
+  const upd = when(er.updated);
   const cells = [
-    row(er.grade ? chip(er.grade, "") : ""),
     row(rt && rt.duration != null ? chip(`자동차 ${Math.max(1, Math.round(rt.duration / 60))}분`, "") : "", chip(`${km}km`, ""), nav),
-    row(chip(bed, ""), tel ? `<a class="chip" href="tel:${esc(tel.replace(/[^0-9+]/g, ""))}">${esc(tel)}</a>` : ""),
+    row(er.grade ? chip(er.grade, "") : "", tel ? `<a class="chip" href="tel:${esc(tel.replace(/[^0-9+]/g, ""))}">${esc(tel)}</a>` : ""),
+    row(chip(bed, ""), upd ? `<span class="chip">${upd[0]} <span class="nb">${upd[1]} 기준</span></span>` : ""),   // 줄이 넘치면 날짜 / 시각 기준 으로 나뉨
   ];
   // 병원이 올린 진료 제한 메시지 (예: '정형외과 전문의 부재로 수지접합 불가'): 블럭 아래 한 줄씩
   const msg = (er.msgs || []).map((m) => `<span class="chip msg">${esc(m)}</span>`).join("");
-  // 항목 안 '(' 바로 뒤에서는 줄이 안 바뀌게(\u2060), 괄호 부분이 통째로 다음 줄로
+  // 항목 끝 괄호 부분(예: '(1500g 이상, 30주 이상)')은 한 덩어리: 줄이 넘치면 괄호 부분이 통째로 다음 줄로 (브라우저마다 '(' 뒤에서 끊는 것 방지)
+  const item = (x) => { const m = /^(.*?)\s*(\([^()]*\))$/.exec(x); return m ? `${esc(m[1])} <span class="paren">${esc(m[2])}</span>` : esc(x); };
   // 중증질환 수용 정보 (칸 맨 아래): 누르면 같은 박스 안에서 펼쳐져 가능·불가 항목을 모두 보여 줌 (다시 누르면 접힘)
-  const sv = er.serious, sevList = (t, xs) => `<p class="sub">${t}</p><div class="row">${xs.length ? xs.map((x) => `<span class="chip">${esc(x).replace(/\(/g, "(\u2060")}</span>`).join("") : `<span class="chip">없음</span>`}</div>`;
+  const sv = er.serious, sevList = (t, xs) => `<p class="sub">${t}</p><div class="row">${xs.length ? xs.map((x) => `<span class="chip">${item(x)}</span>`).join("") : `<span class="chip">없음</span>`}</div>`;
   const sev = sv && (sv["가능"].length || sv["불가"].length)
     ? `<div class="sevbox"><button type="button" class="chip tog" data-tog aria-expanded="false">중증질환 수용 정보</button><div class="sev" hidden>${sevList("가능", sv["가능"])}${sevList("불가", sv["불가"])}</div></div>` : "";
   return `<section class="box info${i === sel ? " sel" : ""}" data-i="${i}"><p class="name">${esc(er.name)}</p><div class="grid">${cells.join("")}${msg}${sev}</div></section>`;
@@ -187,14 +196,14 @@ $("sosInfo").addEventListener("click", (e) => {
   drawMap(lastPos, list[i]);
 });
 async function refresh(p) {
-  if (!p) return;                              // 위치가 아직이면 지도·정보는 위치가 나오면 그림
-  const my = gen;                              // 그 사이 닫았다 다시 열면 이 결과는 버림
+  if (!p || $("sosPanel").hidden) return;     // 위치가 아직이면 지도·정보는 위치가 나오면 그림 (다 닫혔으면 그리지 않음)
+  const my = gen;                              // 다 닫힌 뒤 새로 열었으면 이 결과는 버림
   drawMap(p, null);                            // 먼저 내 위치만
   lastPos = p;
   // 지도가 아직 없으면 먼저 내 위치만. 카카오 지도가 끝까지 안 불러와져도 응급실 정보는 4초 뒤 보여 줌
   const mapP = Promise.race([ensureMap().then(() => { if (open && !map) drawMap(p, null); }), new Promise((r) => setTimeout(r, 4000))]);
-  try { const d = await fetchNearest(p, true); await mapP; await opened(); if (open && my === gen) { showInfo(d); drawMap(p, (d.ers || [])[sel] || d); } }
-  catch { await mapP; await opened(); if (open && my === gen) showInfo(null, true); }
+  try { const d = await fetchNearest(p, true); await mapP; await opened(); if (my === gen) { showInfo(d); drawMap(p, (d.ers || [])[sel] || d); } }
+  catch { await mapP; await opened(); if (my === gen) showInfo(null, true); }
 }
 
 // ---------- 팝업 열기·닫기 (카메라 팝업과 같은 스프링) ----------
@@ -229,13 +238,11 @@ function step(t) {
 }
 function popTo(show) {
   const el = $("sosPanel");
-  if (show) {
-    // 열 때마다 완전히 처음부터: 정보 칸 비움, 지도도 새로 만듦 (위치 찾기·응급실 조회도 새로). 닫히는 도중에 다시 눌러도 마찬가지
-    $("sosInfo").hidden = true; $("sosInfo").innerHTML = ""; shown = null; sel = 0; lastPos = null;
-    layers.forEach((l) => l.setMap(null)); layers = [];
-    if (map) { map = null; $("sosMap").innerHTML = ""; }
-  }
   if (show && el.hidden) {
+    // 카메라 팝업과 같은 기준: 다 닫힌 뒤 다시 열면 완전히 처음부터 (정보 칸 비움, 지도 표시 지움, 위치 찾기·응급실 조회도 새로).
+    //  닫히는 도중에 다시 누르면 보던 그대로
+    $("sosInfo").hidden = true; $("sosInfo").innerHTML = ""; shown = null; sel = 0; lastPos = null;
+    layers.forEach((l) => l.setMap(null)); layers = [];   // 지도 틀은 그대로 두고 표시만 지움 (지도를 새로 만들면 경로 선이 안 그려지는 때가 있음)
     el.hidden = false;
     window.__sign?.place?.(el);
     pop.s = POP_SCALE.from; pop.o = 0; pop.sv = pop.ov = 0;
@@ -245,7 +252,7 @@ function popTo(show) {
   if (!pop.raf) { pop.last = performance.now(); pop.raf = requestAnimationFrame(step); }
 }
 function openPanel(p) {
-  open = true; $("sosBtn").classList.add("on");
+  open = true; shownGen = gen; $("sosBtn").classList.add("on");
   document.body.classList.add("sos-open");
   popTo(true);
   const top = $("form").getBoundingClientRect().top;   // 카메라 팝업처럼 입력창이 화면 위쪽(16px)에 오도록
@@ -258,23 +265,27 @@ function openPanel(p) {
 }
 function closePanel() {
   if (!open) return;
-  open = false; gen++; $("sosBtn").classList.remove("on");   // 아직 찾는 중인 위치·응급실 결과는 버림
+  open = false; $("sosBtn").classList.remove("on");
   popTo(false);
   if (scrollBack != null) { window.__sign?.springScroll?.(scrollBack); scrollBack = null; }
 }
-let gen = 0;   // 누를 때마다 새로: 예전에 시작한 위치 찾기·조회 결과는 버림
+let gen = 0, shownGen = 0;   // gen: 새로 열 때마다 하나씩 (예전 위치 찾기·조회 결과는 버림), shownGen: 그 회차에 팝업을 연 적 있음
 $("sosBtn").onclick = async () => {
   if (open) return closePanel();
+  if (!$("sosPanel").hidden) return openPanel(null);   // 닫히는 도중: 보던 그대로 다시 (찾던 위치·조회도 이어서)
   const my = ++gen;
-  // 매번 처음부터: 저장해 둔 위치를 쓰지 않고 지금 위치를 새로 찾음
+  // 다 닫힌 뒤 새로 열면 처음부터: 저장해 둔 위치를 쓰지 않고 지금 위치를 새로 찾음
   // 위치 권한을 묻고, 허락하는 순간 팝업을 엶 (위치가 나오기를 기다리지 않음). 거절하면 열지 않음
   const st = await navigator.permissions?.query({ name: "geolocation" }).catch(() => null);
   if (my !== gen) return;
   if (st && st.state === "granted") openPanel(null);
-  else if (st) st.onchange = () => { if (st.state === "granted" && !open && my === gen) openPanel(null); st.onchange = null; };
-  // 위치: 빠른 위치(8초)로 먼저, 못 받으면 정밀 위치로 한 번 더 (20초)
-  try { const p = await getPos(8000, false, true).catch(() => getPos(20000, true)); if (my !== gen) return; if (!open) openPanel(p); else refresh(p); }
-  catch { if (my === gen && open) showInfo(null, true); }
+  else if (st) st.onchange = () => { if (st.state === "granted" && !open && my === gen && shownGen !== my) openPanel(null); st.onchange = null; };
+  // 위치: 빠른 위치(8초)로 먼저, 못 받으면 정밀 위치로 한 번 더 (20초). 그 사이 닫았으면 다시 열지 않음
+  try {
+    const p = await getPos(8000, false, true).catch(() => getPos(20000, true));
+    if (my !== gen) return;
+    if (shownGen !== my) openPanel(p); else refresh(p);
+  } catch { if (my === gen) showInfo(null, true); }
 };
 // 팝업 밖의 버튼(카메라·마이크·예시 질문 등)을 누르면 닫히고 그 버튼도 그대로 눌림. 빈 배경을 누르면 닫히지 않음
 document.addEventListener("click", (e) => {

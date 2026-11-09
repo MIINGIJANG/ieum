@@ -59,6 +59,8 @@
 #sosPanel .info .chip.c1 { grid-column: 1 / -1; }   /* 한 줄에 한 칸 */
 #sosPanel .info .chip.c2 { grid-column: span 3; }   /* 두 칸 */
 #sosPanel .info .chip.c3 { grid-column: span 2; }   /* 세 칸 */
+#sosPanel .info .chip.c1, #sosPanel .info .chip.c2, #sosPanel .info .chip.c3 { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; column-gap: .3em; }   /* 옆 칸이 두 줄이어도 글씨는 위아래 가운데 */
+#sosPanel .info .chip .nb { white-space: nowrap; }   /* '오후 5:57 기준'은 한 덩어리 */
 #sosPanel .info .chip { text-align: center; background: var(--box); color: var(--ink); border-radius: 8px; padding: 4px 10px; font-weight: 500; text-decoration: none; }
 #sosPanel .info .chip:hover { background: var(--hover); }
 #sosPanel .info .sevbox { grid-column: 1 / -1; display: grid; background: var(--box); border-radius: 8px; }   /* 중증질환 수용 정보: 버튼과 펼친 목록을 한 박스에 */
@@ -68,6 +70,7 @@
 #sosPanel .info .sev { display: grid; gap: 6px; justify-items: center; padding: 2px 10px 10px; }
 #sosPanel .info .sev .chip { background: var(--bg); text-wrap: balance; word-break: keep-all; }   /* 박스 안 항목: 페이지 배경색으로 구분. 줄이 넘치면 진료 제한 메시지처럼 줄마다 고르게, 낱말 중간에서 끊지 않음 */
 #sosPanel .info .sev .chip:hover { background: var(--hover); }
+#sosPanel .info .sev .paren { display: inline-block; }   /* 괄호 부분은 한 덩어리 (안에서는 끊지 않고 통째로 다음 줄) */
 #sosPanel .info .sev .row { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
 #sosPanel .info .chip.msg { grid-column: 1 / -1; text-wrap: balance; word-break: keep-all; }   /* 여러 줄이면 줄마다 글자 수를 고르게, 낱말 중간에서 끊지 않음 */   /* 진료 제한 메시지: 한 줄 전체, 보통 굵기 */
 /* 응급실 정보 칸에 마우스를 올리면 큰 칸만 빨간 배경·흰 글씨(병원 이름). 안의 블럭 4개는 그대로 */
