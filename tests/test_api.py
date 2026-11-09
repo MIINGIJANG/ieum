@@ -76,3 +76,5 @@ def test_sos_not_configured(client, monkeypatch):
     monkeypatch.delenv("DATA_GO_KR_KEY", raising=False)
     assert client.get("/sos/nearest", params={"lat": 35.8, "lng": 128.5}).status_code == 503
     assert client.get("/sos/config").json()["er"] is False
+    st = client.get("/sos/status").json()
+    assert st["failed"] >= 1 and st["recent_errors"][0]["stage"] == "config"
