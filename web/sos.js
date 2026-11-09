@@ -116,8 +116,9 @@ function erBox(x, i) {
     chip(bed, "r2"), tel ? `<a class="chip r2" href="tel:${esc(tel.replace(/[^0-9+]/g, ""))}">${esc(tel)}</a>` : ""].filter(Boolean);
   // 병원이 올린 진료 제한 메시지 (예: '정형외과 전문의 부재로 수지접합 불가'): 블럭 아래 한 줄씩
   const msg = (er.msgs || []).map((m) => `<span class="chip msg">${esc(m)}</span>`).join("");
+  // 항목 안 '(' 바로 뒤에서는 줄이 안 바뀌게(\u2060), 괄호 부분이 통째로 다음 줄로
   // 중증질환 수용 정보 (칸 맨 아래): 누르면 같은 박스 안에서 펼쳐져 가능·불가 항목을 모두 보여 줌 (다시 누르면 접힘)
-  const sv = er.serious, sevList = (t, xs) => `<p class="sub">${t}</p><div class="row">${xs.length ? xs.map((x) => `<span class="chip">${esc(x)}</span>`).join("") : `<span class="chip">없음</span>`}</div>`;
+  const sv = er.serious, sevList = (t, xs) => `<p class="sub">${t}</p><div class="row">${xs.length ? xs.map((x) => `<span class="chip">${esc(x).replace(/\(/g, "(\u2060")}</span>`).join("") : `<span class="chip">없음</span>`}</div>`;
   const sev = sv && (sv["가능"].length || sv["불가"].length)
     ? `<div class="sevbox"><button type="button" class="chip tog" data-tog aria-expanded="false">중증질환 수용 정보</button><div class="sev" hidden>${sevList("가능", sv["가능"])}${sevList("불가", sv["불가"])}</div></div>` : "";
   const grade = er.grade ? `<p class="grade">${esc(er.grade)}</p>` : "";   // 권역·지역응급의료센터, 지역응급의료기관
@@ -140,6 +141,20 @@ function roll(el) {
   el.style.overflow = "hidden";
   el.animate([{ height: "0px", marginTop: "0px" }, { height: `${h}px`, marginTop: m }], ROLL).onfinish = () => { el.style.overflow = ""; };
 }
+// 두 줄 이상으로 넘친 블럭은 박스 너비를 가장 긴 줄에 맞추고, 그 줄에는 그 블럭만 둠 (그냥 두면 줄이 바뀌어도 박스는 한 줄 전체 너비로 남음)
+function fitChips(root) {
+  for (const el of root.querySelectorAll(".chip")) {
+    el.style.width = el.style.marginInline = "";
+    const rg = document.createRange(); rg.selectNodeContents(el);
+    const lines = [...rg.getClientRects()];
+    if (new Set(lines.map((x) => Math.round(x.top))).size < 2) continue;
+    const cs = getComputedStyle(el), pad = cs.boxSizing === "border-box" ? parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) : 0;
+    const w = Math.ceil(Math.max(...lines.map((x) => x.width))) + pad + 1;
+    el.style.width = `${w}px`;
+    el.style.marginInline = `calc((100% - ${w}px) / 2)`;   // 양옆 여백으로 줄을 채워, 두 줄 블럭이 있는 줄에는 그 블럭만
+
+  }
+}
 // 응급실 칸을 누르면 위 지도의 경로가 그 병원으로 (1순위 ↔ 2순위)
 $("sosInfo").addEventListener("click", (e) => {
   const t = e.target.closest?.("[data-tog]");
@@ -149,6 +164,7 @@ $("sosInfo").addEventListener("click", (e) => {
     t.setAttribute("aria-expanded", String(open1));
     box.getAnimations().forEach((a) => a.cancel());
     box.hidden = false; box.dataset.closing = "";
+    fitChips(box);
     const cs = getComputedStyle(box), h = box.getBoundingClientRect().height;
     const full = { height: `${h}px`, paddingTop: cs.paddingTop, paddingBottom: cs.paddingBottom }, zero = { height: "0px", paddingTop: "0px", paddingBottom: "0px" };
     box.style.overflow = "hidden";
@@ -262,4 +278,4 @@ document.addEventListener("click", (e) => {
   if (!open || $("sosPanel").contains(e.target) || $("sosBtn").contains(e.target)) return;
   if (e.target.closest?.("button, a, [role=button]")) closePanel();
 }, true);
-addEventListener("resize", () => { if (open) { window.__sign?.place?.($("sosPanel")); map?.relayout(); } });
+addEventListener("resize", () => { if (open) { window.__sign?.place?.($("sosPanel")); map?.relayout(); $("sosInfo").querySelectorAll(".sev:not([hidden])").forEach(fitChips); } });
