@@ -114,12 +114,12 @@ function erBox(x, i) {
     chip(bed, "r2"), tel ? `<a class="chip r2" href="tel:${esc(tel.replace(/[^0-9+]/g, ""))}">${esc(tel)}</a>` : ""].filter(Boolean);
   // 병원이 올린 진료 제한 메시지 (예: '정형외과 전문의 부재로 수지접합 불가'): 블럭 아래 한 줄씩
   const msg = (er.msgs || []).map((m) => `<span class="chip msg">${esc(m)}</span>`).join("");
-  // 중증질환 수용 정보: 누르면 펼쳐져 가능·불가 항목을 모두 보여 줌 (다시 누르면 접힘)
+  // 중증질환 수용 정보 (칸 맨 아래): 누르면 펼쳐져 가능·불가 항목을 모두 보여 줌 (다시 누르면 접힘)
   const sv = er.serious, sevList = (t, xs) => `<p class="sub">${t}</p><div class="row">${xs.length ? xs.map((x) => `<span class="chip">${esc(x)}</span>`).join("") : `<span class="chip">없음</span>`}</div>`;
   const sev = sv && (sv["가능"].length || sv["불가"].length)
     ? `<button type="button" class="chip tog" data-tog aria-expanded="false">중증질환 수용 정보</button><div class="sev" hidden>${sevList("가능", sv["가능"])}${sevList("불가", sv["불가"])}</div>` : "";
   const grade = er.grade ? `<p class="grade">${esc(er.grade)}</p>` : "";   // 권역·지역응급의료센터, 지역응급의료기관
-  return `<section class="box info${i === sel ? " sel" : ""}" data-i="${i}">${grade}<p class="name">${esc(er.name)}</p><div class="grid">${cells.join("")}${sev}${msg}</div></section>`;
+  return `<section class="box info${i === sel ? " sel" : ""}" data-i="${i}">${grade}<p class="name">${esc(er.name)}</p><div class="grid">${cells.join("")}${msg}${sev}</div></section>`;
 }
 function showInfo(d, err) {
   const wrap = $("sosInfo");
