@@ -20,12 +20,12 @@ function loadKakao(key) {
   });
 }
 // 위치: 빠른 위치(와이파이·기지국)로 먼저. 정밀 GPS 는 몇~수십 초 걸려서 쓰지 않음 (응급실 찾기에는 충분)
-function getPos(timeout = 8000) {
+function getPos(timeout = 8000, precise = false) {
   return new Promise((res, rej) => {
     if (!navigator.geolocation) return rej(new Error("no geolocation"));
     navigator.geolocation.getCurrentPosition((p) => {
       pos = { lat: p.coords.latitude, lng: p.coords.longitude }; posAt = Date.now(); res(pos);
-    }, rej, { enableHighAccuracy: false, timeout, maximumAge: 300000 });
+    }, rej, { enableHighAccuracy: precise, timeout, maximumAge: precise ? 0 : 300000 });
   });
 }
 async function fetchNearest(p) {
@@ -59,6 +59,15 @@ const PIN = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="40" viewBox="0 0 28 40"><path d="M14 39C14 39 26 23.5 26 14A12 12 0 0 0 2 14C2 23.5 14 39 14 39Z" fill="#ff3b30" stroke="#ffffff" stroke-width="2"/><circle cx="14" cy="14" r="4.5" fill="#ffffff"/></svg>');
 let pinImg = null;
 const pin = (K) => (pinImg ??= new K.MarkerImage(PIN, new K.Size(28, 40), { offset: new K.Point(14, 39) }));
+// 첫 로딩 때 지도 준비가 실패했으면(서버가 다시 시작하는 중 등) 버튼을 누를 때 다시 준비
+let mapLoading = null;
+function ensureMap() {
+  if (kakaoReady && window.kakao?.maps) return Promise.resolve();
+  return (mapLoading ??= (async () => {
+    if (!cfg || !cfg.kakao_js) cfg = await (await fetch(`${API}sos/config`)).json();
+    if (cfg.kakao_js) { kakaoReady = loadKakao(cfg.kakao_js); await kakaoReady; }
+  })().catch(() => { kakaoReady = null; }).finally(() => { mapLoading = null; }));
+}
 function drawMap(p, d) {
   if (!kakaoReady || !window.kakao?.maps) return;
   const K = window.kakao.maps, here = new K.LatLng(p.lat, p.lng);
@@ -139,8 +148,9 @@ async function refresh(p) {
   const same = result && resultFor === `${p.lat.toFixed(3)},${p.lng.toFixed(3)}`;
   drawMap(p, same ? (shown === result && (result.ers || [])[sel]) || result : null);   // 닫히는 도중에 다시 열면 고른 병원 그대로
   lastPos = p;
-  try { const d = await fetchNearest(p); if (open) { showInfo(d); drawMap(p, (d.ers || [])[sel] || d); } }
-  catch { if (open) showInfo(null, true); }
+  const mapP = ensureMap().then(() => { if (open && !map) drawMap(p, null); });   // 지도가 아직 없으면 먼저 내 위치만
+  try { const d = await fetchNearest(p); await mapP; if (open) { showInfo(d); drawMap(p, (d.ers || [])[sel] || d); } }
+  catch { await mapP; if (open) showInfo(null, true); }
 }
 
 // ---------- 팝업 열기·닫기 (카메라 팝업과 같은 스프링) ----------
@@ -210,7 +220,8 @@ $("sosBtn").onclick = async () => {
   const st = await navigator.permissions?.query({ name: "geolocation" }).catch(() => null);
   if (st && st.state === "granted") openPanel(null);
   else if (st) st.onchange = () => { if (st.state === "granted" && !open) openPanel(null); st.onchange = null; };
-  try { const p = await getPos(); if (!open) openPanel(p); else refresh(p); }
+  // 위치: 빠른 위치(8초)로 먼저, 못 받으면 정밀 위치로 한 번 더 (20초)
+  try { const p = await getPos().catch(() => getPos(20000, true)); if (!open) openPanel(p); else refresh(p); }
   catch { if (open && !pos) showInfo(null, true); }
   finally { asking = false; }
 };
