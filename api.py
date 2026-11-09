@@ -338,6 +338,16 @@ def sos_nearest(lat: float, lng: float):
         return JSONResponse({"error": "failed"}, status_code=502)
 
 
+@app.get("/sos/raw")
+def sos_raw(lat: float, lng: float):
+    """(점검용, 곧 지움) 공공데이터포털 원본 항목 확인: 가까운 응급실 1곳의 위치 조회 항목 + 그 지역 중증질환 수용 원본."""
+    from ksl import sos
+    loc = sos._ermct("getEgytLcinfoInqire", WGS84_LAT=lat, WGS84_LON=lng, pageNo=1, numOfRows=1)
+    addr = loc[0].get("dutyAddr") if loc else ""
+    ser = sos._ermct("getSrsillDissAceptncPosblInfoInqire", **(sos._region(addr) or {}))
+    return {"location_item": loc[:1], "serious_items": ser[:3]}
+
+
 @app.get("/sos/status")
 def sos_status():
     """SOS 사용 기록·오류 확인용 (서버가 다시 시작하면 처음부터): 요청 수·성공·실패·단계별 실패·평균 시간·최근 오류 30건.
