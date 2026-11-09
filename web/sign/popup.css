@@ -60,7 +60,7 @@
 #sosPanel .info .chip.c2 { grid-column: span 3; }   /* 두 칸 */
 #sosPanel .info .chip.c3 { grid-column: span 2; }   /* 세 칸 */
 #sosPanel .info .chip.c1, #sosPanel .info .chip.c2, #sosPanel .info .chip.c3 { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; column-gap: .3em; }   /* 옆 칸이 두 줄이어도 글씨는 위아래 가운데 */
-#sosPanel .info .chip .nb { white-space: nowrap; }   /* '오후 5:57 기준'은 한 덩어리 */
+#sosPanel .info .chip .nb { white-space: nowrap; }   /* '17:57 기준'은 한 덩어리 */
 #sosPanel .info .chip { text-align: center; background: var(--box); color: var(--ink); border-radius: 8px; padding: 4px 10px; font-weight: 500; text-decoration: none; }
 #sosPanel .info .chip:hover { background: var(--hover); }
 #sosPanel .info .sevbox { grid-column: 1 / -1; display: grid; background: var(--box); border-radius: 8px; }   /* 중증질환 수용 정보: 버튼과 펼친 목록을 한 박스에 */
