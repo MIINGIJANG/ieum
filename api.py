@@ -345,7 +345,8 @@ def sos_raw(lat: float, lng: float):
     loc = sos._ermct("getEgytLcinfoInqire", WGS84_LAT=lat, WGS84_LON=lng, pageNo=1, numOfRows=1)
     addr = loc[0].get("dutyAddr") if loc else ""
     ser = sos._ermct("getSrsillDissAceptncPosblInfoInqire", **(sos._region(addr) or {}))
-    return {"location_item": loc[:1], "serious_items": ser[:3]}
+    basic = sos._ermct("getEgytBassInfoInqire", HPID=loc[0].get("hpid"), pageNo=1, numOfRows=1) if loc else []
+    return {"location_item": loc[:1], "basic_item": basic[:1], "serious_items": ser[:1]}
 
 
 @app.get("/sos/status")

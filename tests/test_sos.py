@@ -8,7 +8,7 @@ LOC = """<response><header><resultCode>00</resultCode></header><body><items>
 <item><hpid>A2</hpid><dutyName>가까운병원</dutyName><dutyAddr>대구광역시 남구 어딘가 1</dutyAddr><dutyTel1>053-2</dutyTel1><latitude>35.8401</latitude><longitude>128.5801</longitude></item>
 </items></body></response>"""
 SER = """<response><header><resultCode>00</resultCode></header><body><items>
-<item><hpid>A2</hpid><MKioskTy5>Y</MKioskTy5><MKioskTy11>N1</MKioskTy11><MKioskTy1>정보미제공</MKioskTy1></item></items></body></response>"""
+<item><hpid>A2</hpid><MKioskTy20>Y</MKioskTy20><MKioskTy19>불가능</MKioskTy19><MKioskTy15>Y</MKioskTy15><MKioskTy15Msg>1500g 이상</MKioskTy15Msg><MKioskTy1>정보미제공</MKioskTy1><MKioskTy28>Y</MKioskTy28></item></items></body></response>"""
 MSG = """<response><header><resultCode>00</resultCode></header><body><items>
 <item><hpid>A2</hpid><symBlkMsg>정형외과 전문의 부재로 수지접합 불가</symBlkMsg></item>
 <item><hpid>A2</hpid><symBlkMsg>정형외과 전문의 부재로 수지접합 불가</symBlkMsg></item></items></body></response>"""
@@ -44,7 +44,7 @@ def test_nearest(monkeypatch):
     out = sos.nearest(35.84, 128.58)
     assert out["er"]["name"] == "가까운병원" and out["er"]["beds"] == 4 and out["er"]["ct"] == "Y"
     assert out["er"]["msgs"] == ["정형외과 전문의 부재로 수지접합 불가"] and out["ers"][1]["er"]["msgs"] == []
-    assert out["er"]["serious"] == {"가능": ["사지 접합 수술"], "불가": ["중증 화상"]} and out["ers"][1]["er"]["serious"] is None
+    assert out["er"]["serious"] == {"가능": ["저체중출생아 집중치료 (1500g 이상)", "수족지접합"], "불가": ["중증화상 전문치료"]} and out["ers"][1]["er"]["serious"] is None
     assert out["route"]["duration"] == 120 and out["route"]["path"][0] == [35.84, 128.58]
     assert [x["er"]["name"] for x in out["ers"]] == ["가까운병원", "먼병원"] and out["ers"][1]["route"]["duration"] == 300
 

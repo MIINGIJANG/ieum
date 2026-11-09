@@ -124,14 +124,18 @@ def _region(addr):
     return params
 
 
-# 중증질환자 수용 가능 정보 (getSrsillDissAceptncPosblInfoInqire) 항목 → 화면 이름
-SERIOUS = {"MKioskTy1": "뇌출혈 수술", "MKioskTy2": "뇌경색 재관류", "MKioskTy3": "심근경색 재관류", "MKioskTy4": "복부 손상 수술",
-           "MKioskTy5": "사지 접합 수술", "MKioskTy6": "응급 내시경", "MKioskTy7": "응급 투석", "MKioskTy8": "조산 산모",
-           "MKioskTy9": "정신질환자", "MKioskTy10": "신생아", "MKioskTy11": "중증 화상"}
+# 중증질환자 수용 가능 정보 (getSrsillDissAceptncPosblInfoInqire) 항목 → 화면 이름.
+#  국립중앙의료원 OpenAPI 활용가이드 V13 「응답 메시지 명세」의 이름 (값: Y 가능, 불가능, 정보미제공. MKioskTy28 응급실 gate keeper 는 질환이 아니라 뺌)
+SERIOUS = {f"MKioskTy{i}": n for i, n in enumerate([
+    "심근경색 재관류중재술", "뇌경색 재관류중재술", "거미막하출혈 수술", "거미막하출혈 외 뇌출혈 수술",
+    "흉부 대동맥응급", "복부 대동맥응급", "담낭질환", "담도포함질환", "비외상 복부응급수술", "영유아 장중첩·폐색",
+    "성인 위장관 응급내시경", "영유아 위장관 응급내시경", "성인 기관지 응급내시경", "영유아 기관지 응급내시경",
+    "저체중출생아 집중치료", "분만", "산과수술", "부인과수술", "중증화상 전문치료", "수족지접합", "수족지접합 외 사지접합",
+    "응급투석(HD)", "응급투석(CRRT)", "정신과 폐쇄병동입원", "안과 응급수술", "성인 영상의학혈관중재", "영유아 영상의학혈관중재"], 1)}
 
 
 def serious(addr):
-    """그 시·군·구 응급실들의 중증질환 수용 가능 여부 {hpid: {"가능": [...], "불가": [...]}} (Y… 가능, N… 불가, 그 밖은 정보 없음)"""
+    """그 시·군·구 응급실들의 중증질환 수용 가능 여부 {hpid: {"가능": [...], "불가": [...]}} (Y 가능, 불가능 불가, 정보미제공은 뺌)"""
     params = _region(addr)
     if not params:
         return {}
@@ -143,10 +147,11 @@ def serious(addr):
             v = (it.get(k) or "").strip().upper()
             if v:
                 seen = True
+            label = name + (f" ({it.get(k + 'Msg').strip()})" if (it.get(k + "Msg") or "").strip() else "")   # 예: 저체중출생아 집중치료 (1500g 이상, 30주 이상)
             if v.startswith("Y"):
-                ok.append(name)
-            elif v.startswith("N"):
-                no.append(name)
+                ok.append(label)
+            elif v.startswith("N") or "불가" in v:
+                no.append(label)
         res[it.get("hpid")] = {"가능": ok, "불가": no}
     if res and not seen:   # 항목 이름이 예상과 다르면 기록 (어떤 항목이 왔는지만, 값·좌표 없이)
         log_error("serious", "예상한 MKioskTy 항목 없음, 받은 항목: " + ",".join(keys or []))
