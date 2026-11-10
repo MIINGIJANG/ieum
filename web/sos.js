@@ -55,10 +55,10 @@ if (window.ResizeObserver) new ResizeObserver(fitBtn).observe($("form"));
 
 // ---------- 지도 · 응급실 정보 ----------
 // 내 위치·도착 위치 표시: 빨간 핀 (경로 선과 같은 색)
-// 출발·도착 표시: 말풍선 핀에 흰 글씨, 테두리 없음 (출발 파랑, 도착 빨강)
-const PIN_COLOR = { 출발: "#007aff", 도착: "#ff3b30" };
-const tagPin = (t) => "data:image/svg+xml;charset=utf-8," + encodeURIComponent(   // 물방울 모양 핀 안에 '출발'·'도착'
-  `<svg xmlns="http://www.w3.org/2000/svg" width="44" height="54" viewBox="0 0 44 54"><path d="M22 53C22 53 2 32.5 2 21a20 20 0 0 1 40 0c0 11.5-20 32-20 32Z" fill="${PIN_COLOR[t]}"/><text x="22" y="25.5" text-anchor="middle" font-family="-apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif" font-size="13" font-weight="700" fill="#ffffff">${t}</text></svg>`);
+// 현위치·도착 표시: 말풍선 핀에 흰 글씨, 테두리 없음 (현위치 파랑, 도착 빨강)
+const PIN_COLOR = { 현위치: "#007aff", 도착: "#ff3b30" };
+const tagPin = (t) => "data:image/svg+xml;charset=utf-8," + encodeURIComponent(   // 물방울 모양 핀 안에 '현위치'·'도착' (세 글자는 핀 안에 들어가게 조금 작게)
+  `<svg xmlns="http://www.w3.org/2000/svg" width="44" height="54" viewBox="0 0 44 54"><path d="M22 53C22 53 2 32.5 2 21a20 20 0 0 1 40 0c0 11.5-20 32-20 32Z" fill="${PIN_COLOR[t]}"/><text x="22" y="25.5" text-anchor="middle" font-family="-apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif" font-size="${t.length > 2 ? 11.5 : 13}" font-weight="700" fill="#ffffff">${t}</text></svg>`);
 const pins = {};
 const pin = (K, t) => (pins[t] ??= new K.MarkerImage(tagPin(t), new K.Size(44, 54), { offset: new K.Point(22, 53) }));
 // 첫 로딩 때 지도 준비가 실패했으면(서버가 다시 시작하는 중 등) 버튼을 누를 때 다시 준비
@@ -97,7 +97,7 @@ function drawMap(p, d) {
     const again = () => { K.event.removeListener(map, "idle", again); if (layers.includes(line)) { line.setMap(null); line.setMap(map); } };
     K.event.addListener(map, "idle", again);
   }
-  layers.push(new K.Marker({ position: from, map, image: pin(K, "출발"), zIndex: 2 }));
+  layers.push(new K.Marker({ position: from, map, image: pin(K, "현위치"), zIndex: 2 }));
   if (to) layers.push(new K.Marker({ position: to, map, title: er.name, image: pin(K, "도착"), zIndex: 2 }));
 }
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
