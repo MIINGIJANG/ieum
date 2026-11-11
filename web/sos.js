@@ -160,7 +160,7 @@ function erBox(x, i) {
   const sevBody = groups.map((g) => `<p class="sub">${esc(g)}</p><div class="grp">` + ST.map((st) => {   // 분야 이름은 박스 위, 항목은 분야마다 박스로 감쌈
     const xs = sv.filter((x) => x.group === g && x.status === st);
     return xs.length ? `<div class="row">${xs.map((x) => `<span class="chip">${item(x.msg ? `${x.name} (${x.msg})` : x.name, mk(st))}</span>`).join("")}</div>` : "";
-  }).join("") + "</div>").join("") + `<p class="legend">${ST.map((st) => `${mk(st)}${st}`).join(" · ")}</p>`;   // 범례는 맨 아래
+  }).join("") + "</div>").join("") + `<div class="grp legend"><div class="lg3">${ST.map((st) => `<span class="chip" data-fit="1">${mk(st)}${st}</span>`).join("")}</div></div>`;   // 범례는 맨 아래, 분야와 같은 박스 안에 같은 너비 블럭 3개
   const sev = sv.length
     ? `<div class="sevbox"><button type="button" class="chip tog" data-tog aria-expanded="false">중증질환 수용 정보</button><div class="sev" hidden>${sevBody}</div></div>` : "";
   return `<section class="box info${i === sel ? " sel" : ""}" data-i="${i}"><p class="name">${esc(er.name)}</p><div class="grid">${cells.join("")}${msg}${sev}</div></section>`;
@@ -292,6 +292,14 @@ function lineFit(el) {
   el.dataset.lines = rows.size;   // 몇 줄인지 (arrange 가 줄 수별로 묶을 때 씀)
   return Math.ceil(Math.max(...[...rows.values()].map(([l, r]) => r - l))) + pad + 1;
 }
+// 범례 블럭 3개(같은 너비)에 글자가 한 줄로 안 들어가면 범례 글씨만 들어가는 만큼 줄임
+function fitLegend(root) {
+  const lg = root.querySelector(".lg3");
+  if (!lg) return;
+  lg.style.fontSize = "";
+  const r = Math.max(...[...lg.querySelectorAll(".chip")].map((c) => c.scrollWidth / (c.clientWidth || 1)));
+  if (r > 1) lg.style.fontSize = `${Math.floor(parseFloat(getComputedStyle(lg).fontSize) / r * 10) / 10}px`;
+}
 function fitChips(root) {
   for (const el of root.querySelectorAll(".chip")) {
     if (el.dataset.fit === "1") continue;   // arrange 가 이미 맞춘 두 줄 칸
@@ -311,7 +319,7 @@ $("sosInfo").addEventListener("click", (e) => {
     t.setAttribute("aria-expanded", String(open1));
     box.getAnimations().forEach((a) => a.cancel());
     box.hidden = false; box.dataset.closing = "";
-    arrange(box); fitChips(box);
+    arrange(box); fitChips(box); fitLegend(box);
     const cs = getComputedStyle(box), h = box.getBoundingClientRect().height;
     const over = t.parentElement.getBoundingClientRect().bottom + 24 - innerHeight;
     if (open1 && over > 0) scrollInto(over);   // 펼친 목록이 화면 아래로 넘치면 그만큼 같이 내려 줌
@@ -449,4 +457,4 @@ document.addEventListener("click", (e) => {
   if (!open || $("sosPanel").contains(e.target) || $("sosBtn").contains(e.target)) return;
   if (e.target.closest?.("button, a, [role=button]")) closePanel();
 }, true);
-addEventListener("resize", () => { if (open) { window.__sign?.place?.($("sosPanel")); map?.relayout(); fitText(); $("sosInfo").querySelectorAll(".sev:not([hidden])").forEach((b) => { arrange(b); fitChips(b); }); } });
+addEventListener("resize", () => { if (open) { window.__sign?.place?.($("sosPanel")); map?.relayout(); fitText(); $("sosInfo").querySelectorAll(".sev:not([hidden])").forEach((b) => { arrange(b); fitChips(b); fitLegend(b); }); } });
