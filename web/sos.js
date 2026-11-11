@@ -319,7 +319,8 @@ function fitLegend(root) {
   const lg = root.querySelector(".lg3");
   if (!lg) return;
   lg.style.fontSize = "";
-  const r = Math.max(...[...lg.querySelectorAll(".chip")].map((c) => c.scrollWidth / (c.clientWidth || 1)));
+  // 칸 안 양옆에 글자 하나 남짓(6px) 여유를 두고 맞춤 (딱 맞추면 기기·글꼴에 따라 넘치거나 꽉 차 보임)
+  const r = Math.max(...[...lg.querySelectorAll(".chip")].map((c) => (c.scrollWidth + 6) / (c.clientWidth || 1)));
   if (r > 1) lg.style.fontSize = `${Math.floor(parseFloat(getComputedStyle(lg).fontSize) / r * 10) / 10}px`;
 }
 function fitChips(root) {
