@@ -222,9 +222,8 @@ $("sosInfo").addEventListener("click", (e) => {
   sel = i;
   for (const x of $("sosInfo").querySelectorAll(".info[data-i]")) x.classList.toggle("sel", +x.dataset.i === sel);   // 도착 병원 칸 빨강
   drawMap(lastPos, list[i]);
-  // 지도가 화면에서 다 안 보이면, 바뀐 경로를 바로 볼 수 있게 팝업을 열 때 자리(입력창이 화면 위쪽 16px)로 올림
-  const m = $("sosMap").getBoundingClientRect();
-  if (m.top < 0 || m.bottom > innerHeight) scrollInto($("form").getBoundingClientRect().top - 16);
+  // 바뀐 경로를 바로 볼 수 있게 언제나 팝업을 열 때 자리(입력창이 화면 위쪽 16px)로
+  scrollInto($("form").getBoundingClientRect().top - 16);
 });
 let baseMin = "";   // 팝업을 열 때 잡아 둔 페이지 최소 높이 (토글로 늘렸다가 접으면 여기로 되돌림)
 // 화면을 by 만큼(+ 아래, - 위) 팝업과 같은 스프링으로 움직임. 아래로 내릴 자리가 모자라면 페이지 최소 높이를 늘려 둠 (닫히면 풂)
