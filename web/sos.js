@@ -157,14 +157,17 @@ function erBox(x, i) {
   const mk = (st) => `<svg class="mk" viewBox="0 0 16 16" aria-label="${LABEL[st]}">${MK[st]}</svg>`;
   const ST = ["불가능", "가능", "정보 미제공"];   // 분야 안 줄 순서
   const sv = Array.isArray(er.serious) ? er.serious : [];
-  const groups = [...new Set(sv.map((x) => x.group))];
-  const legend = `<div class="grp legend"><div class="lg3">${ST.map((st) => `<span class="chip" data-fit="1">${mk(st)}${LABEL[st]}</span>`).join("")}</div></div>`;   // 범례: 맨 위(뇌·심혈관 위), 분야와 같은 박스 안에 같은 너비 블럭 3개
-  const sevBody = legend + groups.map((g) => `<p class="sub">${esc(g)}</p><div class="grp">` + ST.map((st) => {   // 분야 이름은 박스 위, 항목은 분야마다 박스로 감쌈
+  // 분야 순서: 제한이 있는 분야 → 가능이 있는 분야 → 정보 없음만 있는 분야 (같은 단계 안에서는 원래 순서). 기타는 늘 맨 아래
+  const tier = (g) => g === "기타" ? 3 : sv.some((x) => x.group === g && x.status === "불가능") ? 0 : sv.some((x) => x.group === g && x.status === "가능") ? 1 : 2;
+  const groups = [...new Set(sv.map((x) => x.group))].map((g, k) => [g, k]).sort((a, b) => tier(a[0]) - tier(b[0]) || a[1] - b[1]).map(([g]) => g);
+  // 범례: 펼치기 버튼 바로 아래, 접혀 있어도 보임. 같은 너비 블럭 3개(배경색)에 개수까지 (예: ✕ 제한 2)
+  const legend = `<div class="lg3">${ST.map((st) => `<span class="chip" data-fit="1">${mk(st)}${LABEL[st]} ${sv.filter((x) => x.status === st).length}</span>`).join("")}</div>`;
+  const sevBody = groups.map((g) => `<p class="sub">${esc(g)}</p><div class="grp">` + ST.map((st) => {   // 분야 이름은 박스 위, 항목은 분야마다 박스로 감쌈
     const xs = sv.filter((x) => x.group === g && x.status === st);
     return xs.length ? `<div class="row">${xs.map((x) => `<span class="chip">${item(x.msg ? `${x.name} (${x.msg})` : x.name, mk(st))}</span>`).join("")}</div>` : "";
   }).join("") + "</div>").join("");
   const sev = sv.length
-    ? `<div class="sevbox"><button type="button" class="chip tog" data-tog aria-expanded="false">진료과 별 진료 가능 정보</button><div class="sev" hidden>${sevBody}</div></div>` : "";
+    ? `<div class="sevbox"><button type="button" class="chip tog" data-tog aria-expanded="false">진료과 별 진료 가능 정보</button>${legend}<div class="sev" hidden>${sevBody}</div></div>` : "";
   return `<section class="box info${i === sel ? " sel" : ""}" data-i="${i}"><p class="name">${esc(er.name)}</p><div class="grid">${cells.join("")}${msg}${sev}</div></section>`;
 }
 function showInfo(d, err) {
@@ -177,6 +180,7 @@ function showInfo(d, err) {
   wrap.hidden = false;
   fitText();
   sortMsgs(wrap);
+  wrap.querySelectorAll(".sevbox").forEach(fitLegend);
   if (first) roll(wrap);
 }
 // 칸 안 글자의 가장 긴 줄 가로 길이 (한 줄이면 그 줄, 여러 줄이면 그중 가장 긴 줄)
@@ -333,14 +337,13 @@ $("sosInfo").addEventListener("click", (e) => {
   const t = e.target.closest?.("[data-tog]");
   if (t) {                                       // 중증질환 수용 정보 펼치기·접기 (지도 경로는 바꾸지 않음)
     // 응급실 정보 칸이 처음 나올 때와 같은 효과: 펼칠 때 아래로 늘어나고, 접을 때 위로 줄어든 뒤 숨김
-    const box = t.nextElementSibling, open1 = box.hidden || box.dataset.closing === "1";
+    const box = t.parentElement.querySelector(".sev"), open1 = box.hidden || box.dataset.closing === "1";
     t.setAttribute("aria-expanded", String(open1));
     box.getAnimations().forEach((a) => a.cancel());
     box.hidden = false; box.dataset.closing = "";
-    arrange(box); fitChips(box); fitLegend(box);
+    arrange(box); fitChips(box);
     const cs = getComputedStyle(box), h = box.getBoundingClientRect().height;
-    const over = t.parentElement.getBoundingClientRect().bottom + 24 - innerHeight;
-    if (open1 && over > 0) scrollInto(over);   // 펼친 목록이 화면 아래로 넘치면 그만큼 같이 내려 줌
+    if (open1) scrollInto(t.getBoundingClientRect().top - 16);   // 펼치면 제목(진료과 별 진료 가능 정보)이 화면 맨 위(16px)에 오도록
     const full = { height: `${h}px`, paddingTop: cs.paddingTop, paddingBottom: cs.paddingBottom }, zero = { height: "0px", paddingTop: "0px", paddingBottom: "0px" };
     box.style.overflow = "hidden";
     if (!open1) { box.dataset.closing = "1"; shrinkPage(h); }
@@ -475,4 +478,4 @@ document.addEventListener("click", (e) => {
   if (!open || $("sosPanel").contains(e.target) || $("sosBtn").contains(e.target)) return;
   if (e.target.closest?.("button, a, [role=button]")) closePanel();
 }, true);
-addEventListener("resize", () => { if (open) { window.__sign?.place?.($("sosPanel")); map?.relayout(); fitText(); $("sosInfo").querySelectorAll(".sev:not([hidden])").forEach((b) => { arrange(b); fitChips(b); fitLegend(b); }); } });
+addEventListener("resize", () => { if (open) { window.__sign?.place?.($("sosPanel")); map?.relayout(); fitText(); $("sosInfo").querySelectorAll(".sev:not([hidden])").forEach((b) => { arrange(b); fitChips(b); }); $("sosInfo").querySelectorAll(".sevbox").forEach(fitLegend); } });

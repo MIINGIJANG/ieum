@@ -78,10 +78,12 @@
 #sosPanel .info .sev .chip:hover { background: var(--hover); }   /* 마우스 올림 색 */
 #sosPanel .info .sev .paren { display: inline-block; }   /* 괄호 부분은 한 덩어리 (안에서는 끊지 않고 통째로 다음 줄) */
 #sosPanel .info .sev .nw { white-space: nowrap; }   /* 마지막 낱말 + 표시 아이콘은 한 덩어리 */
-#sosPanel .info .sev svg.mk { width: .85em; height: .85em; margin-left: .3em; vertical-align: -.05em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }   /* ○ ✕ – 모두 같은 굵기 */
-#sosPanel .info .sev .lg3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; width: 100%; }   /* 범례 블럭 3개: 같은 너비 */
-#sosPanel .info .sev .lg3 .chip { padding-inline: 4px; white-space: nowrap; }   /* 한 줄로. 칸이 좁으면 sos.js fitLegend 가 범례 글씨만 줄임 */
-#sosPanel .info .sev .legend svg.mk { margin-left: 0; margin-right: .3em; }   /* 범례는 아이콘이 글자 왼쪽 */
+#sosPanel .info .sevbox svg.mk { width: .85em; height: .85em; margin-left: .3em; vertical-align: -.05em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }   /* ○ ✕ – 모두 같은 굵기 */
+/* 범례: 펼치기 버튼 아래 같은 너비 블럭 3개 (배경색, 접혀 있어도 보임). 한 줄로, 칸이 좁으면 sos.js fitLegend 가 범례 글씨만 줄임 */
+#sosPanel .info .lg3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0 8px 8px; }
+#sosPanel .info .chip.tog[aria-expanded="true"] + .lg3 { margin-bottom: 4px; }   /* 펼치면 아래 글자와 4px */
+#sosPanel .info .lg3 .chip { background: var(--bg); padding-inline: 4px; white-space: nowrap; }
+#sosPanel .info .lg3 svg.mk { margin-left: 0; margin-right: .3em; }   /* 범례는 아이콘이 글자 왼쪽 */
 #sosPanel .info .sev .row { display: grid; gap: 8px; width: 100%; }   /* 칸 전체 너비 (안 그러면 가장 긴 항목 너비로 줄어 한 줄에 하나씩만 들어감) */   /* 줄(.line)은 sos.js 가 길이를 고르게 나눠 만듦 */
 #sosPanel .info .sev .line { display: flex; gap: 8px; justify-content: center; width: 100%; }
 #sosPanel .info .chip.msg { grid-column: 1 / -1; text-wrap: balance; word-break: keep-all; }   /* 여러 줄이면 줄마다 글자 수를 고르게, 낱말 중간에서 끊지 않음 */   /* 진료 제한 메시지: 한 줄 전체, 보통 굵기 */
