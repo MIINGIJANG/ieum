@@ -189,17 +189,42 @@ function arrange(root) {
     const w = new Map(chips.map((c) => { c.style.width = "max-content"; const x = c.getBoundingClientRect().width; c.style.width = ""; return [c, x]; }));
     const big = chips.filter((c) => w.get(c) > cap), small = chips.filter((c) => w.get(c) <= cap).sort((a, b) => w.get(b) - w.get(a));
     const total = small.reduce((t, c) => t + w.get(c) + gap, 0);
-    let lines = null;
-    for (let k = Math.max(1, Math.ceil(total / (cap + gap))); !lines; k++) {
-      const bins = Array.from({ length: k }, () => ({ sum: -gap, items: [] }));
-      let ok = true;
+    // 1순위: 가장 적은 줄 수. 2순위: 그 줄 수 안에서 줄 길이가 최대한 고르게 (들쭉날쭉하지 않게)
+    const W = (c) => w.get(c), len = (b) => b.reduce((t, c) => t + W(c), 0) + gap * Math.max(0, b.length - 1);
+    const pack = (k, pick) => {   // 긴 것부터 k 줄에 넣기. pick: 넣을 줄 고르는 방법. 못 넣으면 null
+      const bins = Array.from({ length: k }, () => []);
       for (const c of small) {
-        const fit = bins.filter((b) => b.sum + gap + w.get(c) <= cap + 0.5).sort((a, b) => a.sum - b.sum)[0];
-        if (!fit) { ok = false; break; }
-        fit.sum += gap + w.get(c); fit.items.push(c);
+        const fits = bins.filter((b) => len(b) + (b.length ? gap : 0) + W(c) <= cap + 0.5);
+        if (!fits.length) return null;
+        pick(fits).push(c);
       }
-      if (ok) lines = bins.filter((b) => b.items.length).sort((a, b) => b.sum - a.sum).map((b) => b.items);
+      return bins;
+    };
+    const spread = (bins) => { const l = bins.map(len); return Math.max(...l) - Math.min(...l); };
+    const even = (bins) => {   // 두 줄 사이에서 하나 옮기거나 맞바꿔 길이 차이를 줄일 수 있으면 계속
+      for (let more = true, n = 0; more && n < 200; n++) {
+        more = false;
+        for (let i = 0; i < bins.length && !more; i++) for (let j = 0; j < bins.length && !more; j++) {
+          if (i === j) continue;
+          const A = bins[i], B = bins[j], before = spread(bins);
+          for (let a = 0; a < A.length && !more; a++) {
+            const mv = [A.filter((_, x) => x !== a), [...B, A[a]]];   // A 의 하나를 B 로
+            if (mv[0].length && len(mv[1]) <= cap + 0.5) { const t = [...bins]; t[i] = mv[0]; t[j] = mv[1]; if (spread(t) < before - 0.5) { bins[i] = mv[0]; bins[j] = mv[1]; more = true; break; } }
+            for (let b = 0; b < B.length && !more; b++) {           // 맞바꾸기
+              const nA = [...A]; nA[a] = B[b]; const nB = [...B]; nB[b] = A[a];
+              if (len(nA) <= cap + 0.5 && len(nB) <= cap + 0.5) { const t = [...bins]; t[i] = nA; t[j] = nB; if (spread(t) < before - 0.5) { bins[i] = nA; bins[j] = nB; more = true; } }
+            }
+          }
+        }
+      }
+      return bins;
+    };
+    let lines = null;
+    for (let k = Math.max(1, Math.ceil(total / (cap + gap))); !lines && k <= small.length; k++) {
+      const tries = [pack(k, (f) => f.sort((a, b) => len(a) - len(b))[0]), pack(k, (f) => f[0])].filter(Boolean).map(even);
+      if (tries.length) lines = tries.sort((a, b) => spread(a) - spread(b))[0].filter((b) => b.length).sort((a, b) => len(b) - len(a));
     }
+    lines ??= small.map((c) => [c]);
     // 여러 줄 칸: 혼자 한 줄에 두고 줄였을 때 너비·줄 수를 잰 뒤 맨 위에. 두 줄 → 세 줄 → 네 줄… 순서로,
     //  같은 줄 수끼리는 좁은 것부터. 같은 줄 수 칸이 한 줄에 같이 들어가면 같이 (그 아래 한 줄 칸들)
     const line = (items) => { const l = document.createElement("div"); l.className = "line"; l.append(...items); return l; };

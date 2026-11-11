@@ -71,7 +71,7 @@
 #sosPanel .info .sev .chip { background: var(--bg); text-wrap: balance; word-break: keep-all; }   /* 박스 안 항목: 페이지 배경색으로 구분. 줄이 넘치면 진료 제한 메시지처럼 줄마다 고르게, 낱말 중간에서 끊지 않음 */
 #sosPanel .info .sev .chip:hover { background: var(--hover); }
 #sosPanel .info .sev .paren { display: inline-block; }   /* 괄호 부분은 한 덩어리 (안에서는 끊지 않고 통째로 다음 줄) */
-#sosPanel .info .sev .row { display: grid; gap: 6px; }   /* 줄(.line)은 sos.js 가 길이를 고르게 나눠 만듦 */
+#sosPanel .info .sev .row { display: grid; gap: 6px; width: 100%; }   /* 칸 전체 너비 (안 그러면 가장 긴 항목 너비로 줄어 한 줄에 하나씩만 들어감) */   /* 줄(.line)은 sos.js 가 길이를 고르게 나눠 만듦 */
 #sosPanel .info .sev .line { display: flex; gap: 6px; justify-content: center; width: 100%; }
 #sosPanel .info .chip.msg { grid-column: 1 / -1; text-wrap: balance; word-break: keep-all; }   /* 여러 줄이면 줄마다 글자 수를 고르게, 낱말 중간에서 끊지 않음 */   /* 진료 제한 메시지: 한 줄 전체, 보통 굵기 */
 /* 응급실 정보 칸에 마우스를 올리면 큰 칸만 빨간 배경·흰 글씨(병원 이름). 안의 블럭 4개는 그대로 */
