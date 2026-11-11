@@ -72,7 +72,7 @@
   border-left: .55em solid currentColor; border-top: .32em solid transparent; border-bottom: .32em solid transparent;
   transition: transform .5s cubic-bezier(.3,.7,.2,1); }
 #sosPanel .info .chip.tog[aria-expanded="true"]::before { transform: rotate(90deg); }
-#sosPanel .info .sev { display: grid; gap: 8px; justify-items: center; padding: 4px 8px 8px; }   /* 바깥 칸 → 중증 박스 → 분야 박스 → 블럭 사이 여백은 모두 8px */
+#sosPanel .info .sev { display: grid; gap: 8px; justify-items: center; padding: 0 8px 8px; }   /* 바깥 칸 → 중증 박스 → 분야 박스 → 블럭 사이 여백은 모두 8px */
 #sosPanel .info .sev .grp { display: grid; gap: 8px; justify-items: center; width: 100%; background: var(--bg); border-radius: 8px; padding: 8px; }   /* 분야 박스: 배경색 */
 #sosPanel .info .sev .chip { background: var(--box); text-wrap: balance; word-break: keep-all; }   /* 분야 박스 안 항목: 본 화면 블럭색. 줄이 넘치면 진료 제한 메시지처럼 줄마다 고르게, 낱말 중간에서 끊지 않음 */
 #sosPanel .info .sev .chip:hover { background: var(--hover); }   /* 마우스 올림 색 */
