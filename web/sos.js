@@ -158,10 +158,11 @@ function erBox(x, i) {
   const ST = ["불가능", "가능", "정보 미제공"];   // 분야 안 줄 순서
   const sv = Array.isArray(er.serious) ? er.serious : [];
   const groups = [...new Set(sv.map((x) => x.group))];
-  const sevBody = groups.map((g) => `<p class="sub">${esc(g)}</p><div class="grp">` + ST.map((st) => {   // 분야 이름은 박스 위, 항목은 분야마다 박스로 감쌈
+  const legend = `<div class="grp legend"><div class="lg3">${ST.map((st) => `<span class="chip" data-fit="1">${mk(st)}${LABEL[st]}</span>`).join("")}</div></div>`;   // 범례: 맨 위(뇌·심혈관 위), 분야와 같은 박스 안에 같은 너비 블럭 3개
+  const sevBody = legend + groups.map((g) => `<p class="sub">${esc(g)}</p><div class="grp">` + ST.map((st) => {   // 분야 이름은 박스 위, 항목은 분야마다 박스로 감쌈
     const xs = sv.filter((x) => x.group === g && x.status === st);
     return xs.length ? `<div class="row">${xs.map((x) => `<span class="chip">${item(x.msg ? `${x.name} (${x.msg})` : x.name, mk(st))}</span>`).join("")}</div>` : "";
-  }).join("") + "</div>").join("") + `<div class="grp legend"><div class="lg3">${ST.map((st) => `<span class="chip" data-fit="1">${mk(st)}${LABEL[st]}</span>`).join("")}</div></div>`;   // 범례는 맨 아래, 분야와 같은 박스 안에 같은 너비 블럭 3개
+  }).join("") + "</div>").join("");
   const sev = sv.length
     ? `<div class="sevbox"><button type="button" class="chip tog" data-tog aria-expanded="false">중증질환 수용 정보</button><div class="sev" hidden>${sevBody}</div></div>` : "";
   return `<section class="box info${i === sel ? " sel" : ""}" data-i="${i}"><p class="name">${esc(er.name)}</p><div class="grid">${cells.join("")}${msg}${sev}</div></section>`;
