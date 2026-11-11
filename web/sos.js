@@ -146,21 +146,22 @@ function erBox(x, i) {
   };
   // 중증질환 수용 정보 (칸 맨 아래): 누르면 같은 박스 안에서 펼쳐져 불가(위)·가능(아래) 항목을 모두 보여 줌 (다시 누르면 접힘)
   // 중증질환 수용 정보 (칸 맨 아래): 누르면 같은 박스 안에서 펼쳐짐 (다시 누르면 접힘). 27개 항목을 분야별로,
-  //  분야 안에서는 불가능 → 가능 → 정보 미제공 줄 순서. 표시 아이콘은 칸 글자 뒤에
-  // 표시 아이콘: ○ 가능, ✕ 불가능, – 정보 미제공. 같은 굵기의 선으로 그림 (글자 기호는 글꼴마다 굵기가 달라서)
+  //  분야 안에서는 제한 → 가능 → 정보 없음 줄 순서. 표시 아이콘은 칸 글자 뒤에
+  // 표시 아이콘: ✕ 제한, ○ 가능, – 정보 없음. 같은 굵기의 선으로 그림 (글자 기호는 글꼴마다 굵기가 달라서)
   const MK = {
     가능: '<circle cx="8" cy="8" r="5.5"/>',
     불가능: '<path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/>',
     "정보 미제공": '<path d="M3 8h10"/>',
   };
-  const mk = (st) => `<svg class="mk" viewBox="0 0 16 16" aria-label="${st}">${MK[st]}</svg>`;
+  const LABEL = { 불가능: "제한", 가능: "가능", "정보 미제공": "정보 없음" };   // 화면에 쓰는 말 (서버 값은 그대로)
+  const mk = (st) => `<svg class="mk" viewBox="0 0 16 16" aria-label="${LABEL[st]}">${MK[st]}</svg>`;
   const ST = ["불가능", "가능", "정보 미제공"];   // 분야 안 줄 순서
   const sv = Array.isArray(er.serious) ? er.serious : [];
   const groups = [...new Set(sv.map((x) => x.group))];
   const sevBody = groups.map((g) => `<p class="sub">${esc(g)}</p><div class="grp">` + ST.map((st) => {   // 분야 이름은 박스 위, 항목은 분야마다 박스로 감쌈
     const xs = sv.filter((x) => x.group === g && x.status === st);
     return xs.length ? `<div class="row">${xs.map((x) => `<span class="chip">${item(x.msg ? `${x.name} (${x.msg})` : x.name, mk(st))}</span>`).join("")}</div>` : "";
-  }).join("") + "</div>").join("") + `<div class="grp legend"><div class="lg3">${ST.map((st) => `<span class="chip" data-fit="1">${mk(st)}${st}</span>`).join("")}</div></div>`;   // 범례는 맨 아래, 분야와 같은 박스 안에 같은 너비 블럭 3개
+  }).join("") + "</div>").join("") + `<div class="grp legend"><div class="lg3">${ST.map((st) => `<span class="chip" data-fit="1">${mk(st)}${LABEL[st]}</span>`).join("")}</div></div>`;   // 범례는 맨 아래, 분야와 같은 박스 안에 같은 너비 블럭 3개
   const sev = sv.length
     ? `<div class="sevbox"><button type="button" class="chip tog" data-tog aria-expanded="false">중증질환 수용 정보</button><div class="sev" hidden>${sevBody}</div></div>` : "";
   return `<section class="box info${i === sel ? " sel" : ""}" data-i="${i}"><p class="name">${esc(er.name)}</p><div class="grid">${cells.join("")}${msg}${sev}</div></section>`;
