@@ -112,11 +112,16 @@ def nearby(lat, lng, n=5):
     return sorted(out, key=lambda x: x["km"])[:n]
 
 
+_BLANK_MSG = {"불가능메세지등록", "불가능메시지등록"}
+
+
 def messages(hpid):
     """병원이 직접 올린 응급실·중증질환 진료 제한 메시지 (예: '정형외과 전문의 부재로 수지접합 불가'). 최대 3개, 같은 문장은 한 번."""
     out = []
     for it in _ermct("getEmrrmSrsillDissMsgInqire", HPID=hpid, pageNo=1, numOfRows=10):
         m = (it.get("symBlkMsg") or "").strip()
+        if "".join(m.split()) in _BLANK_MSG:   # 병원이 내용을 안 넣으면 오는 자리표시 문구 ('불가능메세지등록')는 뺌
+            continue
         if m and m not in out:
             out.append(m)
     return out[:3]
