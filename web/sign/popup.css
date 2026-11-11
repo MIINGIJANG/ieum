@@ -12,6 +12,8 @@
   background: var(--hover); color: var(--ink); border-radius: 14px; padding: 12px; display: grid;   /* 팝업 배경 = 블럭에 마우스 올렸을 때 색 */
   font-size: 14px; line-height: 1.5; text-align: left;
 }
+/* SOS 팝업 아래 페이지 바닥과 16px 여백 (팝업이 자리를 띄워 놓은 상자라 margin 으로는 페이지가 안 늘어나서, 보이지 않는 자리 표시로 늘림) */
+#sosPanel::after { content: ""; position: absolute; left: 0; top: 100%; width: 1px; height: 16px; pointer-events: none; }
 #panel[hidden], #sosPanel[hidden] { display: none !important; }
 #panel [hidden], #sosPanel [hidden] { display: none !important; }
 #panel *, #sosPanel * { box-sizing: border-box; }
