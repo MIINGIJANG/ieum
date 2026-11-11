@@ -222,7 +222,7 @@ function arrange(root) {
     let lines = null;
     for (let k = Math.max(1, Math.ceil(total / (cap + gap))); !lines && k <= small.length; k++) {
       const tries = [pack(k, (f) => f.sort((a, b) => len(a) - len(b))[0]), pack(k, (f) => f[0])].filter(Boolean).map(even);
-      if (tries.length) lines = tries.sort((a, b) => spread(a) - spread(b))[0].filter((b) => b.length).sort((a, b) => len(b) - len(a));
+      if (tries.length) lines = tries.sort((a, b) => spread(a) - spread(b))[0].filter((b) => b.length).sort((a, b) => len(a) - len(b));   // 줄 길이(칸 가로 길이 + 사이 간격)가 짧은 줄부터 위로
     }
     lines ??= small.map((c) => [c]);
     // 여러 줄 칸: 혼자 한 줄에 두고 줄였을 때 너비를 잰 뒤 맨 위에. 몇 줄이든 상관없이 좁은 것부터,
@@ -239,6 +239,7 @@ function arrange(root) {
       c.dataset.fit = "1"; c.style.width = `${bw.get(c)}px`;
       c.style.marginInline = b.items.length === 1 ? `calc((100% - ${bw.get(c)}px) / 2)` : "";   // 혼자면 양옆 여백으로 줄을 채움
     }
+    bigLines.sort((a, b) => a.sum - b.sum);   // 여러 줄 칸 줄도 짧은 줄부터
     row.replaceChildren(...[...bigLines.map((b) => b.items), ...lines].map(line));
   }
 }
