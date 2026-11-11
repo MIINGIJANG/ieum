@@ -177,6 +177,32 @@ function roll(el) {
   el.animate([{ height: "0px", marginTop: "0px" }, { height: `${h}px`, marginTop: m }], ROLL).onfinish = () => { el.style.overflow = ""; };
 }
 // 두 줄 이상으로 넘친 블럭은 박스 너비를 가장 긴 줄에 맞추고, 그 줄에는 그 블럭만 둠 (그냥 두면 줄이 바뀌어도 박스는 한 줄 전체 너비로 남음)
+// 중증질환 항목 줄 정리: 병원이 적은 순서 대신, 줄마다 길이가 최대한 같아 전체가 직사각형에 가깝게 보이도록 다시 배치
+//  가장 적은 줄 수로 넣되, 긴 항목부터 지금 가장 짧은 줄에 넣음 (한 줄에 다 안 들어가는 긴 항목은 혼자 한 줄)
+function arrange(root) {
+  for (const row of root.querySelectorAll(".row")) {
+    const chips = [...row.querySelectorAll(".chip")];
+    chips.forEach((c) => { c.style.width = c.style.marginInline = ""; });
+    row.replaceChildren(...chips);   // 예전 줄 나눔 풀기
+    const cap = row.clientWidth, gap = parseFloat(getComputedStyle(row).columnGap) || 6;
+    if (!cap || chips.length < 2) { const l = document.createElement("div"); l.className = "line"; l.append(...chips); row.replaceChildren(l); continue; }
+    const w = new Map(chips.map((c) => { c.style.width = "max-content"; const x = c.getBoundingClientRect().width; c.style.width = ""; return [c, x]; }));
+    const big = chips.filter((c) => w.get(c) > cap), small = chips.filter((c) => w.get(c) <= cap).sort((a, b) => w.get(b) - w.get(a));
+    const total = small.reduce((t, c) => t + w.get(c) + gap, 0);
+    let lines = null;
+    for (let k = Math.max(1, Math.ceil(total / (cap + gap))); !lines; k++) {
+      const bins = Array.from({ length: k }, () => ({ sum: -gap, items: [] }));
+      let ok = true;
+      for (const c of small) {
+        const fit = bins.filter((b) => b.sum + gap + w.get(c) <= cap + 0.5).sort((a, b) => a.sum - b.sum)[0];
+        if (!fit) { ok = false; break; }
+        fit.sum += gap + w.get(c); fit.items.push(c);
+      }
+      if (ok) lines = bins.filter((b) => b.items.length).sort((a, b) => b.sum - a.sum).map((b) => b.items);
+    }
+    row.replaceChildren(...[...big.map((c) => [c]), ...lines].map((items) => { const l = document.createElement("div"); l.className = "line"; l.append(...items); return l; }));
+  }
+}
 function fitChips(root) {
   for (const el of root.querySelectorAll(".chip")) {
     el.style.width = el.style.marginInline = "";
@@ -202,7 +228,7 @@ $("sosInfo").addEventListener("click", (e) => {
     t.setAttribute("aria-expanded", String(open1));
     box.getAnimations().forEach((a) => a.cancel());
     box.hidden = false; box.dataset.closing = "";
-    fitChips(box);
+    arrange(box); fitChips(box);
     const cs = getComputedStyle(box), h = box.getBoundingClientRect().height;
     const over = t.parentElement.getBoundingClientRect().bottom + 24 - innerHeight;
     if (open1 && over > 0) scrollInto(over);   // 펼친 목록이 화면 아래로 넘치면 그만큼 같이 내려 줌
@@ -340,4 +366,4 @@ document.addEventListener("click", (e) => {
   if (!open || $("sosPanel").contains(e.target) || $("sosBtn").contains(e.target)) return;
   if (e.target.closest?.("button, a, [role=button]")) closePanel();
 }, true);
-addEventListener("resize", () => { if (open) { window.__sign?.place?.($("sosPanel")); map?.relayout(); fitText(); $("sosInfo").querySelectorAll(".sev:not([hidden])").forEach(fitChips); } });
+addEventListener("resize", () => { if (open) { window.__sign?.place?.($("sosPanel")); map?.relayout(); fitText(); $("sosInfo").querySelectorAll(".sev:not([hidden])").forEach((b) => { arrange(b); fitChips(b); }); } });
