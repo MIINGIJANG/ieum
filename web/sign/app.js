@@ -493,10 +493,9 @@ function closePanel() {
   popTo(false);
   if (scrollBack != null) { springScroll(scrollBack); scrollBack = null; }
 }
-// 카메라를 쓸 수 없는 게 미리 보이면(카메라 없음·권한 거절) 팝업을 열지 않음. 모르면 열고, 켜기에 실패하면 바로 닫음
+// 카메라가 아예 없으면 팝업을 열지 않음. 권한은 여기서 미리 거르지 않음 (예전에 '허용 안 함'을 눌렀어도 누를 때마다 브라우저에 다시 물음)
 async function cameraUsable() {
   if (!navigator.mediaDevices?.getUserMedia) return false;
-  try { if ((await navigator.permissions?.query({ name: "camera" }))?.state === "denied") return false; } catch {}
   try {
     const ds = await navigator.mediaDevices.enumerateDevices();
     if (ds.length && !ds.some((d) => d.kind === "videoinput")) return false;
@@ -504,20 +503,21 @@ async function cameraUsable() {
   return true;
 }
 // 이미 허용한 기기면 바로 팝업. 아직이면 먼저 카메라 권한을 묻고, '허용'을 누른 뒤에 팝업을 엶 (거절하면 열지 않음)
-let asking = false;
+//  누를 때마다 새로 물음: 앞에서 묻던 것이 끝나지 않았어도(권한 창을 닫아 버린 경우 등) 다시 누르면 다시 물음 (늦게 온 앞의 결과는 버림)
+let askSeq = 0;
 $("camBtn").onclick = async () => {
   if (panelOpen) return closePanel();
-  if (asking || !(await cameraUsable())) return;
+  const my = ++askSeq;
+  if (!(await cameraUsable()) || my !== askSeq) return;
   let st = null;
   try { st = (await navigator.permissions?.query({ name: "camera" }))?.state; } catch {}
+  if (my !== askSeq) return;
   if (st === "granted") return openPanel();
-  asking = true;
   try {
     const s = await navigator.mediaDevices.getUserMedia(VIDEO);   // 여기서 브라우저가 허용 여부를 물음
-    if (panelOpen) { s.getTracks().forEach((t) => t.stop()); return; }
+    if (panelOpen || my !== askSeq) { s.getTracks().forEach((t) => t.stop()); return; }
     openPanel(s);
-  } catch (e) { console.error(e); }                              // 거절·실패: 팝업을 열지 않음
-  finally { asking = false; }
+  } catch (e) { console.error(e); }                              // 거절·실패: 팝업을 열지 않음 (다시 누르면 다시 물음)
 };
 // 팝업이 떠 있을 때 팝업 밖을 누르면 그 순간 팝업이 닫히기 시작함.
 //  누른 곳이 버튼(예시 질문 등)이면 그 버튼도 그 순간 그대로 눌림 (예시 질문이 바로 입력창에 들어감), 빈 배경이면 닫기만

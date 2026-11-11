@@ -167,12 +167,6 @@ function erBox(x, i) {
     ? `<div class="sevbox"><button type="button" class="chip tog" data-tog aria-expanded="false">진료과 별 진료 가능 정보</button>${legend}<div class="sev" hidden>${sevBody}</div></div>` : "";
   return `<section class="box info${i === sel ? " sel" : ""}" data-i="${i}"><p class="name">${esc(er.name)}</p><div class="grid">${cells.join("")}${msg}${sev}</div></section>`;
 }
-// 응급실 정보 칸 자리에 안내 한 줄 (위치를 못 찾았을 때 등)
-function sosMsg(text) {
-  const wrap = $("sosInfo");
-  wrap.innerHTML = `<p class="sosmsg">${esc(text)}</p>`;
-  wrap.hidden = false;
-}
 function showInfo(d, err) {
   const wrap = $("sosInfo");
   const list = d ? (d.ers && d.ers.length ? d.ers : d.er ? [{ er: d.er, route: d.route }] : []) : [];
@@ -478,29 +472,39 @@ function closePanel() {
   if (scrollBack != null) { window.__sign?.springScroll?.(scrollBack); scrollBack = null; }
 }
 let gen = 0, shownGen = 0;   // gen: 새로 열 때마다 하나씩 (예전 위치 찾기·조회 결과는 버림), shownGen: 그 회차에 팝업을 연 적 있음
+// 지금 위치 찾기 (SOS 를 누를 때마다 새로). 누른 그 순간 바로 시작해야 Safari 등이 위치 요청을 사용자 동작으로 받아 줌
+//  - 빠른 위치(와이파이·기지국)를 계속 기다리다가 3초 뒤부터는 정밀 위치도 함께. 먼저 온 것을 씀
+//  - '잠깐 못 찾음' 오류는 무시하고 계속 기다림 (Mac·Safari 는 첫 위치 전에 이런 오류를 자주 냄). 거절이면 바로 멈춤
+//  - 30초 안에 못 찾으면 이 기기에서 마지막으로 찾았던 위치를 씀
+function locate() {
+  return new Promise((res, rej) => {
+    const g = navigator.geolocation;
+    if (!g) return pos ? res(pos) : rej(new Error("no geolocation"));
+    const ids = [];
+    let done = false, t2 = 0, t30 = 0;
+    const end = (f, v) => { if (done) return; done = true; ids.forEach((i) => g.clearWatch(i)); clearTimeout(t2); clearTimeout(t30); f(v); };
+    const ok = (p) => { pos = { lat: p.coords.latitude, lng: p.coords.longitude }; posAt = Date.now(); end(res, pos); };
+    const bad = (e) => { if (e && e.code === 1) end(rej, e); };   // 거절만 멈춤, 나머지 오류는 계속 기다림
+    ids.push(g.watchPosition(ok, bad, { enableHighAccuracy: false, maximumAge: 60000 }));
+    t2 = setTimeout(() => { if (!done) ids.push(g.watchPosition(ok, bad, { enableHighAccuracy: true, maximumAge: 0 })); }, 3000);
+    t30 = setTimeout(() => (pos ? end(res, pos) : end(rej, new Error("timeout"))), 30000);
+  });
+}
 $("sosBtn").onclick = async () => {
   if (open) return closePanel();
   if (!$("sosPanel").hidden) return openPanel(null);   // 닫히는 도중: 보던 그대로 다시 (찾던 위치·조회도 이어서)
   const my = ++gen;
-  // 다 닫힌 뒤 새로 열면 처음부터: 저장해 둔 위치를 쓰지 않고 지금 위치를 새로 찾음
-  // 위치 권한을 묻고, 허락하는 순간 팝업을 엶 (위치가 나오기를 기다리지 않음). 거절하면 열지 않음
+  const where = locate();                              // 누른 순간 바로 위치 찾기 시작 (권한 창도 이때 뜸)
+  // 이미 위치를 허락해 둔 기기면 위치가 나오기를 기다리지 않고 바로 팝업. 처음이면 '허용'을 누르는 순간 팝업. 거절하면 열지 않음
   const st = await navigator.permissions?.query({ name: "geolocation" }).catch(() => null);
   if (my !== gen) return;
   if (st && st.state === "granted") openPanel(null);
   else if (st) st.onchange = () => { if (st.state === "granted" && !open && my === gen && shownGen !== my) openPanel(null); st.onchange = null; };
-  // 위치: 빠른 새 위치(8초) → 못 받으면 기기가 최근(5분 안)에 잡아 둔 위치(4초) → 그래도 없으면 정밀 위치(20초). 그 사이 닫았으면 다시 열지 않음
-  //  (일부 브라우저·Mac 은 '새 위치만'을 요구하면 실패하거나 오래 걸려서, 허용을 눌러도 아무 반응이 없는 것처럼 보였음)
   try {
-    const p = await getPos(8000, false, true).catch((e) => (e && e.code === 1 ? Promise.reject(e) : getPos(4000))).catch((e) => (e && e.code === 1 ? Promise.reject(e) : getPos(20000, true)));
+    const p = await where;
     if (my !== gen) return;
     if (shownGen !== my) openPanel(p); else refresh(p);
-  } catch (e) {
-    if (my !== gen) return;
-    if (e && e.code === 1 && shownGen !== my) return;   // 위치를 거절: 팝업을 열지 않음 (지금처럼)
-    // 허용했는데 위치를 못 찾음: 팝업을 열고 안내 (전에는 아무 반응이 없었음)
-    if (shownGen !== my) openPanel(null);
-    sosMsg("지금 위치를 찾지 못했어요. 기기의 위치 서비스가 켜져 있는지 확인한 뒤 SOS 를 다시 눌러 주세요.");
-  }
+  } catch { if (my === gen && shownGen === my) showInfo(null, true); }
 };
 // 팝업 밖의 버튼(카메라·마이크·예시 질문 등)을 누르면 닫히고 그 버튼도 그대로 눌림. 빈 배경을 누르면 닫히지 않음
 document.addEventListener("click", (e) => {
