@@ -225,16 +225,15 @@ function arrange(root) {
       if (tries.length) lines = tries.sort((a, b) => spread(a) - spread(b))[0].filter((b) => b.length).sort((a, b) => len(b) - len(a));
     }
     lines ??= small.map((c) => [c]);
-    // 여러 줄 칸: 혼자 한 줄에 두고 줄였을 때 너비·줄 수를 잰 뒤 맨 위에. 두 줄 → 세 줄 → 네 줄… 순서로,
-    //  같은 줄 수끼리는 좁은 것부터. 같은 줄 수 칸이 한 줄에 같이 들어가면 같이 (그 아래 한 줄 칸들)
+    // 여러 줄 칸: 혼자 한 줄에 두고 줄였을 때 너비를 잰 뒤 맨 위에. 몇 줄이든 상관없이 좁은 것부터,
+    //  한 줄에 같이 들어가면 같이 (그 아래 한 줄 칸들)
     const line = (items) => { const l = document.createElement("div"); l.className = "line"; l.append(...items); return l; };
     const bw = new Map(big.map((c) => { row.append(line([c])); return [c, lineFit(c) || cap]; }));
-    const nl = (c) => +c.dataset.lines || 2;
     const bigLines = [];
-    for (const c of big.sort((a, b) => nl(a) - nl(b) || bw.get(a) - bw.get(b))) {
+    for (const c of big.sort((a, b) => bw.get(a) - bw.get(b))) {
       const last = bigLines[bigLines.length - 1];
-      if (last && last.n === nl(c) && last.sum + gap + bw.get(c) <= cap + 0.5) { last.sum += gap + bw.get(c); last.items.push(c); }
-      else bigLines.push({ n: nl(c), sum: bw.get(c), items: [c] });
+      if (last && last.sum + gap + bw.get(c) <= cap + 0.5) { last.sum += gap + bw.get(c); last.items.push(c); }
+      else bigLines.push({ sum: bw.get(c), items: [c] });
     }
     for (const b of bigLines) for (const c of b.items) {
       c.dataset.fit = "1"; c.style.width = `${bw.get(c)}px`;
