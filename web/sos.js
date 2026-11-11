@@ -164,7 +164,7 @@ function erBox(x, i) {
     return xs.length ? `<div class="row">${xs.map((x) => `<span class="chip">${item(x.msg ? `${x.name} (${x.msg})` : x.name, mk(st))}</span>`).join("")}</div>` : "";
   }).join("") + "</div>").join("");
   const sev = sv.length
-    ? `<div class="sevbox"><button type="button" class="chip tog" data-tog aria-expanded="false">중증질환 수용 정보</button><div class="sev" hidden>${sevBody}</div></div>` : "";
+    ? `<div class="sevbox"><button type="button" class="chip tog" data-tog aria-expanded="false">진료과 별 진료 가능 정보</button><div class="sev" hidden>${sevBody}</div></div>` : "";
   return `<section class="box info${i === sel ? " sel" : ""}" data-i="${i}"><p class="name">${esc(er.name)}</p><div class="grid">${cells.join("")}${msg}${sev}</div></section>`;
 }
 function showInfo(d, err) {
