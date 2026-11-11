@@ -11,7 +11,8 @@ SER = """<response><header><resultCode>00</resultCode></header><body><items>
 <item><hpid>A2</hpid><MKioskTy20>Y</MKioskTy20><MKioskTy19>불가능</MKioskTy19><MKioskTy15>Y</MKioskTy15><MKioskTy15Msg>1500g 이상</MKioskTy15Msg><MKioskTy1>정보미제공</MKioskTy1><MKioskTy28>Y</MKioskTy28></item></items></body></response>"""
 MSG = """<response><header><resultCode>00</resultCode></header><body><items>
 <item><hpid>A2</hpid><symBlkMsg>정형외과 전문의 부재로 수지접합 불가</symBlkMsg></item>
-<item><hpid>A2</hpid><symBlkMsg>정형외과 전문의 부재로 수지접합 불가</symBlkMsg></item></items></body></response>"""
+<item><hpid>A2</hpid><symBlkMsg>정형외과 전문의 부재로 수지접합 불가</symBlkMsg></item>
+<item><hpid>A2</hpid><symBlkMsg>불가능메세지등록</symBlkMsg></item></items></body></response>"""
 EMPTY = """<response><header><resultCode>00</resultCode></header><body><items></items></body></response>"""
 BEDS = """<response><header><resultCode>00</resultCode></header><body><items>
 <item><hpid>A2</hpid><hvec>4</hvec><dutyTel3>053-119</dutyTel3><hvctayn>Y</hvctayn><hvidate>20261106163000</hvidate></item>
