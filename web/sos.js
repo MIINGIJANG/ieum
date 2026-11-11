@@ -220,10 +220,11 @@ function arrange(root) {
 }
 // 두 줄 이상으로 넘친 칸의 너비를 가장 긴 줄에 맞춘 값 (한 줄이면 null). 그냥 두면 줄이 바뀌어도 박스는 한 줄 전체 너비로 남음
 function lineFit(el) {
-  const rg = document.createRange(); rg.selectNodeContents(el);
-  // 조각(글자·괄호 덩어리)을 줄 높이 기준으로 줄마다 묶음 (글씨 크기에 따라 같은 줄 조각의 위치가 1px 남짓 어긋날 수 있어서)
+  // 글자 조각만 잼: 괄호 덩어리(inline-block)는 안에서 줄이 바뀌면 상자 자체가 칸 너비만큼 넓어서, 그 상자 대신 안의 글자로 잼
+  const rects = [], tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  for (let n = tw.nextNode(); n; n = tw.nextNode()) { const rg = document.createRange(); rg.selectNodeContents(n); rects.push(...[...rg.getClientRects()].filter((x) => x.width)); }
+  // 조각을 줄 높이 기준으로 줄마다 묶음 (글씨 크기에 따라 같은 줄 조각의 위치가 1px 남짓 어긋날 수 있어서)
   const cs = getComputedStyle(el), lh = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.5;
-  const rects = [...rg.getClientRects()].filter((x) => x.width);
   if (!rects.length) return null;
   const top0 = Math.min(...rects.map((x) => x.top)), rows = new Map();
   for (const x of rects) { const k = Math.round((x.top - top0) / lh), o = rows.get(k); rows.set(k, o ? [Math.min(o[0], x.left), Math.max(o[1], x.right)] : [x.left, x.right]); }
