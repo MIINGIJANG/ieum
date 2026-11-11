@@ -137,16 +137,29 @@ function erBox(x, i) {
   // 병원이 올린 진료 제한 메시지 (예: '정형외과 전문의 부재로 수지접합 불가'): 블럭 아래 한 줄씩
   const msg = (er.msgs || []).map((m) => `<span class="chip msg">${esc(m)}</span>`).join("");
   // 항목 끝 괄호 부분(예: '(1500g 이상, 30주 이상)')은 한 덩어리: 줄이 넘치면 괄호 부분이 통째로 다음 줄로 (브라우저마다 '(' 뒤에서 끊는 것 방지)
-  const item = (x) => { const m = /^(.*?)\s*(\([^()]*\))$/.exec(x); return m ? `${esc(m[1])} <span class="paren">${esc(m[2])}</span>` : esc(x); };
+  // tail(표시 아이콘)은 마지막 덩어리(괄호 부분 또는 마지막 낱말)에 붙여 혼자 다음 줄로 떨어지지 않게
+  const item = (x, tail = "") => {
+    const m = /^(.*?)\s*(\([^()]*\))$/.exec(x);
+    if (m) return `${esc(m[1])} <span class="paren">${esc(m[2])}${tail}</span>`;
+    const k = x.lastIndexOf(" ");
+    return tail ? `${esc(x.slice(0, k + 1))}<span class="nw">${esc(x.slice(k + 1))}${tail}</span>` : esc(x);
+  };
   // 중증질환 수용 정보 (칸 맨 아래): 누르면 같은 박스 안에서 펼쳐져 불가(위)·가능(아래) 항목을 모두 보여 줌 (다시 누르면 접힘)
   // 중증질환 수용 정보 (칸 맨 아래): 누르면 같은 박스 안에서 펼쳐짐 (다시 누르면 접힘). 27개 항목을 분야별로,
-  //  분야 안에서는 불가능 → 가능 → 정보 미제공 줄 순서. 표시: ✕ 불가능, ○ 가능, – 정보 미제공
-  const ST = [["불가능", "✕"], ["가능", "○"], ["정보 미제공", "–"]];
+  //  분야 안에서는 불가능 → 가능 → 정보 미제공 줄 순서. 표시 아이콘은 칸 글자 뒤에
+  // 표시 아이콘: ○ 가능, ✕ 불가능, – 정보 미제공. 같은 굵기의 선으로 그림 (글자 기호는 글꼴마다 굵기가 달라서)
+  const MK = {
+    가능: '<circle cx="8" cy="8" r="5.5"/>',
+    불가능: '<path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/>',
+    "정보 미제공": '<path d="M3 8h10"/>',
+  };
+  const mk = (st) => `<svg class="mk" viewBox="0 0 16 16" aria-label="${st}">${MK[st]}</svg>`;
+  const ST = ["불가능", "가능", "정보 미제공"];   // 분야 안 줄 순서
   const sv = Array.isArray(er.serious) ? er.serious : [];
   const groups = [...new Set(sv.map((x) => x.group))];
-  const sevBody = `<p class="sub legend">✕ 불가능 · ○ 가능 · – 정보 미제공</p>` + groups.map((g) => `<p class="sub">${esc(g)}</p>` + ST.map(([st, mk]) => {
+  const sevBody = `<p class="sub legend">가능 ${mk("가능")} · 불가능 ${mk("불가능")} · 정보 미제공 ${mk("정보 미제공")}</p>` + groups.map((g) => `<p class="sub">${esc(g)}</p>` + ST.map((st) => {
     const xs = sv.filter((x) => x.group === g && x.status === st);
-    return xs.length ? `<div class="row">${xs.map((x) => `<span class="chip">${mk} ${item(x.msg ? `${x.name} (${x.msg})` : x.name)}</span>`).join("")}</div>` : "";
+    return xs.length ? `<div class="row">${xs.map((x) => `<span class="chip">${item(x.msg ? `${x.name} (${x.msg})` : x.name, mk(st))}</span>`).join("")}</div>` : "";
   }).join("")).join("");
   const sev = sv.length
     ? `<div class="sevbox"><button type="button" class="chip tog" data-tog aria-expanded="false">중증질환 수용 정보</button><div class="sev" hidden>${sevBody}</div></div>` : "";
@@ -257,6 +270,7 @@ function lineFit(el) {
   // 글자 조각만 잼: 괄호 덩어리(inline-block)는 안에서 줄이 바뀌면 상자 자체가 칸 너비만큼 넓어서, 그 상자 대신 안의 글자로 잼
   const rects = [], tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
   for (let n = tw.nextNode(); n; n = tw.nextNode()) { const rg = document.createRange(); rg.selectNodeContents(n); rects.push(...[...rg.getClientRects()].filter((x) => x.width)); }
+  rects.push(...[...el.querySelectorAll("svg.mk")].map((x) => x.getBoundingClientRect()));   // 표시 아이콘도 글자처럼
   // 조각을 줄 높이 기준으로 줄마다 묶음 (글씨 크기에 따라 같은 줄 조각의 위치가 1px 남짓 어긋날 수 있어서)
   const cs = getComputedStyle(el), lh = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.5;
   if (!rects.length) return null;
