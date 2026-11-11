@@ -167,6 +167,12 @@ function erBox(x, i) {
     ? `<div class="sevbox"><button type="button" class="chip tog" data-tog aria-expanded="false">진료과 별 진료 가능 정보</button>${legend}<div class="sev" hidden>${sevBody}</div></div>` : "";
   return `<section class="box info${i === sel ? " sel" : ""}" data-i="${i}"><p class="name">${esc(er.name)}</p><div class="grid">${cells.join("")}${msg}${sev}</div></section>`;
 }
+// 응급실 정보 칸 자리에 안내 한 줄 (위치를 못 찾았을 때 등)
+function sosMsg(text) {
+  const wrap = $("sosInfo");
+  wrap.innerHTML = `<p class="sosmsg">${esc(text)}</p>`;
+  wrap.hidden = false;
+}
 function showInfo(d, err) {
   const wrap = $("sosInfo");
   const list = d ? (d.ers && d.ers.length ? d.ers : d.er ? [{ er: d.er, route: d.route }] : []) : [];
@@ -482,12 +488,19 @@ $("sosBtn").onclick = async () => {
   if (my !== gen) return;
   if (st && st.state === "granted") openPanel(null);
   else if (st) st.onchange = () => { if (st.state === "granted" && !open && my === gen && shownGen !== my) openPanel(null); st.onchange = null; };
-  // 위치: 빠른 위치(8초)로 먼저, 못 받으면 정밀 위치로 한 번 더 (20초). 그 사이 닫았으면 다시 열지 않음
+  // 위치: 빠른 새 위치(8초) → 못 받으면 기기가 최근(5분 안)에 잡아 둔 위치(4초) → 그래도 없으면 정밀 위치(20초). 그 사이 닫았으면 다시 열지 않음
+  //  (일부 브라우저·Mac 은 '새 위치만'을 요구하면 실패하거나 오래 걸려서, 허용을 눌러도 아무 반응이 없는 것처럼 보였음)
   try {
-    const p = await getPos(8000, false, true).catch(() => getPos(20000, true));
+    const p = await getPos(8000, false, true).catch((e) => (e && e.code === 1 ? Promise.reject(e) : getPos(4000))).catch((e) => (e && e.code === 1 ? Promise.reject(e) : getPos(20000, true)));
     if (my !== gen) return;
     if (shownGen !== my) openPanel(p); else refresh(p);
-  } catch { if (my === gen) showInfo(null, true); }
+  } catch (e) {
+    if (my !== gen) return;
+    if (e && e.code === 1 && shownGen !== my) return;   // 위치를 거절: 팝업을 열지 않음 (지금처럼)
+    // 허용했는데 위치를 못 찾음: 팝업을 열고 안내 (전에는 아무 반응이 없었음)
+    if (shownGen !== my) openPanel(null);
+    sosMsg("지금 위치를 찾지 못했어요. 기기의 위치 서비스가 켜져 있는지 확인한 뒤 SOS 를 다시 눌러 주세요.");
+  }
 };
 // 팝업 밖의 버튼(카메라·마이크·예시 질문 등)을 누르면 닫히고 그 버튼도 그대로 눌림. 빈 배경을 누르면 닫히지 않음
 document.addEventListener("click", (e) => {
