@@ -147,25 +147,41 @@ SERIOUS = {f"MKioskTy{i}": n for i, n in enumerate([
     "응급투석(HD)", "응급투석(CRRT)", "정신과 폐쇄병동입원", "안과 응급수술", "성인 영상의학혈관중재", "영유아 영상의학혈관중재"], 1)}
 
 
+# 분야별 묶음 (SOS 칸에서 분야마다 보여 줌). 이름은 위 SERIOUS 와 같음
+SERIOUS_GROUPS = [
+    ("뇌·심혈관", ["심근경색 재관류중재술", "뇌경색 재관류중재술", "거미막하출혈 수술", "거미막하출혈 외 뇌출혈 수술",
+                "흉부 대동맥응급", "복부 대동맥응급", "성인 영상의학혈관중재"]),
+    ("복부·내시경", ["담낭질환", "담도포함질환", "비외상 복부응급수술", "성인 위장관 응급내시경", "성인 기관지 응급내시경"]),
+    ("소아·산과", ["영유아 장중첩·폐색", "영유아 위장관 응급내시경", "영유아 기관지 응급내시경", "영유아 영상의학혈관중재",
+                "저체중출생아 집중치료", "분만", "산과수술", "부인과수술"]),
+    ("외상·화상", ["중증화상 전문치료", "수족지접합", "수족지접합 외 사지접합"]),
+    ("기타", ["응급투석(HD)", "응급투석(CRRT)", "정신과 폐쇄병동입원", "안과 응급수술"]),
+]
+
+
+def serious_items(it=None):
+    """27개 항목 모두 [{"group", "name", "status": 가능|불가능|정보 미제공, "msg"}]. 항목 값이 없거나 병원 정보가 아예 없으면 '정보 미제공'"""
+    by_name = {n: k for k, n in SERIOUS.items()}
+    out = []
+    for group, names in SERIOUS_GROUPS:
+        for name in names:
+            k = by_name[name]
+            v = ((it or {}).get(k) or "").strip().upper()
+            st = "가능" if v.startswith("Y") else "불가능" if (v.startswith("N") or "불가" in v) else "정보 미제공"
+            out.append({"group": group, "name": name, "status": st, "msg": ((it or {}).get(k + "Msg") or "").strip() or None})
+    return out
+
+
 def serious(addr):
-    """그 시·군·구 응급실들의 중증질환 수용 가능 여부 {hpid: {"가능": [...], "불가": [...]}} (Y 가능, 불가능 불가, 정보미제공은 뺌)"""
+    """그 시·군·구 응급실들의 중증질환 수용 정보 {hpid: serious_items(...)} (27개 항목 모두, 가능·불가능·정보 미제공)"""
     params = _region(addr)
     if not params:
         return {}
     res, seen, keys = {}, False, None
     for it in _ermct("getSrsillDissAceptncPosblInfoInqire", **params):
         keys = keys or sorted(it)
-        ok, no = [], []
-        for k, name in SERIOUS.items():
-            v = (it.get(k) or "").strip().upper()
-            if v:
-                seen = True
-            label = name + (f" ({it.get(k + 'Msg').strip()})" if (it.get(k + "Msg") or "").strip() else "")   # 예: 저체중출생아 집중치료 (1500g 이상, 30주 이상)
-            if v.startswith("Y"):
-                ok.append(label)
-            elif v.startswith("N") or "불가" in v:
-                no.append(label)
-        res[it.get("hpid")] = {"가능": ok, "불가": no}
+        seen = seen or any((it.get(k) or "").strip() for k in SERIOUS)
+        res[it.get("hpid")] = serious_items(it)
     if res and not seen:   # 항목 이름이 예상과 다르면 기록 (어떤 항목이 왔는지만, 값·좌표 없이)
         log_error("serious", "예상한 MKioskTy 항목 없음, 받은 항목: " + ",".join(keys or []))
     return res
@@ -325,7 +341,7 @@ def nearest(lat, lng, fresh=False):
         return (0, rt["duration"], rt.get("distance") or 0, -bed_of(c), c["km"])
     order = sorted(zip(top, routes), key=rank)
     allers = [{"er": {**c, **bedmap.get(reg(c["addr"]), {}).get(c["hpid"], {}), "msgs": msgs.get(c["hpid"], []),
-                      "serious": sermap.get(reg(c["addr"]), {}).get(c["hpid"])}, "route": rt}
+                      "serious": sermap.get(reg(c["addr"]), {}).get(c["hpid"]) or serious_items()}, "route": rt}
               for c, rt in order]
     has_bed = lambda x: (x["er"].get("beds") or 0) > 0
     n = 2

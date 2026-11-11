@@ -61,7 +61,11 @@ def test_nearest(monkeypatch):
     assert out["er"]["kakao_id"] == "777" and out["er"]["lat"] == 35.8402          # 장례식장은 빼고 같은 이름 병원
     assert "kakao_id" not in out["ers"][1]["er"]                                     # 이름이 안 맞으면 원래 그대로
     assert out["er"]["msgs"] == ["정형외과 전문의 부재로 수지접합 불가"] and out["ers"][1]["er"]["msgs"] == []
-    assert out["er"]["serious"] == {"가능": ["저체중출생아 집중치료 (1500g 이상)", "수족지접합"], "불가": ["중증화상 전문치료"]} and out["ers"][1]["er"]["serious"] is None
+    st = {x["name"]: (x["status"], x["msg"]) for x in out["er"]["serious"]}
+    assert len(st) == 27 and st["저체중출생아 집중치료"] == ("가능", "1500g 이상") and st["수족지접합"] == ("가능", None)
+    assert st["중증화상 전문치료"] == ("불가능", None) and st["심근경색 재관류중재술"] == ("정보 미제공", None) and st["분만"] == ("정보 미제공", None)
+    other = out["ers"][1]["er"]["serious"]   # 수용 정보가 아예 없는 병원: 27개 모두 '정보 미제공'
+    assert len(other) == 27 and {x["status"] for x in other} == {"정보 미제공"}
     assert out["route"]["duration"] == 120 and out["route"]["path"][0] == [35.84, 128.58]
     assert [x["er"]["name"] for x in out["ers"]] == ["가까운병원", "먼병원"] and out["ers"][1]["route"]["duration"] == 300
 

@@ -139,9 +139,17 @@ function erBox(x, i) {
   // 항목 끝 괄호 부분(예: '(1500g 이상, 30주 이상)')은 한 덩어리: 줄이 넘치면 괄호 부분이 통째로 다음 줄로 (브라우저마다 '(' 뒤에서 끊는 것 방지)
   const item = (x) => { const m = /^(.*?)\s*(\([^()]*\))$/.exec(x); return m ? `${esc(m[1])} <span class="paren">${esc(m[2])}</span>` : esc(x); };
   // 중증질환 수용 정보 (칸 맨 아래): 누르면 같은 박스 안에서 펼쳐져 불가(위)·가능(아래) 항목을 모두 보여 줌 (다시 누르면 접힘)
-  const sv = er.serious, sevList = (t, xs) => `<p class="sub">${t}</p><div class="row">${xs.length ? xs.map((x) => `<span class="chip">${item(x)}</span>`).join("") : `<span class="chip">없음</span>`}</div>`;
-  const sev = sv && (sv["가능"].length || sv["불가"].length)
-    ? `<div class="sevbox"><button type="button" class="chip tog" data-tog aria-expanded="false">중증질환 수용 정보</button><div class="sev" hidden>${sevList("불가", sv["불가"])}${sevList("가능", sv["가능"])}</div></div>` : "";
+  // 중증질환 수용 정보 (칸 맨 아래): 누르면 같은 박스 안에서 펼쳐짐 (다시 누르면 접힘). 27개 항목을 분야별로,
+  //  분야 안에서는 불가능 → 가능 → 정보 미제공 줄 순서. 표시: ✕ 불가능, ○ 가능, – 정보 미제공
+  const ST = [["불가능", "✕"], ["가능", "○"], ["정보 미제공", "–"]];
+  const sv = Array.isArray(er.serious) ? er.serious : [];
+  const groups = [...new Set(sv.map((x) => x.group))];
+  const sevBody = `<p class="sub legend">✕ 불가능 · ○ 가능 · – 정보 미제공</p>` + groups.map((g) => `<p class="sub">${esc(g)}</p>` + ST.map(([st, mk]) => {
+    const xs = sv.filter((x) => x.group === g && x.status === st);
+    return xs.length ? `<div class="row">${xs.map((x) => `<span class="chip">${mk} ${item(x.msg ? `${x.name} (${x.msg})` : x.name)}</span>`).join("")}</div>` : "";
+  }).join("")).join("");
+  const sev = sv.length
+    ? `<div class="sevbox"><button type="button" class="chip tog" data-tog aria-expanded="false">중증질환 수용 정보</button><div class="sev" hidden>${sevBody}</div></div>` : "";
   return `<section class="box info${i === sel ? " sel" : ""}" data-i="${i}"><p class="name">${esc(er.name)}</p><div class="grid">${cells.join("")}${msg}${sev}</div></section>`;
 }
 function showInfo(d, err) {
