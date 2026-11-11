@@ -80,7 +80,7 @@
 #sosPanel .info .sev .nw { white-space: nowrap; }   /* 마지막 낱말 + 표시 아이콘은 한 덩어리 */
 #sosPanel .info .sevbox svg.mk { width: .85em; height: .85em; margin-left: .3em; vertical-align: -.05em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }   /* ○ ✕ – 모두 같은 굵기 */
 /* 범례: 펼치기 버튼 아래 같은 너비 블럭 3개 (배경색, 접혀 있어도 보임). 한 줄로, 칸이 좁으면 sos.js fitLegend 가 범례 글씨만 줄임 */
-#sosPanel .info .lg3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0 8px 8px; }
+#sosPanel .info .lg3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0 8px 8px; font-size: .88em; }   /* 범례 글씨는 다른 글씨보다 조금 작게 */
 #sosPanel .info .chip.tog[aria-expanded="true"] + .lg3 { margin-bottom: 4px; }   /* 펼치면 아래 글자와 4px */
 #sosPanel .info .lg3 .chip { background: var(--bg); padding-inline: 4px; white-space: nowrap; }
 #sosPanel .info .lg3 svg.mk { margin-left: 0; margin-right: .3em; }   /* 범례는 아이콘이 글자 왼쪽 */
