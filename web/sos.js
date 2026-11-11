@@ -93,9 +93,15 @@ function drawMap(p, d) {
   if (path.length) {
     const line = new K.Polyline({ path, map, strokeWeight: 6, strokeColor: "#007aff", strokeOpacity: 1, strokeStyle: "solid" });
     layers.push(line);
-    // 지도가 다 움직인 뒤 선을 한 번 더 그려 잘린 부분이 없게
-    const again = () => { K.event.removeListener(map, "idle", again); if (layers.includes(line)) { line.setMap(null); line.setMap(map); } };
-    K.event.addListener(map, "idle", again);
+    // 카카오 지도는 경로 선 그림판(SVG) 크기를 지도 칸의 '보이는' 크기로 잼. 팝업이 커지거나 줄어드는 중(scale)에 재면
+    //  그림판이 작게 남아 선이 잘리거나 안 보임 → 지도가 다 움직인 뒤, 다음 화면, 0.4초 뒤에 크기를 다시 재고 선을 다시 그림
+    const again = () => {
+      if (!layers.includes(line) || $("sosPanel").style.transform) return;   // 지운 선이거나 팝업이 아직 움직이는 중이면 그냥 둠 (다 커지면 다시 그림)
+      map.relayout(); line.setMap(null); line.setMap(map);
+    };
+    const onIdle = () => { K.event.removeListener(map, "idle", onIdle); again(); };
+    K.event.addListener(map, "idle", onIdle);
+    requestAnimationFrame(again); setTimeout(again, 400);
   }
   layers.push(new K.Marker({ position: from, map, image: pin(K, "현위치"), zIndex: 2 }));
   if (to) layers.push(new K.Marker({ position: to, map, title: er.name, image: pin(K, "도착"), zIndex: 2 }));
