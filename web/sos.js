@@ -182,7 +182,7 @@ function roll(el) {
 function arrange(root) {
   for (const row of root.querySelectorAll(".row")) {
     const chips = [...row.querySelectorAll(".chip")];
-    chips.forEach((c) => { c.style.width = c.style.marginInline = ""; delete c.dataset.fit; });
+    chips.forEach((c) => { c.style.width = c.style.marginInline = ""; delete c.dataset.fit; delete c.dataset.lines; });
     row.replaceChildren(...chips);   // 예전 줄 나눔 풀기
     const cap = row.clientWidth, gap = parseFloat(getComputedStyle(row).columnGap) || 6;
     if (!cap || chips.length < 2) { const l = document.createElement("div"); l.className = "line"; l.append(...chips); row.replaceChildren(l); continue; }
@@ -200,14 +200,16 @@ function arrange(root) {
       }
       if (ok) lines = bins.filter((b) => b.items.length).sort((a, b) => b.sum - a.sum).map((b) => b.items);
     }
-    // 두 줄 칸: 혼자 한 줄에 두고 두 줄로 줄였을 때 너비를 잰 뒤, 좁은 것부터 맨 위에. 두 개가 한 줄에 들어가면 같이
+    // 여러 줄 칸: 혼자 한 줄에 두고 줄였을 때 너비·줄 수를 잰 뒤 맨 위에. 두 줄 → 세 줄 → 네 줄… 순서로,
+    //  같은 줄 수끼리는 좁은 것부터. 같은 줄 수 칸이 한 줄에 같이 들어가면 같이 (그 아래 한 줄 칸들)
     const line = (items) => { const l = document.createElement("div"); l.className = "line"; l.append(...items); return l; };
     const bw = new Map(big.map((c) => { row.append(line([c])); return [c, lineFit(c) || cap]; }));
+    const nl = (c) => +c.dataset.lines || 2;
     const bigLines = [];
-    for (const c of big.sort((a, b) => bw.get(a) - bw.get(b))) {
+    for (const c of big.sort((a, b) => nl(a) - nl(b) || bw.get(a) - bw.get(b))) {
       const last = bigLines[bigLines.length - 1];
-      if (last && last.sum + gap + bw.get(c) <= cap + 0.5) { last.sum += gap + bw.get(c); last.items.push(c); }
-      else bigLines.push({ sum: bw.get(c), items: [c] });
+      if (last && last.n === nl(c) && last.sum + gap + bw.get(c) <= cap + 0.5) { last.sum += gap + bw.get(c); last.items.push(c); }
+      else bigLines.push({ n: nl(c), sum: bw.get(c), items: [c] });
     }
     for (const b of bigLines) for (const c of b.items) {
       c.dataset.fit = "1"; c.style.width = `${bw.get(c)}px`;
@@ -227,6 +229,7 @@ function lineFit(el) {
   for (const x of rects) { const k = Math.round((x.top - top0) / lh), o = rows.get(k); rows.set(k, o ? [Math.min(o[0], x.left), Math.max(o[1], x.right)] : [x.left, x.right]); }
   if (rows.size < 2) return null;
   const pad = cs.boxSizing === "border-box" ? parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) : 0;
+  el.dataset.lines = rows.size;   // 몇 줄인지 (arrange 가 줄 수별로 묶을 때 씀)
   return Math.ceil(Math.max(...[...rows.values()].map(([l, r]) => r - l))) + pad + 1;
 }
 function fitChips(root) {
