@@ -123,7 +123,7 @@ function erBox(x, i) {
   const cells = [
     row(rt && rt.duration != null ? chip(`자동차 ${Math.max(1, Math.round(rt.duration / 60))}분`, "") : "", chip(`${km}km`, ""), nav),
     row(er.grade ? chip(er.grade, "") : "", tel ? `<a class="chip" href="tel:${esc(tel.replace(/[^0-9+]/g, ""))}">${esc(tel)}</a>` : ""),
-    row(chip(bed, ""), upd ? `<span class="chip">${upd[0]} <span class="nb">${upd[1]} 기준</span></span>` : ""),   // 줄이 넘치면 날짜 / 시각 기준 으로 나뉨
+    row(chip(bed, ""), upd ? `<span class="chip upd">${upd[0]} <span class="nb">${upd[1]} 기준</span></span>` : ""),   // 줄이 넘치면 날짜 / 시각 기준 으로 나뉨
   ];
   // 병원이 올린 진료 제한 메시지 (예: '정형외과 전문의 부재로 수지접합 불가'): 블럭 아래 한 줄씩
   const msg = (er.msgs || []).map((m) => `<span class="chip msg">${esc(m)}</span>`).join("");
@@ -143,7 +143,22 @@ function showInfo(d, err) {
   const first = wrap.hidden;
   wrap.innerHTML = list.map(erBox).join("");
   wrap.hidden = false;
+  fitText();
   if (first) roll(wrap);
+}
+// 병원 이름을 뺀 칸 안 글씨 크기: '11월 11일 13:03 기준' 칸이 한 줄에 들어가는 크기로 모두 같이 (최대 14px)
+function fitText() {
+  const wrap = $("sosInfo");
+  wrap.style.fontSize = "";
+  const c = wrap.querySelector(".chip.upd");
+  if (!c) return;
+  const cs = getComputedStyle(c), avail = c.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  c.style.flexWrap = "nowrap"; c.style.whiteSpace = "nowrap";
+  const rg = document.createRange(); rg.selectNodeContents(c);
+  const need = rg.getBoundingClientRect().width;
+  c.style.flexWrap = c.style.whiteSpace = "";
+  const fs = parseFloat(getComputedStyle(wrap).fontSize);
+  if (need > avail - 1) wrap.style.fontSize = `${Math.floor(fs * (avail - 1) / need * 10) / 10}px`;
 }
 // 응급실 정보 칸: 처음 나타날 때 카메라 팝업 단어 칸처럼 아래로 늘어나며 내려옴 (0.5초, 같은 곡선). 지도 칸과의 12px 간격도 같이 벌어짐
 const ROLL = { duration: 500, easing: "cubic-bezier(.3,.7,.2,1)" };
@@ -157,10 +172,13 @@ function fitChips(root) {
   for (const el of root.querySelectorAll(".chip")) {
     el.style.width = el.style.marginInline = "";
     const rg = document.createRange(); rg.selectNodeContents(el);
-    const lines = [...rg.getClientRects()];
-    if (new Set(lines.map((x) => Math.round(x.top))).size < 2) continue;
-    const cs = getComputedStyle(el), pad = cs.boxSizing === "border-box" ? parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) : 0;
-    const w = Math.ceil(Math.max(...lines.map((x) => x.width))) + pad + 1;
+    // 조각(글자·괄호 덩어리)을 줄 높이 기준으로 줄마다 묶음 (글씨 크기에 따라 같은 줄 조각의 위치가 1px 남짓 어긋날 수 있어서)
+    const cs = getComputedStyle(el), lh = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.5;
+    const rects = [...rg.getClientRects()].filter((x) => x.width), top0 = Math.min(...rects.map((x) => x.top)), rows = new Map();
+    for (const x of rects) { const k = Math.round((x.top - top0) / lh), o = rows.get(k); rows.set(k, o ? [Math.min(o[0], x.left), Math.max(o[1], x.right)] : [x.left, x.right]); }
+    if (rows.size < 2) continue;
+    const pad = cs.boxSizing === "border-box" ? parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) : 0;
+    const w = Math.ceil(Math.max(...[...rows.values()].map(([l, r]) => r - l))) + pad + 1;
     el.style.width = `${w}px`;
     el.style.marginInline = `calc((100% - ${w}px) / 2)`;   // 양옆 여백으로 줄을 채워, 두 줄 블럭이 있는 줄에는 그 블럭만
 
@@ -314,4 +332,4 @@ document.addEventListener("click", (e) => {
   if (!open || $("sosPanel").contains(e.target) || $("sosBtn").contains(e.target)) return;
   if (e.target.closest?.("button, a, [role=button]")) closePanel();
 }, true);
-addEventListener("resize", () => { if (open) { window.__sign?.place?.($("sosPanel")); map?.relayout(); $("sosInfo").querySelectorAll(".sev:not([hidden])").forEach(fitChips); } });
+addEventListener("resize", () => { if (open) { window.__sign?.place?.($("sosPanel")); map?.relayout(); fitText(); $("sosInfo").querySelectorAll(".sev:not([hidden])").forEach(fitChips); } });
