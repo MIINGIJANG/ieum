@@ -167,15 +167,16 @@ function draw(frame) {
   }
 }
 
-// 카메라 켜기: 팝업을 열면 바로. 권한을 거절했거나 실패하면 팝업을 닫음 (카메라 없이 팝업만 떠 있지 않게)
+// 카메라 켜기: 팝업을 열면 바로 (권한을 먼저 받으며 켠 카메라가 있으면 그것을 씀). 실패하면 팝업을 닫음 (카메라 없이 팝업만 떠 있지 않게)
 let starting = false;
-async function startCamera() {
-  if (stream || starting) return;
+const VIDEO = { video: { width: 640, height: 480, facingMode: "user" }, audio: false };
+async function startCamera(pre = null) {   // pre: 팝업을 열기 전에 권한을 받으며 이미 켠 카메라
+  if (stream || starting) { if (pre && pre !== stream) pre.getTracks().forEach((t) => t.stop()); return; }
   starting = true;
   clearOverlay();   // 다시 켤 때도 처음처럼 빈 화면에서
   try {
     // 카메라 화면은 받는 즉시 보여 줌 (인식 모델 준비를 기다리지 않음). 손 인식은 모델이 준비되면 시작
-    const s = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: "user" }, audio: false });
+    const s = pre || await navigator.mediaDevices.getUserMedia(VIDEO);
     if (!panelOpen) { s.getTracks().forEach((t) => t.stop()); return; }   // 켜지는 동안 팝업을 닫았으면 끔
     stream = s;
     const v = $("video");
@@ -466,7 +467,7 @@ function springScroll(to) {
 }
 for (const ev of ["wheel", "touchstart", "keydown"]) addEventListener(ev, () => { cancelAnimationFrame(scrollAnim); scrollAnim = 0; }, { passive: true });   // 사용자가 직접 스크롤하면 멈춤
 let scrollBack = null;   // 팝업을 열 때 화면을 입력창이 위로 오게 내렸다면, 닫을 때 원래 자리로
-function openPanel() {
+function openPanel(pre = null) {
   // 팝업이 다 닫힌 뒤 다시 열면 처음 상태로 (닫히는 도중에 다시 누르면 하던 그대로)
   const fresh = $("panel").hidden;
   if (fresh) resetWords();
@@ -483,7 +484,7 @@ function openPanel() {
     requestAnimationFrame(() => { if (panelOpen) springScroll(scrollY + $("form").getBoundingClientRect().top - 16); });
   }
   if (fresh) measureNotice();
-  startCamera();
+  startCamera(pre);
 }
 function closePanel() {
   if (stream) stopCamera();
@@ -502,9 +503,21 @@ async function cameraUsable() {
   } catch {}
   return true;
 }
+// 이미 허용한 기기면 바로 팝업. 아직이면 먼저 카메라 권한을 묻고, '허용'을 누른 뒤에 팝업을 엶 (거절하면 열지 않음)
+let asking = false;
 $("camBtn").onclick = async () => {
   if (panelOpen) return closePanel();
-  if (await cameraUsable()) openPanel();
+  if (asking || !(await cameraUsable())) return;
+  let st = null;
+  try { st = (await navigator.permissions?.query({ name: "camera" }))?.state; } catch {}
+  if (st === "granted") return openPanel();
+  asking = true;
+  try {
+    const s = await navigator.mediaDevices.getUserMedia(VIDEO);   // 여기서 브라우저가 허용 여부를 물음
+    if (panelOpen) { s.getTracks().forEach((t) => t.stop()); return; }
+    openPanel(s);
+  } catch (e) { console.error(e); }                              // 거절·실패: 팝업을 열지 않음
+  finally { asking = false; }
 };
 // 팝업이 떠 있을 때 팝업 밖을 누르면 그 순간 팝업이 닫히기 시작함.
 //  누른 곳이 버튼(예시 질문 등)이면 그 버튼도 그 순간 그대로 눌림 (예시 질문이 바로 입력창에 들어감), 빈 배경이면 닫기만
