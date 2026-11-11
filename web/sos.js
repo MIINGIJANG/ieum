@@ -178,12 +178,28 @@ function showInfo(d, err) {
   sortMsgs(wrap);
   if (first) roll(wrap);
 }
-// 진료 제한 메시지: 한 줄로 늘어놓았을 때 가로 길이가 짧은 것부터 위로 (병원이 올린 순서 대신)
+// 칸 안 글자의 가장 긴 줄 가로 길이 (한 줄이면 그 줄, 여러 줄이면 그중 가장 긴 줄)
+function longestLine(el) {
+  const rows = new Map(), tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  const lh = parseFloat(getComputedStyle(el).lineHeight) || 20;
+  let top0 = null;
+  for (let n = tw.nextNode(); n; n = tw.nextNode()) {
+    const rg = document.createRange(); rg.selectNodeContents(n);
+    for (const x of rg.getClientRects()) {
+      if (!x.width) continue;
+      top0 ??= x.top;
+      const k = Math.round((x.top - top0) / lh), o = rows.get(k);
+      rows.set(k, o ? [Math.min(o[0], x.left), Math.max(o[1], x.right)] : [x.left, x.right]);
+    }
+  }
+  return Math.max(0, ...[...rows.values()].map(([l, r]) => r - l));
+}
+// 진료 제한 메시지: 한 줄이든 여러 줄이든 화면에 보이는 가장 긴 줄의 가로 길이가 짧은 칸부터 위로 (병원이 올린 순서 대신)
 function sortMsgs(wrap) {
   for (const box of wrap.querySelectorAll(".info")) {
     const ms = [...box.querySelectorAll(".chip.msg")];
     if (ms.length < 2) continue;
-    const w = new Map(ms.map((m) => { m.style.width = "max-content"; m.style.whiteSpace = "nowrap"; const x = m.getBoundingClientRect().width; m.style.width = m.style.whiteSpace = ""; return [m, x]; }));
+    const w = new Map(ms.map((m) => [m, longestLine(m)]));
     const after = ms[ms.length - 1].nextSibling, parent = ms[0].parentNode;
     for (const m of ms.sort((a, b) => w.get(a) - w.get(b))) parent.insertBefore(m, after);
   }
