@@ -174,7 +174,18 @@ function showInfo(d, err) {
   wrap.innerHTML = list.map(erBox).join("");
   wrap.hidden = false;
   fitText();
+  sortMsgs(wrap);
   if (first) roll(wrap);
+}
+// 진료 제한 메시지: 한 줄로 늘어놓았을 때 가로 길이가 짧은 것부터 위로 (병원이 올린 순서 대신)
+function sortMsgs(wrap) {
+  for (const box of wrap.querySelectorAll(".info")) {
+    const ms = [...box.querySelectorAll(".chip.msg")];
+    if (ms.length < 2) continue;
+    const w = new Map(ms.map((m) => { m.style.width = "max-content"; m.style.whiteSpace = "nowrap"; const x = m.getBoundingClientRect().width; m.style.width = m.style.whiteSpace = ""; return [m, x]; }));
+    const after = ms[ms.length - 1].nextSibling, parent = ms[0].parentNode;
+    for (const m of ms.sort((a, b) => w.get(a) - w.get(b))) parent.insertBefore(m, after);
+  }
 }
 // 병원 이름을 뺀 칸 안 글씨 크기: '11월 11일 13:03 기준' 칸이 한 줄에 들어가는 크기로 모두 같이 (최대 14px)
 function fitText() {
