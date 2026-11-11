@@ -167,3 +167,13 @@ def test_only_designated(monkeypatch):
     sos._CACHE.clear(); sos._GRADES.clear()
     ers = sos.nearest(35.84, 128.58)["ers"]
     assert [x["er"]["name"] for x in ers] == ["경북대학교병원"] and ers[0]["er"]["grade"] == "권역응급의료센터"
+
+
+def test_message_spacing(monkeypatch):
+    """진료 제한 메시지: 쉼표 앞 띄어쓰기·줄바꿈은 정리 (줄이 바뀌어도 쉼표가 줄 맨 앞에 오지 않게)."""
+    xml = """<response><header><resultCode>00</resultCode></header><body><items>
+<item><hpid>H</hpid><symBlkMsg>매주 수요일(18:00~08:00)
+, 심장,  대동맥 관련수술 불가</symBlkMsg></item></items></body></response>"""
+    monkeypatch.setenv("DATA_GO_KR_KEY", "k")
+    monkeypatch.setattr(sos, "_get", lambda url, headers=None: xml.encode())
+    assert sos.messages("H") == ["매주 수요일(18:00~08:00), 심장, 대동맥 관련수술 불가"]
