@@ -178,11 +178,11 @@ function roll(el) {
 }
 // 두 줄 이상으로 넘친 블럭은 박스 너비를 가장 긴 줄에 맞추고, 그 줄에는 그 블럭만 둠 (그냥 두면 줄이 바뀌어도 박스는 한 줄 전체 너비로 남음)
 // 중증질환 항목 줄 정리: 병원이 적은 순서 대신, 줄마다 길이가 최대한 같아 전체가 직사각형에 가깝게 보이도록 다시 배치
-//  가장 적은 줄 수로 넣되, 긴 항목부터 지금 가장 짧은 줄에 넣음 (한 줄에 다 안 들어가는 긴 항목은 혼자 한 줄)
+//  가장 적은 줄 수로 넣되, 긴 항목부터 지금 가장 짧은 줄에 넣음. 한 줄에 다 안 들어가는 두 줄 칸은 늘 맨 위 (좁은 것부터, 두 개가 한 줄에 들어가면 같이)
 function arrange(root) {
   for (const row of root.querySelectorAll(".row")) {
     const chips = [...row.querySelectorAll(".chip")];
-    chips.forEach((c) => { c.style.width = c.style.marginInline = ""; });
+    chips.forEach((c) => { c.style.width = c.style.marginInline = ""; delete c.dataset.fit; });
     row.replaceChildren(...chips);   // 예전 줄 나눔 풀기
     const cap = row.clientWidth, gap = parseFloat(getComputedStyle(row).columnGap) || 6;
     if (!cap || chips.length < 2) { const l = document.createElement("div"); l.className = "line"; l.append(...chips); row.replaceChildren(l); continue; }
@@ -200,23 +200,43 @@ function arrange(root) {
       }
       if (ok) lines = bins.filter((b) => b.items.length).sort((a, b) => b.sum - a.sum).map((b) => b.items);
     }
-    row.replaceChildren(...[...big.map((c) => [c]), ...lines].map((items) => { const l = document.createElement("div"); l.className = "line"; l.append(...items); return l; }));
+    // 두 줄 칸: 혼자 한 줄에 두고 두 줄로 줄였을 때 너비를 잰 뒤, 좁은 것부터 맨 위에. 두 개가 한 줄에 들어가면 같이
+    const line = (items) => { const l = document.createElement("div"); l.className = "line"; l.append(...items); return l; };
+    const bw = new Map(big.map((c) => { row.append(line([c])); return [c, lineFit(c) || cap]; }));
+    const bigLines = [];
+    for (const c of big.sort((a, b) => bw.get(a) - bw.get(b))) {
+      const last = bigLines[bigLines.length - 1];
+      if (last && last.sum + gap + bw.get(c) <= cap + 0.5) { last.sum += gap + bw.get(c); last.items.push(c); }
+      else bigLines.push({ sum: bw.get(c), items: [c] });
+    }
+    for (const b of bigLines) for (const c of b.items) {
+      c.dataset.fit = "1"; c.style.width = `${bw.get(c)}px`;
+      c.style.marginInline = b.items.length === 1 ? `calc((100% - ${bw.get(c)}px) / 2)` : "";   // 혼자면 양옆 여백으로 줄을 채움
+    }
+    row.replaceChildren(...[...bigLines.map((b) => b.items), ...lines].map(line));
   }
+}
+// 두 줄 이상으로 넘친 칸의 너비를 가장 긴 줄에 맞춘 값 (한 줄이면 null). 그냥 두면 줄이 바뀌어도 박스는 한 줄 전체 너비로 남음
+function lineFit(el) {
+  const rg = document.createRange(); rg.selectNodeContents(el);
+  // 조각(글자·괄호 덩어리)을 줄 높이 기준으로 줄마다 묶음 (글씨 크기에 따라 같은 줄 조각의 위치가 1px 남짓 어긋날 수 있어서)
+  const cs = getComputedStyle(el), lh = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.5;
+  const rects = [...rg.getClientRects()].filter((x) => x.width);
+  if (!rects.length) return null;
+  const top0 = Math.min(...rects.map((x) => x.top)), rows = new Map();
+  for (const x of rects) { const k = Math.round((x.top - top0) / lh), o = rows.get(k); rows.set(k, o ? [Math.min(o[0], x.left), Math.max(o[1], x.right)] : [x.left, x.right]); }
+  if (rows.size < 2) return null;
+  const pad = cs.boxSizing === "border-box" ? parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) : 0;
+  return Math.ceil(Math.max(...[...rows.values()].map(([l, r]) => r - l))) + pad + 1;
 }
 function fitChips(root) {
   for (const el of root.querySelectorAll(".chip")) {
+    if (el.dataset.fit === "1") continue;   // arrange 가 이미 맞춘 두 줄 칸
     el.style.width = el.style.marginInline = "";
-    const rg = document.createRange(); rg.selectNodeContents(el);
-    // 조각(글자·괄호 덩어리)을 줄 높이 기준으로 줄마다 묶음 (글씨 크기에 따라 같은 줄 조각의 위치가 1px 남짓 어긋날 수 있어서)
-    const cs = getComputedStyle(el), lh = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.5;
-    const rects = [...rg.getClientRects()].filter((x) => x.width), top0 = Math.min(...rects.map((x) => x.top)), rows = new Map();
-    for (const x of rects) { const k = Math.round((x.top - top0) / lh), o = rows.get(k); rows.set(k, o ? [Math.min(o[0], x.left), Math.max(o[1], x.right)] : [x.left, x.right]); }
-    if (rows.size < 2) continue;
-    const pad = cs.boxSizing === "border-box" ? parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) : 0;
-    const w = Math.ceil(Math.max(...[...rows.values()].map(([l, r]) => r - l))) + pad + 1;
+    const w = lineFit(el);
+    if (!w) continue;
     el.style.width = `${w}px`;
     el.style.marginInline = `calc((100% - ${w}px) / 2)`;   // 양옆 여백으로 줄을 채워, 두 줄 블럭이 있는 줄에는 그 블럭만
-
   }
 }
 // 응급실 칸을 누르면 위 지도의 경로가 그 병원으로 (1순위 ↔ 2순위)
