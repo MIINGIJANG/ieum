@@ -99,3 +99,6 @@
 @media (prefers-color-scheme: dark) {
   #sosPanel .map img:not([src^="data:"]) { filter: invert(1) hue-rotate(180deg) brightness(.9) contrast(.9); }
 }
+
+/* SOS 안내 한 줄 (위치를 못 찾았을 때 등): 응급실 정보 칸 자리에, 칸과 같은 모양 */
+#sosPanel .sosmsg { margin: 0; padding: 12px 16px; background: var(--bg); border-radius: 12px; text-align: center; text-wrap: balance; word-break: keep-all; }
