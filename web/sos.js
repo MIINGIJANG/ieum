@@ -20,10 +20,7 @@ function loadKakao(key) {
   });
 }
 // 위치: 빠른 위치(와이파이·기지국)로 먼저. 정밀 GPS 는 몇~수십 초 걸려서 쓰지 않음 (응급실 찾기에는 충분)
-// 시험용: 주소에 ?lat=37.4979&lng=127.0276 처럼 붙이면 실제 위치 대신 그 자리로 (위치 권한도 묻지 않음). 없으면 실제 위치
-const TEST_POS = (() => { const q = new URLSearchParams(location.search), la = parseFloat(q.get("lat")), lo = parseFloat(q.get("lng")); return isFinite(la) && isFinite(lo) ? { lat: la, lng: lo } : null; })();
 function getPos(timeout = 8000, precise = false, fresh = false) {
-  if (TEST_POS) { pos = TEST_POS; posAt = Date.now(); return Promise.resolve(pos); }
   return new Promise((res, rej) => {
     if (!navigator.geolocation) return rej(new Error("no geolocation"));
     navigator.geolocation.getCurrentPosition((p) => {
@@ -45,7 +42,7 @@ async function fetchNearest(p, fresh = false) {   // fresh: 저장해 둔 결과
     cfg = await (await fetch(`${API}sos/config`)).json();
     if (cfg.kakao_js) { kakaoReady = loadKakao(cfg.kakao_js); await kakaoReady.catch(() => { kakaoReady = null; }); }
     // 위치를 이미 허락해 둔 기기면 위치와 가까운 응급실까지 미리 (처음이면 권한은 버튼을 누를 때 물음)
-    const st = TEST_POS ? { state: "granted" } : await navigator.permissions?.query({ name: "geolocation" }).catch(() => null);
+    const st = await navigator.permissions?.query({ name: "geolocation" }).catch(() => null);
     if (st && st.state === "granted") await getPos(6000).then(fetchNearest).catch(() => {});
   } catch { /* 준비 실패: 버튼을 누를 때 다시 */ }
   dispatchEvent(new Event("sos-ready"));
@@ -481,7 +478,7 @@ $("sosBtn").onclick = async () => {
   const my = ++gen;
   // 다 닫힌 뒤 새로 열면 처음부터: 저장해 둔 위치를 쓰지 않고 지금 위치를 새로 찾음
   // 위치 권한을 묻고, 허락하는 순간 팝업을 엶 (위치가 나오기를 기다리지 않음). 거절하면 열지 않음
-  const st = TEST_POS ? { state: "granted" } : await navigator.permissions?.query({ name: "geolocation" }).catch(() => null);
+  const st = await navigator.permissions?.query({ name: "geolocation" }).catch(() => null);
   if (my !== gen) return;
   if (st && st.state === "granted") openPanel(null);
   else if (st) st.onchange = () => { if (st.state === "granted" && !open && my === gen && shownGen !== my) openPanel(null); st.onchange = null; };
