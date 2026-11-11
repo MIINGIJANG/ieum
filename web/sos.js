@@ -157,10 +157,10 @@ function erBox(x, i) {
   const ST = ["불가능", "가능", "정보 미제공"];   // 분야 안 줄 순서
   const sv = Array.isArray(er.serious) ? er.serious : [];
   const groups = [...new Set(sv.map((x) => x.group))];
-  const sevBody = `<p class="sub legend">불가능 ${mk("불가능")} · 가능 ${mk("가능")} · 정보 미제공 ${mk("정보 미제공")}</p>` + groups.map((g) => `<p class="sub">${esc(g)}</p>` + ST.map((st) => {
+  const sevBody = `<p class="sub legend">불가능 ${mk("불가능")} · 가능 ${mk("가능")} · 정보 미제공 ${mk("정보 미제공")}</p>` + groups.map((g) => `<div class="grp"><p class="sub">${esc(g)}</p>` + ST.map((st) => {   // 분야마다 박스로 감쌈
     const xs = sv.filter((x) => x.group === g && x.status === st);
     return xs.length ? `<div class="row">${xs.map((x) => `<span class="chip">${item(x.msg ? `${x.name} (${x.msg})` : x.name, mk(st))}</span>`).join("")}</div>` : "";
-  }).join("")).join("");
+  }).join("") + "</div>").join("");
   const sev = sv.length
     ? `<div class="sevbox"><button type="button" class="chip tog" data-tog aria-expanded="false">중증질환 수용 정보</button><div class="sev" hidden>${sevBody}</div></div>` : "";
   return `<section class="box info${i === sel ? " sel" : ""}" data-i="${i}"><p class="name">${esc(er.name)}</p><div class="grid">${cells.join("")}${msg}${sev}</div></section>`;

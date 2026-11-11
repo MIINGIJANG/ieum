@@ -68,8 +68,9 @@
 #sosPanel .info .chip.tog::after { content: " ▾"; }
 #sosPanel .info .chip.tog[aria-expanded="true"]::after { content: " ▴"; }
 #sosPanel .info .sev { display: grid; gap: 6px; justify-items: center; padding: 2px 10px 10px; }
-#sosPanel .info .sev .chip { background: var(--bg); text-wrap: balance; word-break: keep-all; }   /* 박스 안 항목: 페이지 배경색으로 구분. 줄이 넘치면 진료 제한 메시지처럼 줄마다 고르게, 낱말 중간에서 끊지 않음 */
-#sosPanel .info .sev .chip:hover { background: var(--hover); }
+#sosPanel .info .sev .grp { display: grid; gap: 6px; justify-items: center; width: 100%; background: var(--bg); border-radius: 8px; padding: 8px; }   /* 분야 박스: 배경색 */
+#sosPanel .info .sev .chip { background: var(--box); text-wrap: balance; word-break: keep-all; }   /* 분야 박스 안 항목: 본 화면 블럭색. 줄이 넘치면 진료 제한 메시지처럼 줄마다 고르게, 낱말 중간에서 끊지 않음 */
+#sosPanel .info .sev .chip:hover { background: var(--hover); }   /* 마우스 올림 색 */
 #sosPanel .info .sev .paren { display: inline-block; }   /* 괄호 부분은 한 덩어리 (안에서는 끊지 않고 통째로 다음 줄) */
 #sosPanel .info .sev .nw { white-space: nowrap; }   /* 마지막 낱말 + 표시 아이콘은 한 덩어리 */
 #sosPanel .info .sev svg.mk { width: .85em; height: .85em; margin-left: .3em; vertical-align: -.05em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }   /* ○ ✕ – 모두 같은 굵기 */
