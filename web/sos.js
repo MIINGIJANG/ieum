@@ -157,7 +157,7 @@ function erBox(x, i) {
   const ST = ["불가능", "가능", "정보 미제공"];   // 분야 안 줄 순서
   const sv = Array.isArray(er.serious) ? er.serious : [];
   const groups = [...new Set(sv.map((x) => x.group))];
-  const sevBody = `<p class="sub legend">가능 ${mk("가능")} · 불가능 ${mk("불가능")} · 정보 미제공 ${mk("정보 미제공")}</p>` + groups.map((g) => `<p class="sub">${esc(g)}</p>` + ST.map((st) => {
+  const sevBody = `<p class="sub legend">불가능 ${mk("불가능")} · 가능 ${mk("가능")} · 정보 미제공 ${mk("정보 미제공")}</p>` + groups.map((g) => `<p class="sub">${esc(g)}</p>` + ST.map((st) => {
     const xs = sv.filter((x) => x.group === g && x.status === st);
     return xs.length ? `<div class="row">${xs.map((x) => `<span class="chip">${item(x.msg ? `${x.name} (${x.msg})` : x.name, mk(st))}</span>`).join("")}</div>` : "";
   }).join("")).join("");
