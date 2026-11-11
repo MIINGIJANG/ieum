@@ -333,33 +333,51 @@ function fitChips(root) {
     el.style.marginInline = `calc((100% - ${w}px) / 2)`;   // 양옆 여백으로 줄을 채워, 두 줄 블럭이 있는 줄에는 그 블럭만
   }
 }
+// 진료과 별 정보 펼치기·접기. 응급실 정보 칸이 처음 나올 때와 같은 효과: 펼칠 때 아래로 늘어나고, 접을 때 위로 줄어든 뒤 숨김
+//  quiet: 다른 병원을 고르면서 접을 때는 화면을 따로 움직이지 않음 (병원 칸 이동·스크롤과 겹치지 않게)
+function toggleSev(t, quiet = false) {
+  const box = t.parentElement.querySelector(".sev"), open1 = box.hidden || box.dataset.closing === "1";
+  t.setAttribute("aria-expanded", String(open1));
+  box.getAnimations().forEach((a) => a.cancel());
+  box.hidden = false; box.dataset.closing = "";
+  arrange(box); fitChips(box);
+  const cs = getComputedStyle(box), h = box.getBoundingClientRect().height;
+  if (open1 && !quiet) scrollInto(t.getBoundingClientRect().top - 16);   // 펼치면 제목(진료과 별 진료 가능 정보)이 화면 맨 위(16px)에 오도록
+  const full = { height: `${h}px`, paddingTop: cs.paddingTop, paddingBottom: cs.paddingBottom }, zero = { height: "0px", paddingTop: "0px", paddingBottom: "0px" };
+  box.style.overflow = "hidden";
+  if (!open1) { box.dataset.closing = "1"; if (!quiet) shrinkPage(h); }
+  box.animate(open1 ? [zero, full] : [full, zero], ROLL).onfinish = () => {
+    box.style.overflow = "";
+    if (!open1) { box.hidden = true; box.dataset.closing = ""; document.documentElement.style.minHeight = baseMin; }
+  };
+}
+// 병원 칸 자리 바꾸기: 카메라 팝업 낱말 블럭처럼 예전 자리에서 새 자리로 미끄러짐 (FLIP, 0.45초 같은 곡선)
+const MOVE = { duration: 450, easing: "cubic-bezier(.3,.7,.2,1)" };
+function moveFirst(b) {
+  const wrap = $("sosInfo"), boxes = [...wrap.querySelectorAll(".info[data-i]")];
+  if (boxes[0] === b) return;
+  const before = new Map(boxes.map((x) => [x, x.getBoundingClientRect().top]));
+  wrap.prepend(b);
+  for (const x of boxes) {
+    const dy = before.get(x) - x.getBoundingClientRect().top;
+    if (Math.abs(dy) >= 1) x.animate([{ transform: `translateY(${dy}px)` }, { transform: "none" }], MOVE);
+  }
+}
 // 응급실 칸을 누르면 위 지도의 경로가 그 병원으로 (1순위 ↔ 2순위)
 $("sosInfo").addEventListener("click", (e) => {
   const t = e.target.closest?.("[data-tog]");
-  if (t) {                                       // 중증질환 수용 정보 펼치기·접기 (지도 경로는 바꾸지 않음)
-    // 응급실 정보 칸이 처음 나올 때와 같은 효과: 펼칠 때 아래로 늘어나고, 접을 때 위로 줄어든 뒤 숨김
-    const box = t.parentElement.querySelector(".sev"), open1 = box.hidden || box.dataset.closing === "1";
-    t.setAttribute("aria-expanded", String(open1));
-    box.getAnimations().forEach((a) => a.cancel());
-    box.hidden = false; box.dataset.closing = "";
-    arrange(box); fitChips(box);
-    const cs = getComputedStyle(box), h = box.getBoundingClientRect().height;
-    if (open1) scrollInto(t.getBoundingClientRect().top - 16);   // 펼치면 제목(진료과 별 진료 가능 정보)이 화면 맨 위(16px)에 오도록
-    const full = { height: `${h}px`, paddingTop: cs.paddingTop, paddingBottom: cs.paddingBottom }, zero = { height: "0px", paddingTop: "0px", paddingBottom: "0px" };
-    box.style.overflow = "hidden";
-    if (!open1) { box.dataset.closing = "1"; shrinkPage(h); }
-    box.animate(open1 ? [zero, full] : [full, zero], ROLL).onfinish = () => {
-      box.style.overflow = "";
-      if (!open1) { box.hidden = true; box.dataset.closing = ""; document.documentElement.style.minHeight = baseMin; }
-    };
-    return;
-  }
+  if (t) { toggleSev(t); return; }               // 진료과 별 정보 펼치기·접기 (지도 경로는 바꾸지 않음)
   const b = e.target.closest?.(".info[data-i]");
   if (!b || !shown || !lastPos) return;
   const i = +b.dataset.i, list = shown.ers || [];
   if (!list[i] || i === sel) return;
   sel = i;
-  for (const x of $("sosInfo").querySelectorAll(".info[data-i]")) x.classList.toggle("sel", +x.dataset.i === sel);   // 도착 병원 칸 빨강
+  for (const x of $("sosInfo").querySelectorAll(".info[data-i]")) {
+    x.classList.toggle("sel", +x.dataset.i === sel);   // 도착 병원 칸 빨강
+    const open = x !== b && x.querySelector("[data-tog][aria-expanded='true']");
+    if (open) toggleSev(open, true);                    // 다른 병원 칸에 펼쳐 둔 진료과 별 정보는 접음
+  }
+  moveFirst(b);                                          // 고른 병원 칸을 지도 바로 아래(맨 위)로
   drawMap(lastPos, list[i]);
   // 바뀐 경로를 바로 볼 수 있게 언제나 팝업을 열 때 자리(입력창이 화면 위쪽 16px)로
   scrollInto($("form").getBoundingClientRect().top - 16);
