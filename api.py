@@ -9,6 +9,7 @@ uvicorn api:app --port 8000
 명세: docs/api.md
 """
 import os
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -146,6 +147,9 @@ def demo_sentences():
 _EXAMPLES = None
 
 
+_STARTED = time.time()
+
+
 @app.get("/llm_check")
 def llm_check():
     """Claude(LLM 답변 모드) 연결 확인: 브라우저로 이 주소를 열면 됨. 질문 1번만큼 비용(약 3원)."""
@@ -154,7 +158,11 @@ def llm_check():
         return {"연결": "안 됨", "이유": "ANTHROPIC_API_KEY 가 설정되지 않음 (Space Settings → Variables and secrets)"}
     r = pipe.ask("정화통은 언제 교체해요?")
     ok = r.get("answer_mode") == "llm"
-    return {"연결": "됨" if ok else "안 됨", "답변 방식": r.get("answer_mode"),
+    raw = os.environ["ANTHROPIC_API_KEY"]
+    # 설정 확인용 (글자는 하나도 내보내지 않음): 길이, 모양이 맞는지, 공백·따옴표가 섞였는지, 서버가 켜진 지 몇 분인지
+    info = {"길이": len(raw.strip()), "sk-ant- 로 시작": raw.strip().strip("\"'").startswith("sk-ant-"),
+            "공백·따옴표 섞임": raw != raw.strip().strip("\"'").strip(), "서버 켜진 지(분)": round((time.time() - _STARTED) / 60)}
+    return {"연결": "됨" if ok else "안 됨", "답변 방식": r.get("answer_mode"), "설정": info,
             "Claude 호출 결과": LLM_STATUS["last"], "답변": r.get("answer_text"),
             "Claude 원문": LLM_STATUS.get("raw"), "보낸 문서 쪽": LLM_STATUS.get("pages")}
 
