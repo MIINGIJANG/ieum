@@ -476,6 +476,7 @@ $("form").onsubmit = (e) => { e.preventDefault(); if (!sosOpen()) run(); };   //
 // 듣는 동안 마이크는 둥근 검은 원에 흰 마이크, 왼쪽에 소리 파형이 오른쪽에서 왼쪽으로 흐름. 브라우저가 음성 인식을 못 하면 마이크 숨김
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let rec = null, listening = false;
+let micOn = false;   // 마이크가 실제로 켜졌는지 (권한 창에서 허용해야 켜짐)
 const PH = $("q").placeholder;
 // 안내 문구가 입력창에 다 들어가지 않으면(휴대폰) 들어갈 만큼만 글자를 줄임. 넓은 화면은 그대로
 function fitPlaceholder() {
@@ -492,9 +493,10 @@ document.fonts?.ready.then(fitPlaceholder);
 fitPlaceholder();
 $("mic").hidden = !SR;
 function updateGo() {
-  $("form").classList.toggle("listening", listening);
-  $("mic").setAttribute("aria-label", listening ? "듣기 멈추기" : "음성으로 질문하기");
-  $("mic").setAttribute("aria-pressed", String(listening));
+  const on = listening && micOn;                     // 마이크가 실제로 켜진 뒤에만 듣는 중 표시 (권한 창이 떠 있는 동안은 그대로)
+  $("form").classList.toggle("listening", on);
+  $("mic").setAttribute("aria-label", on ? "듣기 멈추기" : "음성으로 질문하기");
+  $("mic").setAttribute("aria-pressed", String(on));
   fitPlaceholder();   // 듣는 동안은 파형 자리만큼 입력창 안쪽이 좁아짐
 }
 // 파형: 마이크 소리 크기(PC) 또는 말소리 감지(휴대폰: 음성 인식과 마이크를 같이 열면 인식이 끊기는 기기가 있음)
@@ -561,9 +563,8 @@ const wave = (() => {
 function endListening(r = rec) {
   if (r) { r.onresult = r.onend = r.onerror = r.onaudiostart = r.onspeechstart = r.onspeechend = null; try { r.abort(); } catch { /* 이미 끝남 */ } }
   if (r === rec) rec = null;
-  listening = false; wave.stop(); updateGo();
+  listening = false; micOn = false; wave.stop(); updateGo();
 }
-let micOn = false;   // 마이크가 실제로 켜졌는지 (권한 창에서 허용해야 켜짐)
 function listen() {
   // 듣는 중이면 멈춤. 단, 아직 마이크가 켜지기 전(권한 창이 떠 있다가 Esc 등으로 그냥 닫힌 경우)이면 앞의 요청을 지우고 새로 물음
   if (listening && micOn) { endListening(); return; }
@@ -576,12 +577,12 @@ function listen() {
     $("q").value = [...e.results].map((r) => r[0].transcript).join("").trim();
     if (e.results.length && e.results[e.results.length - 1].isFinal) endListening(me);   // 확정되면 바로 끝 (조용한 시간 안 기다림)
   };
-  rec.onaudiostart = () => { micOn = true; wave.openMic(); };
+  rec.onaudiostart = () => { micOn = true; updateGo(); wave.openMic(); };
   rec.onspeechstart = () => wave.speak(true);
   rec.onspeechend = () => wave.speak(false);
   rec.onerror = (e) => {
-    const msg = e.error === "not-allowed" || e.error === "service-not-allowed" ? "마이크 사용을 허용해 주세요"
-      : e.error === "no-speech" ? "말씀이 들리지 않았어요. 다시 눌러 주세요" : "";
+    if (e.error === "not-allowed" || e.error === "service-not-allowed") { endListening(me); return; }   // 거절: 안내 없이 바로 처음 상태로 (다시 누르면 다시 물음)
+    const msg = e.error === "no-speech" ? "말씀이 들리지 않았어요. 다시 눌러 주세요" : "";
     if (!msg) return;                                // 그 밖의 오류(중간에 멈춤 등)는 안내 없이 원래 문구 그대로
     $("q").placeholder = msg; fitPlaceholder();
     setTimeout(() => { $("q").placeholder = PH; fitPlaceholder(); }, 3000);
