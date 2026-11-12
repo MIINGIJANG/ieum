@@ -94,9 +94,12 @@
 #sosPanel .info[data-i]:hover { background: var(--strong); }
 #sosPanel .info.sel, #sosPanel .info.sel:hover { background: #ff3b30; }
 #sosPanel .info[data-i]:hover .name, #sosPanel .info.sel .name { color: #ffffff; }
-/* 다크 모드 지도: 카카오 지도는 어두운 지도를 따로 주지 않으므로 지도 바탕 그림(타일)만 밝기를 뒤집어 어둡게.
-   색은 hue-rotate 로 원래 색 쪽으로 되돌림. 빨간 핀(data: 그림)과 경로 선(SVG)은 그대로 */
+/* 다크 모드 지도: 카카오 지도는 어두운 지도를 따로 주지 않으므로 지도 칸 전체(바탕 그림·축척·로고·가장자리)를 밝기만 뒤집어 어둡게
+   (invert + hue-rotate 180°: 밝기는 뒤집고 색은 원래 쪽으로. 두 번 하면 원래대로)
+   - 현위치·도착 표시(data: 그림)와 경로 선(SVG)은 한 번 더 뒤집어 원래 색 그대로 (파랑·빨강)
+   - 지도 칸 바탕은 뒤집힌 뒤 화면 배경색(#242526)이 되도록 그 반대색으로 */
 @media (prefers-color-scheme: dark) {
-  #sosPanel .map img:not([src^="data:"]) { filter: invert(1) hue-rotate(180deg) brightness(.9) contrast(.9); }
+  #sosPanel .map { filter: invert(1) hue-rotate(180deg); background: #dbdad9; }
+  #sosPanel .map img[src^="data:"], #sosPanel .map svg { filter: invert(1) hue-rotate(180deg); }
 }
 
