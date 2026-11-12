@@ -586,6 +586,9 @@ function listen() {
 $("mic").onclick = listen;
 // 카메라 수어 팝업이 뜨기 시작하면 듣기를 그 순간 끔. (팝업이 떠 있을 때 마이크를 누르면 팝업 닫기와 듣기가 같은 클릭에서 같이 시작: sign/app.js)
 addEventListener("sign-open", () => { if (listening) endListening(); });
+// 듣는 중에 카메라·SOS 버튼을 누르면 그 순간 듣기를 끄고 지금까지 들은 글자는 버림 (입력창 비움). 그다음 팝업이 열림
+for (const id of ["camBtn", "sosBtn"])
+  $(id).addEventListener("click", () => { if (listening) { endListening(); $("q").value = ""; updateGo(); } }, true);
 $("go").onclick = () => { if (listening) endListening(); run(); };
 
 async function run() {
