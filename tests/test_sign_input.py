@@ -21,3 +21,13 @@ def test_sign_input_files():
     assert set(d["labels"]) <= set(meta["labels"]) and len(d["labels"]) > 100
     assert {"as": "안전모", "words": ["머리", "보호"]} in d["combos"] and d["to_doc"].get("입다") == "착용"
     assert len(d["questions"]) >= 10
+    assert (SIGN / "models/model.onnx").stat().st_size < 16_000_000     # 가중치를 16비트로 저장한 모델 (scripts/model/shrink_sign_model.py)
+    assert "mirror: true" in app and "class Handedness" in app           # 왼손잡이 대응
+
+
+def test_service_worker_covers_boot_files():
+    """오프라인 저장(web/sw.js)이 SOS 는 저장하지 않고, 답·동작·파일 목록을 다루는지."""
+    sw = (ROOT / "web/sw.js").read_text(encoding="utf-8")
+    assert '"/sos/"' in sw and "offline/manifest" in sw and "/motions" in sw and "/query" in sw
+    html = (ROOT / "web/index.html").read_text(encoding="utf-8")
+    assert 'register("./sw.js")' in html and '"precache"' in html

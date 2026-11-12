@@ -329,8 +329,12 @@ if (!window.avatar) window.dispatchEvent(new Event("avatar-failed"));
 <script>
 const API = location.protocol.startsWith("http") ? "" : "http://localhost:8000";
 // 오프라인 모드: 받은 화면·답·동작을 저장해 두고 인터넷이 끊기면 그것으로 (web/sw.js, 화면 변화 없음)
-if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
-  addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
+//  바로 등록해서 두 번째 방문부터는 저장해 둔 파일로 첫 로딩이 빨라지고, 첫 로딩이 끝나면 나머지 파일도 뒤에서 모두 받아 둠
+const offlineReady = "serviceWorker" in navigator && location.protocol.startsWith("http")
+  ? navigator.serviceWorker.register("./sw.js").then(() => navigator.serviceWorker.ready).catch(() => null) : Promise.resolve(null);
+function offlinePrecache() {
+  offlineReady.then((reg) => reg && reg.active && reg.active.postMessage({ type: "precache" }));
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});   // 저장해 둔 것이 저절로 지워지지 않게 (물어보는 창 없음)
 }
 
 // ---------- 첫 로딩: 처음 쓸 때 생기는 지연을 여기서 모두 미리 처리 ----------
@@ -372,7 +376,7 @@ const cameraReady = new Promise((res) => {
   addEventListener("sign-ready", res, { once: true });
   addEventListener("sign-failed", res, { once: true });
 });
-// SOS: 카카오 지도 불러오기, 위치를 이미 허락한 기기면 위치와 가까운 응급실까지 미리 (sos.js 가 끝나면 알림)
+// SOS: 카카오 지도 불러오기 (sos.js 가 끝나면 알림). 위치·응급실은 SOS 를 누를 때마다 새로 찾음
 const sosReady = new Promise((res) => addEventListener("sos-ready", res, { once: true }));
 // 예시 질문의 답을 미리 받아 둠 → 예시를 골라 보내면 기다림 없이 바로 답 (보이는 예시는 로딩 중에, 새로 보이는 예시는 그때그때)
 const answers = new Map();
@@ -381,7 +385,9 @@ function prefetchAnswer(q) {
     answers.set(q, fetch(`${API}/query`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text: q, prefetch: true }),
-    }).then(r => r.ok ? r.json() : Promise.reject(new Error(r.status))).catch(e => { answers.delete(q); throw e; }));
+    }).then(r => r.ok ? r.json() : Promise.reject(new Error(r.status)))
+      .then(d => { setTimeout(() => fetchWords(wordsOf(d)), 0); return d; })   // 그 답의 단어 동작도 미리 → 단어를 눌러도 기다림 없음 (오프라인 포함)
+      .catch(e => { answers.delete(q); throw e; }));
   return answers.get(q);
 }
 let answersDone;
@@ -393,12 +399,14 @@ const bootAll = Promise.all([
   boot.add("fonts", Promise.race([document.fonts ? document.fonts.ready : null, new Promise(r => setTimeout(r, 3000))])),  // 글꼴은 3초까지만 기다림
   boot.add("answers", Promise.race([answersReady, new Promise(r => setTimeout(r, 20000))])),   // 예시 질문 답은 20초까지만 기다림
   boot.add("camera", cameraReady),
-  boot.add("sos", Promise.race([sosReady, new Promise(r => setTimeout(r, 12000))])),   // 지도 불러오기 + (이미 허락했으면) 위치·가까운 응급실까지 미리, 12초까지만   // 카메라 모델 받기·엔진 시작·첫 계산까지 끝까지 기다림 (처음 한 번 약 60MB, 다음부터는 저장해 둔 것) → 사용 중 기다림 없음
+  boot.add("sos", Promise.race([sosReady, new Promise(r => setTimeout(r, 8000))])),    // 지도 불러오기, 8초까지만
+  // 카메라: 모델 받기·엔진 시작·첫 계산까지 끝까지 기다림 (처음 한 번 약 30MB, 다음부터는 저장해 둔 것) → 사용 중 기다림 없음
 ]);
 // 너무 오래 걸리면(아주 느린 망) 3분 뒤에는 그냥 시작 (남은 준비는 뒤에서 계속)
 Promise.race([bootAll, new Promise(r => setTimeout(r, 180000))]).then(() => {
   // 오프라인 모드: 나머지 예시 질문 답도 뒤에서 천천히 받아 둠 → 인터넷이 끊겨도 예시 질문은 답이 나옴 (web/sw.js 가 저장)
   examplesReady.then(list => list.forEach((e, i) => setTimeout(() => prefetchAnswer(e.question).catch(() => {}), 3000 + 800 * i)));
+  offlinePrecache();
   const el = document.getElementById("boot");
   el.remove();                                 // 바로 사라짐 (페이드 없음)
   toTop();
@@ -847,11 +855,14 @@ function play(m = motion, only = null) {
 // 단어 블록을 누르면 그 단어만 다시 보기 (손 올리기 → 그 단어 → 손 내리기)
 // 답이 나오면 단어마다의 동작을 뒤에서 한 번에 미리 받아 둠 → 단어를 누르면 기다림 없이 바로
 const wordMotion = new Map();                  // 글로스 → Promise(동작 또는 null)
+const wordsOf = (d) => ((d && d.motion && d.motion.segments) || []).filter(s => s.has_motion && s.gloss).map(s => s.gloss);   // 답에 나온(동작이 있는) 단어들
 function fetchWords(gs) {
   const need = [...new Set(gs)].filter(g => !wordMotion.has(g));
   if (!need.length) return;
-  const req = fetch(`${API}/motions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ glosses: need }) })
-    .then(r => r.ok ? r.json() : {}).catch(() => ({}));
+  // 서버는 한 번에 40개까지 → 나눠서 요청
+  const parts = []; for (let i = 0; i < need.length; i += 40) parts.push(need.slice(i, i + 40));
+  const req = Promise.all(parts.map(part => fetch(`${API}/motions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ glosses: part }) })
+    .then(r => r.ok ? r.json() : {}).catch(() => ({})))).then(rs => Object.assign({}, ...rs));
   need.forEach(g => wordMotion.set(g, req.then(all => {
     const m = all[g];
     if (!m || !m.frames || !m.frames.length) { wordMotion.delete(g); return null; }   // 실패하면 다음에 누를 때 다시

@@ -22,15 +22,16 @@ uvicorn api:app --host 0.0.0.0 --port 8000
 | `KSL_FINGERSPELL`, `KSL_FS_LIMIT` | 꺼짐, 3 | 지문자 켜기, 답변마다 최대 개수 |
 | `KSL_MISSING_LOG` | `data/logs/missing_glosses.json` | 동작 없는 단어 기록 파일 |
 | `KSL_HF_TOKEN`(또는 `HF_TOKEN`), `KSL_LOG_REPO`, `KSL_LOG_SYNC_SEC` | —, `MIINGI/ieum-logs`, 600 | 기록을 Hugging Face 데이터셋에 보관 (Space 위에서만) |
-| `KSL_NO_WARMUP` | — | 켜질 때 예시 질문 답 미리 만들기 건너뜀 (개발용) |
+| `KSL_NO_WARMUP` | — | 켜질 때 예시 질문 답 미리 만들기·웹 파일 미리 압축 건너뜀 (개발용) |
+| `DATA_GO_KR_KEY`, `KAKAO_REST_KEY`, `KAKAO_JS_KEY` | — | SOS: 공공데이터포털 키, 카카오 REST 키(경로·장소), 카카오 지도 JavaScript 키 (`docs/sos.md`) |
+| `IEUM_GZ_DIR` | 임시 폴더의 `ieum-gz` | 웹 파일 압축본을 두는 곳 |
 
 ## 엔드포인트
 
 | 메서드 | 경로 | 요청 | 용도 |
 |---|---|---|---|
-| POST | `/query` | `{"text": "...", "prefetch": false, "seen": false}` | **화면이 쓰는 것.** 질문이면 `/ask`, 문장이면 `/translate` 처럼 (`mode` 로 구분). 같은 질문은 캐시로 바로. `prefetch` 는 미리 받기(기록 안 함), `seen` 은 미리 받은 답을 보였다는 기록만 |
+| POST | `/query` | `{"text": "...", "prefetch": false, "seen": false}` | **화면이 쓰는 것.** 모든 입력을 질문으로 보고 답함 (산업안전과 무관하면 `mode: none`). 같은 질문은 캐시로 바로. `prefetch` 는 미리 받기(기록 안 함), `seen` 은 미리 받은 답을 보였다는 기록만 |
 | POST | `/ask` | `{"question": "..."}` | 질문 → 검색 → 답변 → 수어 |
-| POST | `/translate` | `{"text": "..."}` | 문장 직접 번역 |
 | POST | `/motion` | `{"glosses": ["위험1", "조심1"]}` | 글로스 → 이어붙인 동작 |
 | POST | `/motions` | `{"glosses": [...]}` | 글로스마다 따로 만든 동작 (블록을 눌러 다시 볼 때, 최대 40개) |
 | GET | `/examples` | – | 예시 질문 + 주제 키 |
@@ -42,12 +43,18 @@ uvicorn api:app --host 0.0.0.0 --port 8000
 | GET | `/eval?detail=false` | – | 환각 방지 평가를 이 서버로 실행 |
 | GET | `/llm_check` | – | Claude 연결 확인 (질문 1번 비용) |
 | GET | `/health` | – | 서버 상태 |
+| GET | `/sos/config` | – | SOS 준비 상태 (지도용 공개 키, 서버 키가 있는지) |
+| GET | `/sos/nearest?lat=&lng=&fresh=1` | – | 가까운 지정 응급의료기관 + 자동차 경로 + 병상 + 진료 가능 정보 (`docs/sos.md`). 위치는 저장하지 않음 |
+| GET | `/sos/status` | – | SOS 사용 기록·최근 오류 (위치 없음) |
+| GET | `/offline/manifest` | – | 웹 파일 목록과 내용 해시 (오프라인 저장용, `docs/offline.md`) |
+
+웹 파일(`web/`)은 한 번 압축해 둔 것을 보내고 모두 `Cache-Control: no-cache` (바뀌지 않았으면 304) — `ksl/webfiles.py`.
 
 ## `/ask`·`/query` 응답
 
 ```jsonc
 {
-  "mode": "ask",                         // /query: ask(질문) | translate(문장) | none(산업안전과 무관해 답하지 않음)
+  "mode": "ask",                         // /query: ask(질문) | none(산업안전과 무관해 답하지 않음)
   "question": "낙하물은 어떻게 조심해요?",
   "answer_mode": "demo",                 // demo(모범 답안) | llm(Claude) | extractive(문서 문장 그대로)
   "answer_text": "...",                  // 화면 답변 (비어 있으면 답하지 않음)

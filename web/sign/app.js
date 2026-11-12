@@ -1,7 +1,7 @@
 // 카메라 수어 입력 팝업 (본 화면 web/index.html 과 시험 페이지 web/sign/index.html 이 같이 씀). 모양은 popup.css,
 // 공통 부분은 core.js, 관절 점 엔진은 engines.js. 모델은 페이지를 열 때 미리 준비 (본 화면은 첫 로딩 화면에서) → 카메라 버튼을 누르면 바로 켜짐.
 // 영상은 기기 밖으로 나가지 않음 (서버에는 고른 질문 글자만).
-import { DEFAULTS, FrameCleaner, Recognizer, Segmenter, WindowCommitter, base, classify, docWords, fromB64,
+import { DEFAULTS, FrameCleaner, Handedness, Recognizer, Segmenter, WindowCommitter, base, classify, docWords, fromB64,
   frameToFeatures, mentionAt, mentions, rankQuestions, rerank } from "./core.js";
 import { createEngine } from "./engines.js";
 
@@ -16,7 +16,7 @@ const opts = { ...DEFAULTS };
 // ---------------- 상태 ----------------
 const rec = new Recognizer();
 let domain = null, domainIdx = null, engine = null, worker = null, workerBusy = false, stream = null, raf = 0;
-const cleaner = new FrameCleaner(), seg = new Segmenter(), win = new WindowCommitter();
+const cleaner = new FrameCleaner(), seg = new Segmenter(), win = new WindowCommitter(), hand = new Handedness();   // hand: 왼손잡이 판단 (카메라를 켠 동안 기억)
 const items = [];                                       // 알아들은 낱말 [{label, cands, confident, locked, custom}]
 let classifying = false;
 
@@ -33,7 +33,6 @@ fetch(BASE + "custom_words.json").then((r) => (r.ok ? r.json() : null)).catch(()
 const word = (l) => (domain && domain.words[l]) || base(l);
 
 // ---------------- 불러오기 ----------------
-function setLoad() {}   // 카메라 칸에는 안내 문구·불러오기 막대를 두지 않음 (불러오는 동안은 켜기 버튼만 눌리지 않게)
 // 미리 준비: 모델 받기·인식 엔진 시작 (한 번만). 끝나면 'sign-ready' 알림 (본 화면 첫 로딩 화면이 기다림)
 let readyP = null;
 function prepare() {
@@ -42,15 +41,16 @@ function prepare() {
     (e) => { console.error("카메라 수어 입력 준비 실패", e); readyP = null; dispatchEvent(new Event("sign-failed")); throw e; }));
 }
 async function loadModels() {
-  await domainReady;
-  setLoad("수어 단어 인식 모델 불러오는 중…", 5);
-  await rec.load(BASE, (g, t) => t && setLoad("수어 단어 인식 모델 불러오는 중…", 5 + 60 * g / t));
-  if (domain) { const s = new Set(domain.labels); domainIdx = rec.labels.map((l, i) => (s.has(l) ? i : -1)).filter((i) => i >= 0); }
-  await startEngine();
-  setLoad("준비 완료", 100);
+  // 낱말 인식 모델과 관절 점 엔진을 동시에 준비 (서로 기다릴 필요가 없음 → 첫 로딩이 그만큼 짧아짐)
+  await Promise.all([
+    (async () => {
+      await Promise.all([rec.load(BASE), domainReady]);
+      if (domain) { const s = new Set(domain.labels); domainIdx = rec.labels.map((l, i) => (s.has(l) ? i : -1)).filter((i) => i >= 0); }
+    })(),
+    startEngine(),
+  ]);
 }
 async function startEngine() {
-  setLoad(`관절 인식 모델 불러오는 중… (${opts.engine === "light" ? "가벼운 모드" : "Holistic"})`, 70);
   if (opts.worker && typeof Worker !== "undefined" && typeof createImageBitmap !== "undefined") {
     try {
       worker = new Worker(new URL("./landmark-worker.js", import.meta.url), { type: "module" });
@@ -113,12 +113,12 @@ function onFrame(raw, t) {
     if (s) onSegment(s.frames);
   } else if (!classifying) {
     classifying = true;
-    win.push(feat, t, (fs) => classify(rec, fs, opts, domainIdx, protos)).then((r) => r && addItem(r)).finally(() => { classifying = false; });
+    win.push(feat, t, (fs) => classify(rec, fs, opts, domainIdx, protos, hand)).then((r) => r && addItem(r)).finally(() => { classifying = false; });
   }
 }
 
 async function onSegment(feats) {
-  addItem(await classify(rec, feats, opts, domainIdx, protos));
+  addItem(await classify(rec, feats, opts, domainIdx, protos, hand));
 }
 function addItem(r) {
   // 한 낱말을 하는 중에 잠깐 멈추면 여러 조각으로 끊겨 같은 낱말이 여러 번 나옴 → 이미 있는 낱말이면 다시 넣지 않음
@@ -184,7 +184,7 @@ async function startCamera(pre = null) {   // pre: 팝업을 열기 전에 권�
     await v.play();
     await prepare();
     if (stream !== s) return;                                             // 준비하는 동안 꺼졌으면 그대로
-    cleaner.reset(); seg.reset(); win.reset();
+    cleaner.reset(); seg.reset(); win.reset(); hand.reset();
     raf = requestAnimationFrame(loop);
   } catch (e) {
     console.error(e);
