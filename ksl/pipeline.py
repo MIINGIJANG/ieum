@@ -539,8 +539,16 @@ class SafetySignPipeline:
         """준비된 안내 문장으로 답해도 되는지: 유사도 기준 + 핵심어가 질문에 있어야 함."""
         if not demo or score < self.demo_threshold:
             return False
-        kws = self.answers.get(demo["korean"], {}).get("keywords")
-        return not kws or any(k in re.sub(r"\s", "", question) for k in kws)
+        a = self.answers.get(demo["korean"], {})
+        kws = a.get("keywords")
+        if kws and not any(k in re.sub(r"\s", "", question) for k in kws):
+            return False
+        # 준비된 답은 그 문서 쪽의 내용 → 문장이 아주 비슷하지는 않은데(0.6 미만) 검색 상위에도 그 쪽이 없으면
+        #  더 구체적인 다른 질문 (예: '핏테스트는 얼마나 자주', '농약용 보안경을 연마 작업에') → 문서에서 찾아 답함
+        if score >= 0.6 or not a.get("pages"):
+            return True
+        top = self.rag.search(question, self.k)
+        return not top or any(h["page"] in a["pages"] for h in top)
 
     @staticmethod
     def _evidence(hits):
@@ -572,9 +580,16 @@ class SafetySignPipeline:
                 hits2 = self.rag.search(joined, self.k)
                 if self._evidence(hits2) >= self.min_score:
                     hits, top = hits2, self._evidence(hits2)
+            rescue = False
             if top < self.min_score:                       # 근거 약함 → 답하지 않음
-                return self._abstain(question, top)
+                # 단, 산업안전 핵심어가 있는 질문이고 Claude 를 쓸 수 있으면 Claude 에게 맡김: 말이 달라 점수만 낮은 질문
+                #  ('보호구 수리는 누가 해요?' ↔ 문서 '전문가에 의해서만')을 살림. Claude 가 근거를 못 찾으면 그대로 답하지 않음
+                if not (os.environ.get("ANTHROPIC_API_KEY") and self.in_domain(question) and top >= self.min_score * 0.3):
+                    return self._abstain(question, top)
+                rescue = True
             texts, mode = self.rag.answer(question, hits, rows=self._rows)
+            if rescue and mode != "llm":                   # Claude 가 답하지 못함(한도·오류) → 답하지 않음
+                return self._abstain(question, top)
             hint = None
             if mode == "llm" and any("찾을 수 없" in t for t in texts):   # Claude 도 문서에서 근거를 못 찾음 → 답하지 않음
                 return self._abstain(question, top)
@@ -582,6 +597,10 @@ class SafetySignPipeline:
             if not texts:
                 return self._abstain(question, top)
             answer_text = " ".join(texts)
+            if mode == "extractive" and len(texts[0]) <= 90 and re.search(r"(니다|한다|된다|있다|없다)\.?$", texts[0]):
+                # Claude 없이 답할 때: 첫 문장이 짧고 끝맺음이 있는 문장이면(표 줄로 만든 문장 등) 그 문장을 그대로 수어 블록으로
+                #  (핵심 단어만 고르면 '떨어지거나 / 위험 / 작업' 처럼 보호구 이름·끝맺음이 빠짐). 블록이 너무 많으면 from_hint 가 쓰지 않음
+                hint = texts[0]
         # 수어: 답변 문장에 실제로 있는 말만 수어 단어로 (data/sign/sign_words.csv). 번역 모델은 아직 엉뚱한 단어를 만들어서 답변에는 쓰지 않음
         #  짧게 (화면 답변 글은 전체 그대로): 준비된 안내 문장으로 답한 질문은 그 확정 문장의 수어,
         #  아니면 답변의 핵심 (ksl/keypoints.py: 질문과 가장 관련 있는 문장의 핵심 단어, 키가 있으면 Claude 가 고름)
