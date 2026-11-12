@@ -203,7 +203,7 @@ class BM25:
         return out
 
 
-LLM_STATUS = {"last": None}  # 마지막 Claude 호출 결과 (/llm_check 로 확인)
+LLM_STATUS = {"last": None, "ok": 0, "fail": 0, "last_error": None, "last_error_at": None}  # Claude 호출 결과 (/llm_check 로 확인)
 _LLM_CACHE = {}               # (질문, 검색 결과) → Claude 답변
 _CLIENT = None                # Anthropic SDK 클라이언트 (연결 재사용)
 
@@ -332,9 +332,13 @@ class SafetyRAG:
             try:
                 out = self._llm_answer(query, hits, max_sentences)
                 LLM_STATUS["last"] = "정상"
+                LLM_STATUS["ok"] += 1
                 return out, "llm"
             except Exception as e:  # LLM 실패 시 추출식으로 대체
-                LLM_STATUS["last"] = f"오류: {str(e)[:200]}"
+                import time
+                LLM_STATUS["last"] = LLM_STATUS["last_error"] = f"오류: {str(e)[:200]}"
+                LLM_STATUS["fail"] += 1
+                LLM_STATUS["last_error_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
                 print(f"[rag] LLM 실패 → 추출식 사용: {e}")
         return self._extractive(query, hits, max_sentences, rows), "extractive"
 

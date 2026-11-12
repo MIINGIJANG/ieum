@@ -165,6 +165,7 @@ _EXAMPLES = None
 
 
 _STARTED = time.time()
+_LLM_CHECKED = 0.0
 
 
 @app.get("/llm_check")
@@ -173,6 +174,13 @@ def llm_check():
     from ksl.rag import LLM_STATUS
     if not os.environ.get("ANTHROPIC_API_KEY"):
         return {"연결": "안 됨", "이유": "ANTHROPIC_API_KEY 가 설정되지 않음 (Space Settings → Variables and secrets)"}
+    # 저장해 둔 답을 쓰지 않고 실제로 한 번 불러 봄 (저장된 답 때문에 '정상'으로 보이지 않게). 1분에 한 번만 새로 부름
+    from ksl import rag
+    global _LLM_CHECKED
+    if time.time() - _LLM_CHECKED > 60:
+        _LLM_CHECKED = time.time()
+        for k in [k for k in rag._LLM_CACHE if k[0] == "정화통은 언제 교체해요?"]:
+            rag._LLM_CACHE.pop(k, None)
     r = pipe.ask("정화통은 언제 교체해요?")
     ok = r.get("answer_mode") == "llm"
     raw = os.environ["ANTHROPIC_API_KEY"]
@@ -180,7 +188,8 @@ def llm_check():
     info = {"길이": len(raw.strip()), "sk-ant- 로 시작": raw.strip().strip("\"'").startswith("sk-ant-"),
             "공백·따옴표 섞임": raw != raw.strip().strip("\"'").strip(), "서버 켜진 지(분)": round((time.time() - _STARTED) / 60)}
     return {"연결": "됨" if ok else "안 됨", "답변 방식": r.get("answer_mode"), "설정": info,
-            "Claude 호출 결과": LLM_STATUS["last"], "답변": r.get("answer_text"),
+            "Claude 호출 결과": LLM_STATUS["last"], "성공·실패 횟수(서버 켜진 뒤)": [LLM_STATUS["ok"], LLM_STATUS["fail"]],
+            "마지막 오류": LLM_STATUS["last_error"], "마지막 오류 시각": LLM_STATUS["last_error_at"], "답변": r.get("answer_text"),
             "Claude 원문": LLM_STATUS.get("raw"), "보낸 문서 쪽": LLM_STATUS.get("pages")}
 
 
