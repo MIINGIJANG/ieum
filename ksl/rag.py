@@ -324,10 +324,11 @@ class SafetyRAG:
         return self._bm
 
     # ---------- 답변 문장 만들기 ----------
-    def answer(self, query, hits, max_sentences=2):
+    def answer(self, query, hits, max_sentences=2, rows=None):
         """ANTHROPIC_API_KEY 가 있으면 LLM으로 '근거 안에서만' 쉬운 문장 생성,
         없으면 검색 chunk에서 질문과 가장 비슷한 문장을 그대로 추출(환각 없음)."""
-        if os.environ.get("ANTHROPIC_API_KEY"):
+        from . import guard
+        if os.environ.get("ANTHROPIC_API_KEY") and guard.llm_budget():   # 하루 한도를 넘으면 추출식으로 (ksl/guard.py)
             try:
                 out = self._llm_answer(query, hits, max_sentences)
                 LLM_STATUS["last"] = "정상"
@@ -335,16 +336,27 @@ class SafetyRAG:
             except Exception as e:  # LLM 실패 시 추출식으로 대체
                 LLM_STATUS["last"] = f"오류: {str(e)[:200]}"
                 print(f"[rag] LLM 실패 → 추출식 사용: {e}")
-        return self._extractive(query, hits, max_sentences), "extractive"
+        return self._extractive(query, hits, max_sentences, rows), "extractive"
 
-    def _extractive(self, query, hits, n):
+    def _extractive(self, query, hits, n, rows=None):
         """검색된 chunk 의 문장(목록 항목 포함) 중 질문과 가장 맞는 문장을 그대로 뽑음.
-        점수 = 문장-질문 유사도 + 상위 chunk 가산점 (검색 순위를 존중)."""
+        점수 = 문장-질문 유사도 + 상위 chunk 가산점 (검색 순위를 존중).
+        rows(hit) → (그 쪽 표의 줄을 문장으로 만든 것, 표 안의 줄인지 판단) 이 있으면, 칸이 뒤섞인 표 글 대신 그 문장을 후보로 씀."""
         from sklearn.feature_extraction.text import TfidfVectorizer
-        cand, seen = [], set()
+        from .rowtext import list_item
+        cand, seen, rowset = [], set(), set()
         for rank, h in enumerate(hits):
+            made, in_table = rows(h) if rows else ([], lambda s: False)
+            for s in made:
+                if s not in seen:
+                    seen.add(s)
+                    cand.append((s, rank))
+                    rowset.add(s)
             for s in h["text"].split("\n"):
                 s = s.strip()
+                s = list_item(s) or s                      # '○○ 작업: 보호구' → 문장
+                if made and in_table(s):
+                    continue
                 code = len(re.findall(r"[A-Za-z0-9\-]", s)) / max(len(s.replace(" ", "")), 1)
                 if len(s) >= 20 and s not in seen and code < 0.2:   # 짧은 제목줄, 기호만 나열된 표 줄 제외
                     seen.add(s)
@@ -356,6 +368,7 @@ class SafetyRAG:
         v = TfidfVectorizer(analyzer="char_wb", ngram_range=(2, 4)).fit(sents + [q])
         sc = (v.transform(sents) @ v.transform([q]).T).toarray().ravel()
         sc = sc + np.array([0.08 * (len(hits) - r) / len(hits) for _, r in cand])
+        sc = sc + np.array([0.08 if s_ in rowset else 0.0 for s_, _ in cand])   # 표 줄로 만든 문장은 완성된 문장 → 제목 줄보다 먼저
         top = np.argsort(-sc)[:n]
         top = [i for i in top if sc[i] >= 0.75 * sc[top[0]]]  # 1위보다 많이 낮은 문장은 버림
         return [sents[i] for i in top]

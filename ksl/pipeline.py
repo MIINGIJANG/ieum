@@ -311,6 +311,7 @@ class SafetySignPipeline:
         self.answers = json.loads(Path(answers).read_text(encoding="utf-8")) if answers and Path(answers).exists() else {}
         from .pageimage import PageImages
         from .tables import PageTables
+        self._row_cache = {}
         self.tables = PageTables(Path(titles).parent if titles else "data/kosha")
         self.images = PageImages(Path(titles).parent if titles else "data/kosha")
         self._order = {c["text"]: i for i, c in enumerate(self.rag.chunks)}
@@ -510,12 +511,29 @@ class SafetySignPipeline:
             B = {b[i:i + 2] for i in range(len(b) - 1)}
             return len(A & B) / max(1, min(len(A), len(B)))
 
-        plain = [t for t in texts if not in_table(t) and len(t) >= 25] or texts   # 표 줄만 있으면 그대로 둠
+        made = {s for h in hits for s in self._rows(h)[0]}                          # 표 줄을 문장으로 만든 것은 그대로 씀
+        plain = [t for t in texts if t in made or (not in_table(t) and len(t) >= 25)] or texts   # 표 줄만 있으면 그대로 둠
         out = []
         for t in plain:
             if not any(similar(re.sub(r"\s", "", t), re.sub(r"\s", "", o)) >= 0.7 for o in out):
                 out.append(t)
         return out
+
+    def _rows(self, hit):
+        """그 문단이 나온 쪽의 표 → (줄마다 만든 문장, '표 안의 줄인지' 판단). ksl/rowtext.py"""
+        from .rowtext import row_sentences
+        key = (hit["doc"], hit["page"])
+        if key not in self._row_cache:
+            tables = self.tables.get(*key)
+            self._row_cache[key] = [x for t in tables for x in row_sentences(t["rows"])]
+        # 그 쪽의 표 줄 중 이 문단에 실제로 들어 있는 줄만 (같은 쪽의 다른 표·다른 줄이 끼어들지 않게)
+        flat = re.sub(r"\s", "", strip_marks(hit["text"]))
+        def inside(src):                      # 줄의 글자(3글자씩)가 문단에 절반 넘게 있으면 들어 있는 것 (문단에서는 칸이 뒤섞여 있어 통째로는 못 찾음)
+            g = {src[i:i + 3] for i in range(len(src) - 2)} or {src}
+            return sum(x in flat for x in g) / len(g) >= 0.5
+        made = [s for s, src in self._row_cache[key] if src and inside(src)]
+        in_table = lambda line: any(b["type"] == "table" for b in self.tables.blocks(hit["doc"], hit["page"], [line]))
+        return made, in_table
 
     def _demo_ok(self, question, demo, score):
         """준비된 안내 문장으로 답해도 되는지: 유사도 기준 + 핵심어가 질문에 있어야 함."""
@@ -556,7 +574,7 @@ class SafetySignPipeline:
                     hits, top = hits2, self._evidence(hits2)
             if top < self.min_score:                       # 근거 약함 → 답하지 않음
                 return self._abstain(question, top)
-            texts, mode = self.rag.answer(question, hits)
+            texts, mode = self.rag.answer(question, hits, rows=self._rows)
             hint = None
             if mode == "llm" and any("찾을 수 없" in t for t in texts):   # Claude 도 문서에서 근거를 못 찾음 → 답하지 않음
                 return self._abstain(question, top)

@@ -115,6 +115,9 @@ def llm_based(pipe, question, answer_text):
     """Claude 로 핵심 단어 고르기. 키가 없거나 실패하면 None."""
     if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")):
         return None
+    from . import guard
+    if not guard.llm_budget(spend=False):             # 오늘 한도를 다 씀 → 규칙 방식으로
+        return None
     try:
         import anthropic
         client = anthropic.Anthropic(timeout=20.0, max_retries=1)
