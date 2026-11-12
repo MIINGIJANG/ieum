@@ -8,6 +8,7 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>👷</text></svg>">
 <link rel="icon" type="image/png" sizes="32x32" href="./favicon-32.png">
 <link rel="apple-touch-icon" href="./favicon-180.png">
+<link rel="manifest" href="./manifest.webmanifest">   <!-- 홈 화면에 추가하면 앱처럼 열림 (화면은 그대로) -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">  <!-- 글꼴을 기다리지 않고 화면부터 표시 -->
 <script>
@@ -17,6 +18,20 @@
   //  단, 카메라·SOS 팝업이 떠 있는 동안은 건드리지 않음 (보던 화면이 갑자기 맨 위로 튕겨 올라가지 않게)
   const toTop = () => { const c = document.body?.classList; if (c && c.contains("landing") && !c.contains("sos-open") && !c.contains("sign-open")) window.scrollTo(0, 0); };
   addEventListener("pageshow", toTop); addEventListener("load", toTop); addEventListener("resize", toTop);
+  // 화면에서 난 오류·첫 로딩 시간을 서버에 건수로만 남김 (실제 기기에서 무엇이 실패하는지 알기 위함, GET /client/status).
+  //  위치·질문 내용은 보내지 않음. 권한 거절(사용자의 선택)은 오류가 아니므로 뺌. 한 화면에서 10번까지만
+  let logLeft = 10;
+  window.clientLog = (kind, msg, where) => {
+    if (!location.protocol.startsWith("http") || (kind !== "boot" && (logLeft-- <= 0 || /NotAllowed|Permission|denied/i.test(String(msg))))) return;
+    try {
+      const body = JSON.stringify(kind === "boot" ? { kind, times: msg } : { kind, msg: String(msg && msg.message || msg).slice(0, 200), where: String(where || "").slice(0, 80) });
+      fetch("./client/log", { method: "POST", headers: { "Content-Type": "application/json" }, body, keepalive: true }).catch(() => {});
+    } catch { /* 기록 실패는 무시 */ }
+  };
+  addEventListener("error", (e) => { if (e.message) clientLog("error", e.message, `${(e.filename || "").split("/").pop()}:${e.lineno || 0}`); });
+  addEventListener("unhandledrejection", (e) => clientLog("promise", e.reason));
+  addEventListener("sign-failed", () => clientLog("camera", "카메라 수어 입력 준비 실패"));
+  addEventListener("avatar-failed", () => clientLog("avatar", (window.avatarErrors || []).slice(-1)[0] || "아바타 불러오기 실패"));
 </script>
 <style>
   :root {
@@ -407,6 +422,7 @@ Promise.race([bootAll, new Promise(r => setTimeout(r, 180000))]).then(() => {
   // 오프라인 모드: 나머지 예시 질문 답도 뒤에서 천천히 받아 둠 → 인터넷이 끊겨도 예시 질문은 답이 나옴 (web/sw.js 가 저장)
   examplesReady.then(list => list.forEach((e, i) => setTimeout(() => prefetchAnswer(e.question).catch(() => {}), 3000 + 800 * i)));
   offlinePrecache();
+  clientLog("boot", { ...window.bootTimes, total: Math.round(performance.now()) });
   const el = document.getElementById("boot");
   el.remove();                                 // 바로 사라짐 (페이드 없음)
   toTop();
@@ -635,6 +651,7 @@ async function run() {
     showResults();
     render();
   } catch (err) {
+    if (navigator.onLine) clientLog("query", err);
     console.error("질문 처리 실패", err);   // 화면에는 오류 문구를 띄우지 않음 (지금 화면 그대로, 다시 보내면 됨)
   } finally {
     $("go").disabled = false;

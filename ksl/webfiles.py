@@ -17,8 +17,9 @@ from pathlib import Path
 from starlette.responses import FileResponse, Response
 from starlette.staticfiles import NotModifiedResponse, StaticFiles
 
+mimetypes.add_type("application/manifest+json", ".webmanifest")
 # 압축해서 보내는 확장자 (png·woff2 등 이미 압축된 것은 뺌). 모델(.onnx·.task)도 13~25% 줄어듦
-COMPRESS = {".js", ".mjs", ".css", ".html", ".json", ".wasm", ".glb", ".vrm", ".onnx", ".task", ".svg", ".txt", ".md"}
+COMPRESS = {".js", ".mjs", ".css", ".html", ".json", ".wasm", ".glb", ".vrm", ".onnx", ".task", ".svg", ".txt", ".md", ".webmanifest"}
 MIN_SIZE = 1000
 SMALL = 300_000                                # 이보다 작은 파일은 요청 때 바로 압축 (몇 ms)
 # 오프라인 저장에서 빼는 것: 점검·시험 페이지, 예비 아바타, 쓰지 않는 관절 모델(Holistic), 평가 도구
