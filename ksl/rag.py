@@ -213,7 +213,9 @@ def client():
     global _CLIENT
     if _CLIENT is None:
         import anthropic
-        _CLIENT = anthropic.Anthropic(timeout=30.0, max_retries=2)
+        # 붙여 넣을 때 섞인 공백·줄바꿈·따옴표는 떼고 씀 (그대로 보내면 인증 실패)
+        key = (os.environ.get("ANTHROPIC_API_KEY") or "").strip().strip("\"'").strip()
+        _CLIENT = anthropic.Anthropic(api_key=key or None, timeout=30.0, max_retries=2)
     return _CLIENT
 
 
