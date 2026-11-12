@@ -111,3 +111,25 @@ def test_offline_manifest(client):
     for skip in ["/sign/models/holistic_landmarker.task", "/models/avatar.vrm", "/blocks.html", "/sign/eval.html"]:
         assert skip in files and skip not in pre, skip
     assert all(u in files for u in pre)
+
+
+def test_client_log_keeps_no_personal_info(client):
+    """화면 쪽 기록: 건수·시간만, 기기는 큰 분류만, 주소 뒤 ?… 는 지움."""
+    ua = {"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1"}
+    assert client.post("/client/log", json={"kind": "boot", "times": {"total": 4200, "camera": 3000, "x": 1}}, headers=ua).status_code == 204
+    assert client.post("/client/log", json={"kind": "error", "msg": "fail https://a.b/c?lat=35.1&key=SECRET", "where": "app.js:1"}, headers=ua).status_code == 204
+    assert client.post("/client/log", content=b"not json").status_code == 204
+    assert client.post("/client/log", json={"kind": "모르는것", "msg": "x"}).status_code == 204
+    st = client.get("/client/status").json()
+    assert st["boot"]["아이폰 Safari"]["total"]["median_ms"] == 4200 and "x" not in st["boot"]["아이폰 Safari"]
+    assert {"kind": "error", "device": "아이폰 Safari", "count": 1} in st["errors"]
+    dump = str(st)
+    assert "SECRET" not in dump and "35.1" not in dump and "iPhone OS" not in dump
+
+
+def test_web_manifest(client):
+    m = client.get("/manifest.webmanifest")
+    assert m.status_code == 200 and "manifest+json" in m.headers["content-type"]
+    for icon in m.json()["icons"]:
+        assert client.get("/" + icon["src"].lstrip("./")).status_code == 200
+    assert 'rel="manifest"' in client.get("/").text

@@ -171,7 +171,7 @@ self.addEventListener("fetch", (e) => {
   const req = e.request, url = new URL(req.url);
   if (FONT.test(req.url) && req.method === "GET") { e.respondWith(font(req)); return; }
   if (url.origin !== self.location.origin) return;     // 지도 등 다른 사이트는 브라우저에 맡김
-  if (url.pathname.startsWith("/sos/") || url.pathname.startsWith("/offline/")) return;   // SOS·파일 목록은 늘 서버에서
+  if (url.pathname.startsWith("/sos/") || url.pathname.startsWith("/offline/") || url.pathname.startsWith("/client/")) return;   // SOS·파일 목록·기록은 늘 서버에서
   if (req.method === "GET") {
     if (req.headers.has("range")) return;              // 부분 요청은 그대로
     e.respondWith((async () => {

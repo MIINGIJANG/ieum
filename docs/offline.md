@@ -66,3 +66,14 @@
 - 저장 상태: 브라우저 개발자 도구 → Application → Cache Storage → `ieum-offline-v2`
 - 파일 목록: `/offline/manifest`
 - 처음부터 다시 받기: Application → Storage → Clear site data
+
+## 홈 화면에 추가 (앱처럼 열기)
+
+`web/manifest.webmanifest` 가 있어 브라우저의 '홈 화면에 추가'(Android Chrome: 앱 설치, 아이폰 Safari: 공유 → 홈 화면에 추가)로
+주소창 없이 앱처럼 열 수 있다. 화면은 그대로이고, 저장해 둔 파일로 열리므로 인터넷이 없어도 열린다.
+
+## 실제 기기에서 어떻게 되는지 보기
+
+화면은 첫 로딩의 단계별 시간과 오류를 서버에 건수로만 남긴다 (`POST /client/log`, `ksl/clientlog.py`).
+`/client/status` 를 열면 기기 분류(아이폰 Safari·Android Chrome 등)별 첫 로딩 시간과 오류 건수가 나온다.
+주소(IP)·위치·질문 내용은 남기지 않고, 권한 거절은 오류로 세지 않는다.

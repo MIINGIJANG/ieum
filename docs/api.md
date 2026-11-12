@@ -46,6 +46,8 @@ uvicorn api:app --host 0.0.0.0 --port 8000
 | GET | `/sos/config` | – | SOS 준비 상태 (지도용 공개 키, 서버 키가 있는지) |
 | GET | `/sos/nearest?lat=&lng=&fresh=1` | – | 가까운 지정 응급의료기관 + 자동차 경로 + 병상 + 진료 가능 정보 (`docs/sos.md`). 위치는 저장하지 않음 |
 | GET | `/sos/status` | – | SOS 사용 기록·최근 오류 (위치 없음) |
+| POST | `/client/log` | `{"kind": "boot", "times": {...}}` 또는 `{"kind": "error", "msg": "..."}` | 화면에서 난 오류·첫 로딩 시간 기록 (`ksl/clientlog.py`). 주소(IP)·위치·질문 내용은 남기지 않음 |
+| GET | `/client/status` | – | 기기 분류별 첫 로딩 시간(가운데 값·가장 긴 값), 오류 건수, 최근 오류 50건 (서버가 다시 켜지면 처음부터) |
 | GET | `/offline/manifest` | – | 웹 파일 목록과 내용 해시 (오프라인 저장용, `docs/offline.md`) |
 
 웹 파일(`web/`)은 한 번 압축해 둔 것을 보내고 모두 `Cache-Control: no-cache` (바뀌지 않았으면 304) — `ksl/webfiles.py`.

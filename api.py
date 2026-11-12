@@ -12,10 +12,10 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
 from ksl import webfiles
@@ -314,6 +314,27 @@ def motions(req: Glosses):
 def offline_manifest():
     """오프라인 저장용 웹 파일 목록: 파일마다 내용 해시 (ksl/webfiles.py). 화면(web/sw.js)이 저장해 둔 것과 같은지 확인하는 데 씀."""
     return JSONResponse(webfiles.manifest(WEB), headers={"Cache-Control": "no-store"})
+
+
+@app.post("/client/log")
+async def client_log(request: Request):
+    """화면에서 일어난 오류·첫 로딩 시간 기록 (ksl/clientlog.py). 주소(IP)·위치·질문 내용은 남기지 않음."""
+    from ksl import clientlog
+    try:
+        raw = await request.body()
+        if len(raw) <= 4000:
+            import json as _json
+            clientlog.log(_json.loads(raw), request.headers.get("user-agent", ""))
+    except Exception:
+        pass                              # 기록 실패는 화면에 영향 없음
+    return Response(status_code=204)
+
+
+@app.get("/client/status")
+def client_status():
+    """화면 쪽 기록 확인용: 기기 분류별 첫 로딩 시간(가운데 값·가장 긴 값), 오류 건수, 최근 오류 50건. 서버가 다시 켜지면 처음부터."""
+    from ksl import clientlog
+    return clientlog.status()
 
 
 @app.get("/sos/config")
