@@ -437,6 +437,7 @@ function popStep(t) {
     pop.s = pop.ts; pop.o = pop.to; pop.sv = pop.ov = 0; pop.raf = 0; popRender();
     if (!pop.to) {
       $("panel").hidden = true; document.body.classList.remove("sign-open"); document.body.style.minHeight = "";
+      closeWait.splice(0).forEach((f) => f());
     }
     return;
   }
@@ -514,9 +515,16 @@ async function cameraUsable() {
 // 이미 허용한 기기면 바로 팝업. 아직이면 먼저 카메라 권한을 묻고, '허용'을 누른 뒤에 팝업을 엶 (거절하면 열지 않음)
 //  누를 때마다 새로 물음: 앞에서 묻던 것이 끝나지 않았어도(권한 창을 닫아 버린 경우 등) 다시 누르면 다시 물음 (늦게 온 앞의 결과는 버림)
 let askSeq = 0;
+// 팝업이 완전히 닫힐 때까지 기다림 (SOS 팝업이 카메라를 닫고 시작할 때)
+let closeWait = [];
+const whenClosed = () => ($("panel").hidden ? Promise.resolve() : new Promise((r) => closeWait.push(r)));
+// SOS 팝업이 뜨면, 아직 열리기 전에 기다리던 카메라 요청은 취소
+addEventListener("sos-open", () => { if (!panelOpen) askSeq++; });
 $("camBtn").onclick = async () => {
   if (panelOpen) return closePanel();
   const my = ++askSeq;
+  // SOS 팝업이 떠 있거나 닫히는 중이면 완전히 닫힌 뒤에 시작 (권한 묻기도 그다음)
+  if (window.__sos?.whenClosed) { await window.__sos.whenClosed(); if (my !== askSeq) return; }
   if (!(await cameraUsable()) || my !== askSeq) return;
   let st = null;
   try { st = (await navigator.permissions?.query({ name: "camera" }))?.state; } catch {}
@@ -573,5 +581,5 @@ function measureNotice() {
 }
 document.fonts?.ready.then(measureNotice);
 prepare().catch(() => {});   // 페이지를 열면 바로 모델 준비 (카메라 권한은 팝업을 열 때 물음)
-window.__sign = { opts, items, renderWords, draw, place: placePanel, springScroll, closePanel, isOpen: () => panelOpen, docWords: (ws) => docWords(ws, domain), rec, addItem,
+window.__sign = { opts, items, renderWords, draw, place: placePanel, springScroll, closePanel, isOpen: () => panelOpen, whenClosed, docWords: (ws) => docWords(ws, domain), rec, addItem,
   classify: (f) => classify(rec, f, opts, domainIdx, protos) };

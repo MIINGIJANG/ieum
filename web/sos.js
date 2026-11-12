@@ -417,6 +417,12 @@ function origin() {
 }
 // 팝업(지도 칸)이 다 커진 뒤에 응급실 정보 칸이 아래로 늘어나며 나오도록 기다림 (껐다 켜도 처음 열 때와 같은 순서)
 let openWait = [];
+// 팝업이 완전히 닫힐 때까지 기다림 (카메라 팝업이 SOS 를 닫고 시작할 때)
+let closeWait = [];
+const whenClosed = () => ($("sosPanel").hidden ? Promise.resolve() : new Promise((r) => closeWait.push(r)));
+window.__sos = { whenClosed };
+// 카메라 팝업이 뜨면, 아직 열리기 전에 기다리던 SOS 요청(위치 묻기 등)은 취소
+addEventListener("sign-open", () => { if (!open) { gen++; cancelLocate(); } });
 const opened = () => (pop.to === 1 && !pop.raf ? Promise.resolve() : new Promise((r) => openWait.push(r)));
 function render() {
   const el = $("sosPanel");
@@ -431,7 +437,7 @@ function step(t) {
   pop.ov += (-w * w * (pop.o - pop.to) - k * pop.ov) * dt; pop.o += pop.ov * dt;
   if (Math.abs(pop.s - pop.ts) < 0.001 && Math.abs(pop.sv) < 0.01 && Math.abs(pop.o - pop.to) < 0.001 && Math.abs(pop.ov) < 0.01) {
     pop.s = pop.ts; pop.o = pop.to; pop.sv = pop.ov = 0; pop.raf = 0; render();
-    if (!pop.to) { $("sosPanel").hidden = true; document.body.classList.remove("sos-open"); document.documentElement.style.minHeight = baseMin = ""; }
+    if (!pop.to) { $("sosPanel").hidden = true; document.body.classList.remove("sos-open"); document.documentElement.style.minHeight = baseMin = ""; closeWait.splice(0).forEach((f) => f()); }
     else { redrawMap(); openWait.splice(0).forEach((f) => f()); }   // 커지는 중(축소된 상태)에 그린 경로는 잘린 채 남아 끊겨 보임 → 다 커진 뒤 지도 크기를 다시 재고 다시 그림
     return;
   }
@@ -455,6 +461,7 @@ function popTo(show) {
 }
 function openPanel(p) {
   open = true; shownGen = gen; $("sosBtn").classList.add("on");
+  dispatchEvent(new Event("sos-open"));   // 카메라 쪽: 아직 열리기 전에 기다리던 카메라 요청은 취소
   document.body.classList.add("sos-open");
   popTo(true);
   const top = $("form").getBoundingClientRect().top;   // 카메라 팝업처럼 입력창이 화면 위쪽(16px)에 오도록
@@ -476,25 +483,35 @@ let gen = 0, shownGen = 0;   // gen: 새로 열 때마다 하나씩 (예전 위�
 //  - 빠른 위치(와이파이·기지국)를 계속 기다리다가 3초 뒤부터는 정밀 위치도 함께. 먼저 온 것을 씀
 //  - '잠깐 못 찾음' 오류는 무시하고 계속 기다림 (Mac·Safari 는 첫 위치 전에 이런 오류를 자주 냄). 거절이면 바로 멈춤
 //  - 30초 안에 못 찾으면 이 기기에서 마지막으로 찾았던 위치를 씀
+//  - 다시 누르면 앞의 요청은 모두 지우고 새로 (권한 창을 Esc 등으로 그냥 닫아 앞의 요청이 끝나지 않고 남아 있으면 새 권한 창이 안 뜸)
+//  - 30초가 지나도 위치가 없을 때 마지막 위치를 쓰는 건 권한이 허용된 경우만 (권한 창을 닫았는데 나중에 팝업이 뜨지 않게)
+let cancelLocate = () => {};
 function locate() {
+  cancelLocate();
   return new Promise((res, rej) => {
     const g = navigator.geolocation;
     if (!g) return pos ? res(pos) : rej(new Error("no geolocation"));
     const ids = [];
     let done = false, t2 = 0, t30 = 0;
     const end = (f, v) => { if (done) return; done = true; ids.forEach((i) => g.clearWatch(i)); clearTimeout(t2); clearTimeout(t30); f(v); };
+    cancelLocate = () => end(rej, new Error("cancelled"));
     const ok = (p) => { pos = { lat: p.coords.latitude, lng: p.coords.longitude }; posAt = Date.now(); end(res, pos); };
     const bad = (e) => { if (e && e.code === 1) end(rej, e); };   // 거절만 멈춤, 나머지 오류는 계속 기다림
     ids.push(g.watchPosition(ok, bad, { enableHighAccuracy: false, maximumAge: 60000 }));
     t2 = setTimeout(() => { if (!done) ids.push(g.watchPosition(ok, bad, { enableHighAccuracy: true, maximumAge: 0 })); }, 3000);
-    t30 = setTimeout(() => (pos ? end(res, pos) : end(rej, new Error("timeout"))), 30000);
+    t30 = setTimeout(async () => {
+      const st = await navigator.permissions?.query({ name: "geolocation" }).catch(() => null);
+      if (pos && st?.state === "granted") end(res, pos); else end(rej, new Error("timeout"));
+    }, 30000);
   });
 }
 $("sosBtn").onclick = async () => {
   if (open) return closePanel();
   if (!$("sosPanel").hidden) return openPanel(null);   // 닫히는 도중: 보던 그대로 다시 (찾던 위치·조회도 이어서)
   const my = ++gen;
-  const where = locate();                              // 누른 순간 바로 위치 찾기 시작 (권한 창도 이때 뜸)
+  // 카메라 팝업이 떠 있거나 닫히는 중이면 완전히 닫힌 뒤에 시작 (권한 묻기도 그다음)
+  if (window.__sign?.whenClosed) { await window.__sign.whenClosed(); if (my !== gen) return; }
+  const where = locate();                              // 위치 찾기 시작 (권한 창도 이때 뜸)
   // 이미 위치를 허락해 둔 기기면 위치가 나오기를 기다리지 않고 바로 팝업. 처음이면 '허용'을 누르는 순간 팝업. 거절하면 열지 않음
   const st = await navigator.permissions?.query({ name: "geolocation" }).catch(() => null);
   if (my !== gen) return;
