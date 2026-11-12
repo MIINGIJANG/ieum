@@ -64,6 +64,8 @@ ieum/
 │   ├── sos.py              SOS: 가까운 응급실·경로·병상·진료 가능 정보 (공공데이터포털 + 카카오)
 │   ├── webfiles.py         웹 파일 보내기 (미리 압축) + 오프라인 저장용 파일 목록
 │   ├── clientlog.py        화면에서 난 오류·첫 로딩 시간 기록 (개인 정보 없음, /client/status)
+│   ├── guard.py            남용 막기: 요청 한도, Claude 하루 한도
+│   ├── rowtext.py          표의 한 줄 → 문장 (Claude 없이 답할 때)
 │   ├── missing.py, logsync.py   동작 없는 단어 기록 + Hugging Face 데이터셋 보관
 │   ├── pageimage.py, tables.py  출처를 원본 PDF 모양으로
 │   ├── evaluation.py       환각 방지 평가 (서버 /eval, CI)

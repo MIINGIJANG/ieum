@@ -19,7 +19,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
-from ksl import webfiles
+from ksl import guard, webfiles
 from ksl.logsync import LogSync
 from ksl.pipeline import SafetySignPipeline
 
@@ -97,9 +97,14 @@ def health():
             "motion_glosses": len(pipe.motion.index) if pipe.motion else 0}
 
 
+TOO_MANY = JSONResponse({"error": "too_many_requests"}, status_code=429, headers={"Retry-After": "60"})
+
+
 @app.post("/ask")
-def ask(req: Ask):
-    return pipe.ask(req.question, req.beam)
+def ask(req: Ask, request: Request):
+    if not guard.allow("ask", guard.who(request), 20):
+        return TOO_MANY
+    return pipe.ask(req.question[:guard.MAX_TEXT], min(max(req.beam, 1), 8))
 
 
 class Query(BaseModel):
@@ -113,12 +118,20 @@ _QCACHE = {}                   # 답 캐시: (질문, beam) → (응답, 수어 
 _QCACHE_MAX = 300
 
 
-def cached_query(text, beam=4, log=True):
+class TooMany(Exception):
+    pass
+
+
+def cached_query(text, beam=4, log=True, who=None):
+    """who 가 있으면(바깥에서 온 요청) 새 질문만 요청 한도에 셈 — 캐시에 있는 질문은 비용이 없으므로 세지 않음."""
     import contextlib
     from ksl.pipeline import clean_spoken
+    text, beam = text[:guard.MAX_TEXT], min(max(beam, 1), 8)
     key = (clean_spoken(text).strip(), beam)
     hit = _QCACHE.get(key)
     if hit is None:
+        if who is not None and not guard.allow("query", who, 20):
+            raise TooMany()
         cap = pipe.missing.capture() if pipe.missing is not None else contextlib.nullcontext([])
         with cap as calls:
             r = pipe.query(text, beam)
@@ -132,9 +145,13 @@ def cached_query(text, beam=4, log=True):
 
 
 @app.post("/query")
-def query(req: Query):
-    """검색창 하나: 모든 입력을 질문으로 보고 문서 검색 후 답변. 답하지 않으면 mode 가 none."""
-    r = cached_query(req.text, req.beam, log=not req.prefetch)
+def query(req: Query, request: Request):
+    """검색창 하나: 모든 입력을 질문으로 보고 문서 검색 후 답변. 답하지 않으면 mode 가 none.
+    같은 곳에서 새 질문은 1분에 20개까지 (ksl/guard.py)."""
+    try:
+        r = cached_query(req.text, req.beam, log=not req.prefetch, who=guard.who(request))
+    except TooMany:
+        return TOO_MANY
     return {"ok": True} if req.seen else r
 
 
@@ -299,7 +316,7 @@ def missing(n: int = 100):
 
 @app.post("/motion")
 def motion(req: Glosses):
-    return pipe.motion_for(req.glosses, log=False) or {"fps": 30, "frames": [], "segments": []}
+    return pipe.motion_for(req.glosses[:guard.MAX_GLOSSES], log=False) or {"fps": 30, "frames": [], "segments": []}
 
 
 _WCACHE = {}                   # 단어 하나 동작 (손 올리기 → 단어 → 손 내리기) 캐시
@@ -342,7 +359,7 @@ async def client_log(request: Request):
 def client_status():
     """화면 쪽 기록 확인용: 기기 분류별 첫 로딩 시간(가운데 값·가장 긴 값), 오류 건수, 최근 오류 50건. 서버가 다시 켜지면 처음부터."""
     from ksl import clientlog
-    return clientlog.status()
+    return {**clientlog.status(), "guard": guard.status()}
 
 
 @app.get("/sos/config")
@@ -353,9 +370,13 @@ def sos_config():
 
 
 @app.get("/sos/nearest")
-def sos_nearest(lat: float, lng: float, fresh: int = 0):
+def sos_nearest(request: Request, lat: float, lng: float, fresh: int = 0):
     """지금 위치에서 가장 가까운 응급실 + 자동차 경로 + 실시간 병상 (ksl/sos.py). 위치는 저장하지 않음."""
     from ksl import sos
+    if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+        return JSONResponse({"error": "bad_location"}, status_code=422)
+    if not guard.allow("sos", guard.who(request), 12):       # 공공데이터·카카오 한도 보호: 같은 곳에서 1분에 12번까지
+        return TOO_MANY
     if not sos.configured()["er"]:
         sos.log_error("config", "DATA_GO_KR_KEY 없음")
         return JSONResponse({"error": "not_configured"}, status_code=503)

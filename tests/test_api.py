@@ -133,3 +133,21 @@ def test_web_manifest(client):
     for icon in m.json()["icons"]:
         assert client.get("/" + icon["src"].lstrip("./")).status_code == 200
     assert 'rel="manifest"' in client.get("/").text
+
+
+def test_guard_limits_and_budget(monkeypatch):
+    """남용 막기: 같은 곳에서 1분에 N번까지, Claude 하루 한도."""
+    from ksl import guard
+    assert all(guard.allow("t", "a", 3) for _ in range(3)) and not guard.allow("t", "a", 3)
+    assert guard.allow("t", "b", 3)                                   # 다른 곳은 따로 셈
+    monkeypatch.setenv("LLM_DAILY_MAX", "2")
+    monkeypatch.setitem(guard._day, "date", None)
+    assert guard.llm_budget() and guard.llm_budget() and not guard.llm_budget()
+    assert not guard.llm_budget(spend=False)
+
+
+def test_query_is_bounded(client):
+    """아주 긴 입력·이상한 값도 그대로 처리되지 않게 (비용·부하)."""
+    r = client.post("/query", json={"text": "정화통 " * 5000, "beam": 999})
+    assert r.status_code == 200 and len(r.json().get("question", "")) <= 300
+    assert client.get("/sos/nearest?lat=999&lng=0").status_code == 422

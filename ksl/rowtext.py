@@ -1,0 +1,112 @@
+"""표의 한 줄 → 읽을 수 있는 문장 (Claude 없이 답할 때 씀, ksl/rag.py 추출식).
+
+문서의 표는 글로 뽑으면 칸이 뒤섞여 '안전화 물체의 낙하…' 처럼 나온다. 표 구조(data/kosha/*.layout.json)를 알고 있으므로
+줄마다 '작업 → 보호구', '종류 → 설명' 을 문장으로 만든다. 표에 적힌 말만 쓰고 내용을 더하지 않는다 (조사·끝맺음만 붙임).
+"""
+import re
+
+_HANJA = re.compile(r"\s*\([一-鿿]+\)")
+_WEAR = re.compile(r"(모|복|화|장갑|마스크|안경|보안면|보호구|호흡기|안전대|두건|앞치마|덮개|옷|귀마개|보호대)$")
+
+
+def has_final(word):
+    """마지막 글자에 받침이 있는지 (한글이 아니면 숫자·영문 발음으로 어림)."""
+    c = word.rstrip(" )]」』\"'")[-1:] or ""
+    if "가" <= c <= "힣":
+        return (ord(c) - 0xAC00) % 28 != 0
+    return c in "0136780LMNRlmnr"
+
+
+def josa(word, pair):
+    """pair: '은는' | '을를' | '이가' — 받침에 맞는 조사. 끝의 괄호 설명은 빼고 판단 ('귀마개 2종(EP-2)' → 종)."""
+    core = re.sub(r"\s*\([^()]*\)$", "", word) or word
+    return word + (pair[0] if has_final(core) else pair[1])
+
+
+def clean(cell):
+    t = _HANJA.sub("", cell or "")
+    t = re.sub(r"\s*※.*$", "", t)                       # 칸 안의 덧붙임 설명
+    t = re.sub(r"\s*\[[\d.]+\s*참조\]", "", t)
+    t = t.replace("․", "·").replace("･", "·").replace("ㆍ", "·")
+    return re.sub(r"\s+", " ", t).strip(" ,")
+
+
+def _head(cell):
+    return re.sub(r"\s", "", cell or "")
+
+
+def work_gear(work, gear):
+    """'○○ 작업' + '보호구' → '○○ 작업에는 보호구를 착용합니다.'"""
+    work, gear = clean(work), clean(gear)
+    if not work or not gear:
+        return None
+    m = re.match(r"^(.*?)\s*1\.\s", work)                  # '고열작업 1. 용광로… 2. …' → 앞의 이름만
+    if m and m.group(1):
+        work = m.group(1)
+    elif m:                                                # 이름 없이 '1. … 2. …' → 항목마다 한 문장 (끝이 잘린 항목은 뺌)
+        items = [w.strip() for w in re.split(r"\s*\d\.\s+", work) if w.strip()]
+        outs = [x for w_ in items if re.search(r"(작업|업무|경우|장소)$", w_) and (x := work_gear(w_, gear))]
+        return " ".join(outs) or None
+    if len(work) > 120 or len(gear) > 80 or re.search(r"(하거나|한다|할것|하여야|지급)", gear.replace(" ", "")):
+        return f"{work}에 필요한 보호구: {gear}." if len(work) <= 120 else None   # 문장으로 만들기 어려운 줄은 표의 말 그대로
+    items = [re.sub(r"\s*\(.*?\)$|\s*등$", "", x).strip() for x in re.split(r"[,·]| 또는 ", gear)]
+    verb = "착용합니다" if all(_WEAR.search(x) for x in items if x) else "사용합니다"
+    where = "에서는" if work.endswith("장소") else "에는"
+    return f"{work}{where} {josa(gear, '을를')} {verb}."
+
+
+def term_desc(term, desc):
+    """'정전기안전화' + '…방지하기 위한 것' → '정전기안전화는 …방지하기 위한 것입니다.'"""
+    term, desc = clean(term), clean(desc)
+    if not term or not desc or len(desc) < 8 or len(term) > 30 or re.search(r"(?:[가-힣] ){2,}", term + " "):   # '벨 트 식' 처럼 벌려 쓴 말은 뺌
+        return None
+    desc = desc.rstrip(".")
+    if desc.endswith("장소"):
+        return f"{josa(term, '은는')} {desc}에서 사용합니다."
+    if re.search(r"(다|음|함)$", desc):                     # 이미 문장
+        return f"{josa(term, '은는')} {desc}."
+    return f"{josa(term, '은는')} {desc}입니다."
+
+
+def row_sentences(rows):
+    """표 하나(행·열, 병합 칸은 None) → [(문장, 그 줄의 원래 글자)] 목록. 모르는 모양의 표는 빈 목록.
+    원래 글자(띄어쓰기 뺀 것)는 '검색된 문단에 이 줄이 들어 있는지' 확인하는 데 씀."""
+    if not rows or len(rows) < 2:
+        return []
+    head = [_head(c) for c in rows[0]]
+    out, carry = [], [None] * len(head)
+    body = []
+    for r in rows[1:]:
+        r = list(r) + [None] * (len(head) - len(r))
+        for i, c in enumerate(r[:len(head)]):               # 병합된 칸(None)은 위 칸의 값
+            if c is None:
+                r[i] = carry[i] if i == 0 else None
+            else:
+                carry[i] = c
+        body.append(r)
+    col = lambda *names: next((i for i, h in enumerate(head) if h in names), None)
+    w, g = col("작업명"), col("보호구")
+    if w is not None and g is not None:
+        return [(s, _head(r[w])) for r in body if (s := work_gear(r[w], r[g]))]
+    t = col("종류", "분류", "종류(기호)")
+    d = col("사용구분", "성능구분", "구조특징", "성능")
+    grade, code = col("등급"), col("기호")
+    if t is not None and d is not None:
+        for r in body:
+            term = clean(r[t])
+            if head[t] == "종류(기호)" and term:
+                term += "형"
+            if grade is not None and r[grade] and clean(r[grade]) not in ("－", "-"):
+                term = f"{term} {clean(r[grade])}"
+            if code is not None and code != t and r[code] and term:
+                term = f"{term}({clean(r[code])})"
+            s = term_desc(term, r[d] or "")
+            if s:
+                out.append((s, _head(r[d])))
+    return out
+
+
+def list_item(line):
+    """조문의 '○○ 작업: 보호구' 줄 → 문장. 아니면 None."""
+    m = re.match(r"^(.{6,}?(?:작업|장소|경우|업무))\s*:\s*(.{2,60})$", line.strip())
+    return work_gear(m.group(1), m.group(2)) if m else None

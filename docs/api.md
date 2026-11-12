@@ -24,6 +24,7 @@ uvicorn api:app --host 0.0.0.0 --port 8000
 | `KSL_HF_TOKEN`(또는 `HF_TOKEN`), `KSL_LOG_REPO`, `KSL_LOG_SYNC_SEC` | —, `MIINGI/ieum-logs`, 600 | 기록을 Hugging Face 데이터셋에 보관 (Space 위에서만) |
 | `KSL_NO_WARMUP` | — | 켜질 때 예시 질문 답 미리 만들기·웹 파일 미리 압축 건너뜀 (개발용) |
 | `DATA_GO_KR_KEY`, `KAKAO_REST_KEY`, `KAKAO_JS_KEY` | — | SOS: 공공데이터포털 키, 카카오 REST 키(경로·장소), 카카오 지도 JavaScript 키 (`docs/sos.md`) |
+| `LLM_DAILY_MAX` | 2000 | 하루에 Claude 로 답하는 새 질문 수. 넘으면 문서 문장을 뽑는 방식으로 답함 (`ksl/guard.py`) |
 | `IEUM_GZ_DIR` | 임시 폴더의 `ieum-gz` | 웹 파일 압축본을 두는 곳 |
 
 ## 엔드포인트
@@ -91,3 +92,12 @@ uvicorn api:app --host 0.0.0.0 --port 8000
 - 지문자를 켜면 그 segment 에 `fingerspell: true`, `fs_text`, `fs_verified`
 
 자세한 형식·가져오기는 `docs/motion_data.md`, 아바타는 `docs/avatar.md`.
+
+## 남용 막기 (`ksl/guard.py`)
+
+누구나 부를 수 있는 주소가 비용(Claude)과 외부 한도(공공데이터·카카오)를 쓰므로 한도를 둔다. 넘으면 429.
+
+- `/query`·`/ask`: 같은 곳에서 **새 질문** 1분에 20개 (캐시에 있는 질문은 세지 않음). 질문은 300자까지만 씀
+- `/sos/nearest`: 같은 곳에서 1분에 12번
+- Claude 하루 한도 `LLM_DAILY_MAX` — 넘으면 답은 계속 하되 문서 문장을 뽑는 방식으로
+- 요청한 곳(IP)은 해시로만 메모리에 잠깐 두고 기록·저장하지 않는다. 막은 횟수는 `/client/status` 의 `guard`
