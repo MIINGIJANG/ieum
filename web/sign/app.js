@@ -522,6 +522,7 @@ const whenClosed = () => ($("panel").hidden ? Promise.resolve() : new Promise((r
 addEventListener("sos-open", () => { if (!panelOpen) askSeq++; });
 $("camBtn").onclick = async () => {
   if (panelOpen) return closePanel();
+  if (window.__sos?.isOpen?.()) return;   // SOS 팝업이 떠 있는 동안은 카메라 버튼은 아무 반응 없음 (SOS 는 SOS 버튼으로만 닫힘)
   const my = ++askSeq;
   // SOS 팝업이 떠 있거나 닫히는 중이면 완전히 닫힌 뒤에 시작 (권한 묻기도 그다음)
   if (window.__sos?.whenClosed) { await window.__sos.whenClosed(); if (my !== askSeq) return; }

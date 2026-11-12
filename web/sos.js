@@ -420,7 +420,7 @@ let openWait = [];
 // 팝업이 완전히 닫힐 때까지 기다림 (카메라 팝업이 SOS 를 닫고 시작할 때)
 let closeWait = [];
 const whenClosed = () => ($("sosPanel").hidden ? Promise.resolve() : new Promise((r) => closeWait.push(r)));
-window.__sos = { whenClosed };
+window.__sos = { whenClosed, isOpen: () => open };
 // 카메라 팝업이 뜨면, 아직 열리기 전에 기다리던 SOS 요청(위치 묻기 등)은 취소
 addEventListener("sign-open", () => { if (!open) { gen++; cancelLocate(); } });
 const opened = () => (pop.to === 1 && !pop.raf ? Promise.resolve() : new Promise((r) => openWait.push(r)));
@@ -523,9 +523,5 @@ $("sosBtn").onclick = async () => {
     if (shownGen !== my) openPanel(p); else refresh(p);
   } catch { if (my === gen && shownGen === my) showInfo(null, true); }
 };
-// 팝업 밖의 버튼(카메라·마이크·예시 질문 등)을 누르면 닫히고 그 버튼도 그대로 눌림. 빈 배경을 누르면 닫히지 않음
-document.addEventListener("click", (e) => {
-  if (!open || $("sosPanel").contains(e.target) || $("sosBtn").contains(e.target)) return;
-  if (e.target.closest?.("button, a, [role=button]")) closePanel();
-}, true);
+// SOS 팝업은 SOS 버튼을 다시 눌러야만 닫힘 (팝업 밖 배경·버튼을 눌러도 그대로)
 addEventListener("resize", () => { if (open) { window.__sign?.place?.($("sosPanel")); map?.relayout(); fitText(); $("sosInfo").querySelectorAll(".sev:not([hidden])").forEach((b) => { arrange(b); fitChips(b); }); $("sosInfo").querySelectorAll(".sevbox").forEach(fitLegend); } });
