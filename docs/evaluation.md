@@ -33,6 +33,7 @@
 | 도구 | 하는 일 |
 |---|---|
 | `python scripts/eval/check_signs.py` | 대체 표현이 동작 없는 글로스를 가리키는지(조용한 실패, `--strict` 면 실패), 단어표의 회색 글로스, 말과 글로스가 글자를 같이 쓰지 않는 의심 대응 목록 → 수어를 아는 사람이 확인 |
+| `python scripts/eval/answer_audit.py --url <서버>` | 질문 231개(문서 안 203 + 문서 밖 28, `data/eval/audit_questions.csv` 포함)를 실제 서버에 물어보고 답·출처·수어 블록을 모음. 답한 비율·정답 쪽·정답 낱말·답변 방식을 요약 (Claude 답변 모드면 질문당 약 3원) |
 | `python scripts/eval/sign_bench.py` | 카메라 수어 입력: 낱말 176개 × 웹캠 문제 흉내 9가지를 실제 `core.js` 로 돌려 변형별 정확도 (가짜 녹화, `docs/sign_input.md`) |
 | `python scripts/eval/e2e_devices.py --url http://localhost:8000` | 휴대폰·태블릿 세로/가로·PC 에서 첫 화면 → 답변·블록·아바타·가로 넘침 점검, 화면 저장 (`--dark` 다크 모드) |
 | `python scripts/eval/eval_retrieval.py` | 검색 Recall@1/3/5 (`docs/retrieval.md`) |
