@@ -467,6 +467,13 @@ function springScroll(to) {
 }
 for (const ev of ["wheel", "touchstart", "keydown"]) addEventListener(ev, () => { cancelAnimationFrame(scrollAnim); scrollAnim = 0; }, { passive: true });   // 사용자가 직접 스크롤하면 멈춤
 let scrollBack = null;   // 팝업을 열 때 화면을 입력창이 위로 오게 내렸다면, 닫을 때 원래 자리로
+// 카메라 팝업을 열 때 화면을 얼마나 내릴지 (+ 아래로)
+const isPhone = () => matchMedia("(hover: none) and (pointer: coarse)").matches && innerHeight > innerWidth;
+function camScrollBy() {
+  const ex = document.getElementById("examples");
+  if (isPhone() && ex && ex.getClientRects().length) return ex.getBoundingClientRect().bottom;   // 예시 질문 박스 아래 끝이 화면 맨 위에
+  return $("form").getBoundingClientRect().top - 16;                                              // 입력창이 화면 위쪽 16px 에
+}
 function openPanel(pre = null) {
   // 팝업이 다 닫힌 뒤 다시 열면 처음 상태로 (닫히는 도중에 다시 누르면 하던 그대로)
   const fresh = $("panel").hidden;
@@ -475,13 +482,15 @@ function openPanel(pre = null) {
   dispatchEvent(new Event("sign-open"));      // 본 화면: 마이크로 듣는 중이면 팝업이 뜨기 시작하는 순간 같이 끔
   document.body.classList.add("sign-open");   // 본 화면 첫 화면은 스크롤을 막아 두므로, 팝업이 떠 있는 동안은 풀어 줌
   popTo(true);
-  // 팝업 전체(카메라~질문)가 한 화면에 보이게: 입력창이 화면 위쪽(16px)에 오도록 부드럽게 내림
+  // 팝업 전체(카메라~질문)가 한 화면에 보이게 부드럽게 내림
+  //  - 컴퓨터: 입력창이 화면 위쪽(16px)에
+  //  - 스마트폰(터치 화면·세로): 카메라 칸이 세로로 길어서 예시 질문 박스까지 모두 화면 위로 가려지는 곳까지
   //  팝업은 커지는 중이라 아직 페이지가 짧으므로, 내릴 수 있게 페이지 최소 높이를 잡아 둠 (닫히면 풂)
-  const top = $("form").getBoundingClientRect().top;
-  if (Math.abs(top - 16) > 2) {
+  const by = camScrollBy();
+  if (Math.abs(by) > 2) {
     scrollBack ??= scrollY;
-    document.body.style.minHeight = `${Math.ceil(scrollY + top - 16 + innerHeight)}px`;
-    requestAnimationFrame(() => { if (panelOpen) springScroll(scrollY + $("form").getBoundingClientRect().top - 16); });
+    document.body.style.minHeight = `${Math.ceil(scrollY + by + innerHeight)}px`;
+    requestAnimationFrame(() => { if (panelOpen) springScroll(scrollY + camScrollBy()); });
   }
   if (fresh) measureNotice();
   startCamera(pre);
