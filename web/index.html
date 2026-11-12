@@ -553,8 +553,12 @@ function endListening(r = rec) {
   if (r === rec) rec = null;
   listening = false; wave.stop(); updateGo();
 }
+let micOn = false;   // 마이크가 실제로 켜졌는지 (권한 창에서 허용해야 켜짐)
 function listen() {
-  if (listening) { endListening(); return; }        // 멈추기: 서버의 마지막 결과를 기다리지 않음
+  // 듣는 중이면 멈춤. 단, 아직 마이크가 켜지기 전(권한 창이 떠 있다가 Esc 등으로 그냥 닫힌 경우)이면 앞의 요청을 지우고 새로 물음
+  if (listening && micOn) { endListening(); return; }
+  if (listening) endListening();
+  micOn = false;
   rec = new SR();
   const me = rec;
   rec.lang = "ko-KR"; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
@@ -562,7 +566,7 @@ function listen() {
     $("q").value = [...e.results].map((r) => r[0].transcript).join("").trim();
     if (e.results.length && e.results[e.results.length - 1].isFinal) endListening(me);   // 확정되면 바로 끝 (조용한 시간 안 기다림)
   };
-  rec.onaudiostart = () => wave.openMic();
+  rec.onaudiostart = () => { micOn = true; wave.openMic(); };
   rec.onspeechstart = () => wave.speak(true);
   rec.onspeechend = () => wave.speak(false);
   rec.onerror = (e) => {
