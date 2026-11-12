@@ -1,5 +1,5 @@
 // 정확도 평가: 녹화한 관절 점 파일(index.html '정확도 평가용 녹화')을 설정별로 다시 돌려 비교. 모델은 브라우저에서 그대로 실행.
-import { DEFAULTS, FrameCleaner, Recognizer, Segmenter, WindowCommitter, base, classify, docWords, frameToFeatures,
+import { DEFAULTS, FrameCleaner, Handedness, Recognizer, Segmenter, WindowCommitter, base, classify, docWords, frameToFeatures,
   rankQuestions, rerank } from "./core.js";
 
 const $ = (id) => document.getElementById(id);
@@ -7,11 +7,11 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<
 const rec = new Recognizer();
 let domain = null, domainIdx = null, protos = [];
 
-// 비교할 설정: 모두 켠 것, 예전 방식, 하나씩 끈 것
+// 비교할 설정: 모두 켠 것, 예전 방식, 하나씩 끈 것 (녹화 하나를 한 사람으로 보고 왼손잡이 판단을 이어 감)
 const CONFIGS = [
   ["새 방식 (모두 켬)", {}],
-  ["예전 방식 (팀원 그대로)", { segment: "window", calibrate: false, smooth: false, rerank: false, custom: false, domain: false }],
-  ["예전 방식 + 산업안전 단어만", { segment: "window", calibrate: false, smooth: false, rerank: false, custom: false }],
+  ["예전 방식 (팀원 그대로)", { segment: "window", calibrate: false, smooth: false, rerank: false, custom: false, domain: false, mirror: false }],
+  ["예전 방식 + 산업안전 단어만", { segment: "window", calibrate: false, smooth: false, rerank: false, custom: false, mirror: false }],
   ["낱말 끊기만 예전", { segment: "window" }],
   ["산업안전 단어만 끔", { domain: false }],
   ["확신 판단 끔", { calibrate: false }],
@@ -19,6 +19,7 @@ const CONFIGS = [
   ["깊이(z) 끔", { useZ: false }],
   ["후보 다시 고르기 끔", { rerank: false }],
   ["새 낱말 끔", { custom: false }],
+  ["왼손잡이 대응 끔", { mirror: false }],
 ];
 
 async function init() {
@@ -36,8 +37,8 @@ const toFrame = (f) => ({ pose: f.pose.map(([x, y, z, v]) => ({ x, y, z, visibil
 
 /** 녹화 하나를 설정 하나로 → 알아들은 낱말들 */
 async function runOne(recording, o) {
-  const cleaner = new FrameCleaner(), seg = new Segmenter(), win = new WindowCommitter(), items = [];
-  const cls = (fs) => classify(rec, fs, o, domainIdx, protos);
+  const cleaner = new FrameCleaner(), seg = new Segmenter(), win = new WindowCommitter(), hand = new Handedness(), items = [];
+  const cls = (fs) => classify(rec, fs, o, domainIdx, protos, hand);
   for (const f of recording.frames) {
     const raw = toFrame(f), frame = o.smooth ? cleaner.clean(raw, f.t) : raw, feat = frameToFeatures(frame, o.useZ);
     if (o.segment === "motion") { const s = seg.push(frame, feat, f.t); if (s) items.push(await cls(s.frames)); }

@@ -37,6 +37,20 @@ export function resampleSequence(frames, seqLen = SEQ_LEN) {
   return out;
 }
 
+/** 좌우를 뒤집은 특징 (왼손잡이: 왼손·오른손을 바꾸고 가로 좌표를 뒤집음). seq = seqLen × FEATURE_DIM */
+export function mirrorSequence(seq) {
+  const out = new Float32Array(seq.length), SWAP = [0, 2, 1, 4, 3, 6, 5, 8, 7];   // 몸 9점: 코, (왼·오른) 어깨·팔꿈치·손목·엉덩이
+  for (let o = 0; o < seq.length; o += FEATURE_DIM) {
+    for (let i = 0; i < 9; i++) { const a = o + i * 3, b = o + SWAP[i] * 3; out[a] = -seq[b] || 0; out[a + 1] = seq[b + 1]; out[a + 2] = seq[b + 2]; }
+    for (let k = 0; k < 63; k += 3) {                  // 왼손 칸(27~) ↔ 오른손 칸(90~). 손이 없는 쪽은 0 그대로
+      out[o + 27 + k] = -seq[o + 90 + k] || 0; out[o + 28 + k] = seq[o + 91 + k]; out[o + 29 + k] = seq[o + 92 + k];
+      out[o + 90 + k] = -seq[o + 27 + k] || 0; out[o + 91 + k] = seq[o + 28 + k]; out[o + 92 + k] = seq[o + 29 + k];
+    }
+    out[o + 153] = seq[o + 154]; out[o + 154] = seq[o + 153];
+  }
+  return out;
+}
+
 // ---------------- 떨림 줄이기 (One Euro) · 손 끊김 메우기 ----------------
 class OneEuro {
   constructor(minCutoff = 1.5, beta = 0.6, dCutoff = 1.0) { Object.assign(this, { minCutoff, beta, dCutoff, x: null, dx: 0, t: null }); }
@@ -142,12 +156,12 @@ export class Segmenter {
 // ---------------- 인식 ----------------
 export class Recognizer {
   async load(base, onProgress) {
-    const meta = await (await fetch(base + "models/meta.json")).json();
+    // 단어 목록(meta)과 모델을 동시에 받음
+    const [meta, bytes] = await Promise.all([fetch(base + "models/meta.json").then((r) => r.json()), fetchBytes(base + "models/model.onnx", onProgress)]);
     if (meta.feature_dim !== FEATURE_DIM || meta.seq_len !== SEQ_LEN) throw new Error(`특징 규격이 다름: 모델 ${meta.feature_dim}×${meta.seq_len}`);
     this.meta = meta; this.labels = meta.labels;
     ort.env.wasm.wasmPaths = new URL(base + "lib/ort/", location.href).href;
     ort.env.wasm.numThreads = 1;                           // 크로스오리진 격리 없이도 동작하게
-    const bytes = await fetchBytes(base + "models/model.onnx", onProgress);
     this.session = await ort.InferenceSession.create(bytes, { executionProviders: ["wasm"], graphOptimizationLevel: "all" });
     this.input = this.session.inputNames[0];
     await this.logits(new Float32Array(SEQ_LEN * FEATURE_DIM));   // 첫 추론 미리
@@ -238,11 +252,23 @@ export function mentionAt(q, w) {
   const ok = at.filter((i) => i >= 0);
   return ok.length ? Math.min(...ok) : -1;
 }
-const bigrams = (s) => { s = s.replace(/\s/g, ""); const out = new Set(); for (let i = 0; i < s.length - 1; i++) out.add(s.slice(i, i + 2)); return out; };
+// 글자 2개 묶음 (같은 글은 한 번만 계산 — 낱말을 고를 때마다 질문 수십 개와 다시 비교하므로)
+const bigramMemo = new Map();
+const bigrams = (text) => {
+  let out = bigramMemo.get(text);
+  if (!out) {
+    const s = text.replace(/\s/g, "");
+    out = new Set();
+    for (let i = 0; i < s.length - 1; i++) out.add(s.slice(i, i + 2));
+    if (bigramMemo.size > 5000) bigramMemo.clear();
+    bigramMemo.set(text, out);
+  }
+  return out;
+};
 /** 낱말 → 비슷한 질문 (드문 말을 무겁게). [[점수, 질문]...] */
 export function rankQuestions(ws, questions, k = 3) {   // k = Infinity 면 전부
   if (!ws.length) return [];
-  const hit = (q, w) => (mentions(q, w) ? 1 : [...bigrams(w)].some((b) => bigrams(q).has(b)) ? 0.5 : 0);
+  const hit = (q, w) => { if (mentions(q, w)) return 1; const bq = bigrams(q); for (const b of bigrams(w)) if (bq.has(b)) return 0.5; return 0; };
   const weight = Object.fromEntries(ws.map((w) => [w, Math.log((questions.length + 1) / (1 + questions.filter((q) => q.includes(w)).length)) + 0.1]));
   const total = ws.reduce((a, w) => a + weight[w], 0) || 1;
   return questions.map((q) => [ws.reduce((a, w) => a + weight[w] * hit(q, w), 0) / total, q]).filter(([s]) => s > 0).sort((a, b) => b[0] - a[0]).slice(0, k);
@@ -251,11 +277,14 @@ export function rankQuestions(ws, questions, k = 3) {   // k = Infinity 면 전�
  *  점수 = Σ log(후보 확률) + lam × Σ log(1 + 앞 낱말과 같은 질문에 나온 횟수). locked 는 사용자가 고른 낱말 (그대로) */
 export function rerank(items, questions, domain, lam = 0.6) {
   if (items.length < 2 || !questions.length) return items.map((it) => it.label);
-  const docs = questions.map((q) => q);
-  const co = (a, b) => {
-    const da = docWords([base(a)], domain), db = docWords([base(b)], domain);
-    return docs.filter((q) => da.some((w) => q.includes(w)) && db.some((w) => q.includes(w))).length;
+  // 낱말(후보)마다 '그 낱말이 나오는 질문들'을 한 번만 구해 두고, 두 낱말이 같이 나오는 질문 수는 그 교집합 크기
+  const inQ = new Map();
+  const qsOf = (label) => {
+    let set = inQ.get(label);
+    if (!set) { const ws = docWords([base(label)], domain); set = new Set(); questions.forEach((q, i) => { if (ws.some((w) => q.includes(w))) set.add(i); }); inQ.set(label, set); }
+    return set;
   };
+  const co = (a, b) => { const A = qsOf(a), B = qsOf(b); let n = 0; for (const i of A) if (B.has(i)) n++; return n; };
   const opts = items.map((it) => (it.locked ? [{ label: it.label, p: 1 }] : it.cands.length ? it.cands : [{ label: it.label, p: 1 }]));
   let prev = opts[0].map((c) => ({ s: Math.log(c.p + 1e-6), path: [c.label] }));
   for (let i = 1; i < opts.length; i++) {
@@ -272,16 +301,35 @@ export function rerank(items, questions, domain, lam = 0.6) {
 }
 
 // ---------------- 낱말 하나 인식 (화면·평가 공통) ----------------
-/** feats(특징 프레임들) → {label, cands, confident, custom}. opts: {domain, calibrate, custom, customSim} */
-export async function classify(rec, feats, opts, domainIdx, protos) {
-  const logits = await rec.logits(resampleSequence(feats));
-  const r = candidates(logits, rec.labels, { allowed: opts.domain && domainIdx && domainIdx.length ? domainIdx : null, calibrate: opts.calibrate });
+/** 왼손잡이 판단 (카메라를 켠 동안 기억): 낱말마다 '그대로'와 '좌우를 뒤집은 것' 중 어느 쪽이 더 확실했는지를 쌓아 감.
+ *  모델은 오른손잡이 수어로 배웠으므로 뒤집은 쪽이 꾸준히 더 확실하면 왼손잡이로 보고 뒤집은 결과를 씀.
+ *  한 낱말만으로는 헷갈릴 수 있어(대칭인 수어 등) 처음에는 뒤집은 쪽이 훨씬 확실할 때만(bias) 바꿈 */
+export class Handedness {
+  constructor({ bias = 0.7, clamp = 2, limit = 6 } = {}) { Object.assign(this, { bias, clamp, limit, score: 0 }); }
+  reset() { this.score = 0; }
+  /** p0 = 그대로의 1위 확률, p1 = 뒤집은 것의 1위 확률 → 뒤집은 결과를 쓸지 */
+  decide(p0, p1) {
+    const d = Math.max(-this.clamp, Math.min(this.clamp, Math.log((p1 + 1e-4) / (p0 + 1e-4))));
+    this.score = Math.max(-this.limit, Math.min(this.limit, this.score + d));
+    return this.score > this.bias;
+  }
+}
+/** feats(특징 프레임들) → {label, cands, confident, custom, mirrored}. opts: {domain, calibrate, custom, customSim, mirror}. hand = Handedness (없으면 이 낱말만 보고 판단) */
+export async function classify(rec, feats, opts, domainIdx, protos, hand = null) {
+  const allowed = opts.domain && domainIdx && domainIdx.length ? domainIdx : null;
+  const seq = resampleSequence(feats);
+  let logits = await rec.logits(seq), mirrored = false;
+  let r = candidates(logits, rec.labels, { allowed, calibrate: opts.calibrate });
+  if (opts.mirror) {
+    const lm = Float32Array.from(await rec.logits(mirrorSequence(seq))), rm = candidates(lm, rec.labels, { allowed, calibrate: opts.calibrate });
+    if ((hand || new Handedness()).decide(r.cands[0]?.p ?? 0, rm.cands[0]?.p ?? 0)) { logits = lm; r = rm; mirrored = true; }
+  }
   let { cands, confident } = r, custom = false;
   if (opts.custom && protos && protos.length) {
     const m = matchCustom(logits, protos);
     if (m && m.sim >= (opts.customSim ?? 0.85)) { cands = [{ label: m.word, p: m.sim, custom: true }, ...cands].slice(0, 5); confident = true; custom = true; }
   }
-  return { label: cands[0] ? cands[0].label : "?", cands, confident, custom, logits };
+  return { label: cands[0] ? cands[0].label : "?", cands, confident, custom, logits, mirrored };
 }
 
 /** 예전 방식 (팀원 useRecognizer.ts): 0.25초마다 최근 48프레임을 보고, 같은 낱말이 연속 2번 확실하면 확정 */
@@ -305,4 +353,5 @@ export class WindowCommitter {
 
 /** 기본 설정 (화면의 '설정' 과 평가 페이지가 같이 씀) */
 // 관절 인식 기본은 가벼운 모드 (Holistic 은 얼굴 점까지 계산해 느려서 점이 손을 늦게 따라감)
-export const DEFAULTS = { engine: "light", worker: true, segment: "motion", domain: true, calibrate: true, smooth: true, useZ: true, rerank: true, custom: true, customSim: 0.85 };
+// mirror: 왼손잡이 대응 (좌우를 뒤집은 것도 인식해 보고 Handedness 로 판단)
+export const DEFAULTS = { engine: "light", worker: true, segment: "motion", domain: true, calibrate: true, smooth: true, useZ: true, rerank: true, custom: true, customSim: 0.85, mirror: true };

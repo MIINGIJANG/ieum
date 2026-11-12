@@ -78,3 +78,36 @@ def test_sos_not_configured(client, monkeypatch):
     assert client.get("/sos/config").json()["er"] is False
     st = client.get("/sos/status").json()
     assert st["failed"] >= 1 and st["recent_errors"][0]["stage"] == "config"
+
+
+def test_web_files_precompressed(client):
+    """웹 파일은 미리 압축해 둔 것을 보내고, 바뀌지 않았으면 304 (ksl/webfiles.py)."""
+    import gzip
+    from pathlib import Path
+    src = (Path(__file__).resolve().parents[1] / "web/sign/core.js").read_bytes()
+    r = client.get("/sign/core.js", headers={"Accept-Encoding": "gzip"})
+    assert r.status_code == 200 and r.headers["content-encoding"] == "gzip" and r.headers["cache-control"] == "no-cache"
+    assert r.content == src and int(r.headers["content-length"]) < len(src)            # 클라이언트가 풀어 준 내용 = 원본
+    again = client.get("/sign/core.js", headers={"Accept-Encoding": "gzip", "If-None-Match": r.headers["etag"]})
+    assert again.status_code == 304
+    plain = client.get("/sign/core.js", headers={"Accept-Encoding": "identity"})        # 압축을 못 받는 클라이언트는 원본
+    assert plain.status_code == 200 and "content-encoding" not in plain.headers and plain.content == src
+    png = client.get("/favicon-32.png", headers={"Accept-Encoding": "gzip"})            # 이미 압축된 형식은 그대로
+    assert png.status_code == 200 and "content-encoding" not in png.headers and png.headers["cache-control"] == "no-cache"
+    assert gzip.decompress(gzip.compress(src)) == src
+    assert client.get("/", headers={"Accept-Encoding": "gzip"}).headers["content-type"].startswith("text/html")
+
+
+def test_offline_manifest(client):
+    """오프라인 저장용 파일 목록: 파일마다 해시, 미리 저장할 목록에서 점검 페이지·안 쓰는 모델은 뺌."""
+    m = client.get("/offline/manifest")
+    assert m.headers["cache-control"] == "no-store"
+    m = m.json()
+    files, pre = m["files"], set(m["precache"])
+    assert files["/"] == files["/index.html"] and len(m["version"]) == 12
+    for need in ["/", "/sos.js", "/sign/app.js", "/sign/core.js", "/sign/popup.css", "/sign/models/model.onnx", "/sign/models/hand_landmarker.task",
+                 "/sign/lib/ort/ort-wasm-simd-threaded.wasm", "/models/avatar.glb", "/vendor/three/three.module.js"]:
+        assert need in pre, need
+    for skip in ["/sign/models/holistic_landmarker.task", "/models/avatar.vrm", "/blocks.html", "/sign/eval.html"]:
+        assert skip in files and skip not in pre, skip
+    assert all(u in files for u in pre)

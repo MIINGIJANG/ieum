@@ -1,11 +1,11 @@
 // SOS: 버튼을 누르면 위치 권한을 묻고, 허락하면 팝업에 지도(위)와 가장 가까운 응급실 정보(아래).
 // 팝업 틀·자리·폭·움직임은 카메라 팝업과 같음 (sign/popup.css, sign/app.js 의 place·springScroll).
-// 미리 할 수 있는 일(카카오 지도 불러오기, 위치를 이미 허락한 기기면 위치·가까운 응급실)은 첫 로딩 화면에서 → 'sos-ready'
+// 카카오 지도 불러오기는 첫 로딩 화면에서 미리 → 'sos-ready' (위치·응급실은 누를 때마다 새로)
 const $ = (id) => document.getElementById(id);
 const API = new URL("./", import.meta.url).href;
 const SPRING = { response: 0.35, damping: 1 }, POP_SCALE = { from: 0.5, to: 0.2 };   // 카메라 팝업과 같은 값
 
-let cfg = null, kakaoReady = null, pos = null, posAt = 0, result = null, resultFor = null, map = null, layers = [];
+let cfg = null, kakaoReady = null, pos = null, map = null, layers = [];
 let open = false, scrollBack = null;
 const pop = { s: 1, sv: 0, o: 1, ov: 0, ts: 1, to: 1, raf: 0, last: 0 };
 
@@ -19,31 +19,18 @@ function loadKakao(key) {
     document.head.append(s);
   });
 }
-// 위치: 빠른 위치(와이파이·기지국)로 먼저. 정밀 GPS 는 몇~수십 초 걸려서 쓰지 않음 (응급실 찾기에는 충분)
-function getPos(timeout = 8000, precise = false, fresh = false) {
-  return new Promise((res, rej) => {
-    if (!navigator.geolocation) return rej(new Error("no geolocation"));
-    navigator.geolocation.getCurrentPosition((p) => {
-      pos = { lat: p.coords.latitude, lng: p.coords.longitude }; posAt = Date.now(); res(pos);
-    }, rej, { enableHighAccuracy: precise, timeout, maximumAge: precise || fresh ? 0 : 300000 });
-  });
-}
-async function fetchNearest(p, fresh = false) {   // fresh: 저장해 둔 결과를 쓰지 않고 새로 (서버 1분 캐시도 건너뜀)
-  const key = `${p.lat.toFixed(3)},${p.lng.toFixed(3)}`;
-  if (!fresh && result && resultFor === key) return result;
-  const r = await fetch(`${API}sos/nearest?lat=${p.lat}&lng=${p.lng}${fresh ? "&fresh=1" : ""}`);
+// 가까운 응급실: 늘 새로 조회 (서버의 1분 저장도 건너뜀 — 병상·진료 제한은 실시간 정보)
+async function fetchNearest(p) {
+  const r = await fetch(`${API}sos/nearest?lat=${p.lat}&lng=${p.lng}&fresh=1`);
   const d = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(d.error || r.status);
-  result = d; resultFor = key;
   return d;
 }
 (async () => {
   try {
     cfg = await (await fetch(`${API}sos/config`)).json();
     if (cfg.kakao_js) { kakaoReady = loadKakao(cfg.kakao_js); await kakaoReady.catch(() => { kakaoReady = null; }); }
-    // 위치를 이미 허락해 둔 기기면 위치와 가까운 응급실까지 미리 (처음이면 권한은 버튼을 누를 때 물음)
-    const st = await navigator.permissions?.query({ name: "geolocation" }).catch(() => null);
-    if (st && st.state === "granted") await getPos(6000).then(fetchNearest).catch(() => {});
+    // 위치·가까운 응급실은 여기서 미리 찾지 않음: SOS 를 누를 때마다 지금 위치로 새로 찾으므로 미리 찾은 것은 쓰이지 않고 첫 로딩만 늦춤
   } catch { /* 준비 실패: 버튼을 누를 때 다시 */ }
   dispatchEvent(new Event("sos-ready"));
 })();
@@ -404,7 +391,7 @@ async function refresh(p) {
   lastPos = p;
   // 지도가 아직 없으면 먼저 내 위치만. 카카오 지도가 끝까지 안 불러와져도 응급실 정보는 4초 뒤 보여 줌
   const mapP = Promise.race([ensureMap().then(() => { if (open && !map) drawMap(p, null); }), new Promise((r) => setTimeout(r, 4000))]);
-  try { const d = await fetchNearest(p, true); await mapP; await opened(); if (my === gen) { showInfo(d); drawMap(p, (d.ers || [])[sel] || d); } }
+  try { const d = await fetchNearest(p); await mapP; await opened(); if (my === gen) { showInfo(d); drawMap(p, (d.ers || [])[sel] || d); } }
   catch { await mapP; await opened(); if (my === gen) showInfo(null, true); }
 }
 
@@ -495,7 +482,7 @@ function locate() {
     let done = false, t2 = 0, t30 = 0;
     const end = (f, v) => { if (done) return; done = true; ids.forEach((i) => g.clearWatch(i)); clearTimeout(t2); clearTimeout(t30); f(v); };
     cancelLocate = () => end(rej, new Error("cancelled"));
-    const ok = (p) => { pos = { lat: p.coords.latitude, lng: p.coords.longitude }; posAt = Date.now(); end(res, pos); };
+    const ok = (p) => { pos = { lat: p.coords.latitude, lng: p.coords.longitude }; end(res, pos); };
     const bad = (e) => { if (e && e.code === 1) end(rej, e); };   // 거절만 멈춤, 나머지 오류는 계속 기다림
     ids.push(g.watchPosition(ok, bad, { enableHighAccuracy: false, maximumAge: 60000 }));
     t2 = setTimeout(() => { if (!done) ids.push(g.watchPosition(ok, bad, { enableHighAccuracy: true, maximumAge: 0 })); }, 3000);

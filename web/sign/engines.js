@@ -9,9 +9,12 @@ const pts = (a) => (a ? a.map((p) => ({ x: p.x, y: p.y, z: p.z, visibility: p.vi
 async function bytes(url) { const r = await fetch(url); if (!r.ok) throw new Error(`${url} (${r.status})`); return new Uint8Array(await r.arrayBuffer()); }
 
 export async function createEngine(kind, base) {
-  const vision = await FilesetResolver.forVisionTasks(new URL(base + "lib/mediapipe", self.location.href).href);
+  // 라이브러리(wasm)와 모델 파일을 동시에 받음 (차례로 받으면 그만큼 첫 로딩이 길어짐). 엔진 만들기는 차례로
+  const files = kind === "light" ? ["pose_landmarker_lite.task", "hand_landmarker.task"] : ["holistic_landmarker.task"];
+  const [vision, ...bufs] = await Promise.all([FilesetResolver.forVisionTasks(new URL(base + "lib/mediapipe", self.location.href).href),
+    ...files.map((f) => bytes(base + "models/" + f))]);
   const make = async (Cls, file, extra = {}) => {
-    const buf = await bytes(base + "models/" + file);
+    const buf = bufs[files.indexOf(file)];
     for (const delegate of ["GPU", "CPU"]) {
       try { return await Cls.createFromOptions(vision, { baseOptions: { modelAssetBuffer: buf, delegate }, runningMode: "VIDEO", ...extra }); }
       catch (e) { console.warn(file, delegate, "실패", e); }

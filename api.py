@@ -16,9 +16,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from ksl import webfiles
 from ksl.logsync import LogSync
 from ksl.pipeline import SafetySignPipeline
 
@@ -30,27 +30,19 @@ class UTF8JSON(JSONResponse):
 @asynccontextmanager
 async def lifespan(app):
     _warm_on_start()
+    if not os.environ.get("KSL_NO_WARMUP"):
+        webfiles.warm(WEB)     # 웹 파일 목록·압축본을 뒤에서 미리 (첫 방문자가 압축을 기다리지 않게)
     sync.start()               # 수어 없는 단어 기록: 예전 서버의 기록 받기 + 10분마다 올리기 (ksl/logsync.py)
     yield
     sync.stop()
 
 
 ROOT = Path(__file__).resolve().parent
+WEB = ROOT / "web"
 app = FastAPI(title="이음 — 산업안전 수어 안내 API", version="0.4.0", default_response_class=UTF8JSON, lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-app.add_middleware(GZipMiddleware, minimum_size=1000)   # 아바타(6MB→2.5MB)·동작 JSON 압축 → 휴대폰 로딩 빠르게
+app.add_middleware(GZipMiddleware, minimum_size=1000)   # 답·동작 JSON 압축. 웹 파일(web/)은 미리 압축해 둔 것을 보냄 (ksl/webfiles.py)
 
-
-@app.middleware("http")
-async def _sign_no_stale(request, call_next):
-    """카메라 수어 입력(/sign/) 화면 파일은 매번 새 버전인지 확인 (브라우저가 예전 app.js 를 그대로 쓰면 화면 틀과 코드가 섞임).
-    바뀌지 않았으면 304 로 바로 끝나서 느려지지 않음. 큰 모델 파일(.onnx·.task·.wasm)은 그대로 둠."""
-    res = await call_next(request)
-    p = request.url.path
-    if (p.startswith("/sign/") and (p.endswith("/") or p.rsplit(".", 1)[-1] in ("html", "js", "css", "json"))) \
-            or p in ("/", "/index.html", "/sos.js", "/sw.js"):   # 본 화면·SOS 도 (예전 sos.js 가 남아 새 화면과 섞이지 않게)
-        res.headers["Cache-Control"] = "no-cache"
-    return res
 
 INDEX = os.environ.get("KSL_INDEX", "checkpoints/kosha_index.pkl")
 
@@ -318,7 +310,12 @@ def motions(req: Glosses):
     return out
 
 
-# 웹 화면 (web/index.html, 3D 모델·라이브러리 포함). API 경로보다 뒤에 둬야 함
+@app.get("/offline/manifest")
+def offline_manifest():
+    """오프라인 저장용 웹 파일 목록: 파일마다 내용 해시 (ksl/webfiles.py). 화면(web/sw.js)이 저장해 둔 것과 같은지 확인하는 데 씀."""
+    return JSONResponse(webfiles.manifest(WEB), headers={"Cache-Control": "no-store"})
+
+
 @app.get("/sos/config")
 def sos_config():
     """SOS 준비 상태: 지도 표시용 카카오 JavaScript 키(공개용, 도메인으로 보호)와 서버 키가 있는지."""
@@ -347,4 +344,5 @@ def sos_status():
     return sos.status()
 
 
-app.mount("/", StaticFiles(directory=ROOT / "web", html=True), name="web")
+# 웹 화면 (web/index.html, 3D 모델·라이브러리 포함). API 경로보다 뒤에 둬야 함
+app.mount("/", webfiles.WebFiles(directory=WEB, html=True), name="web")
