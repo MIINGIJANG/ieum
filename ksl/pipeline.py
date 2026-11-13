@@ -604,7 +604,11 @@ class SafetySignPipeline:
             hint = None
             if mode == "llm" and any("찾을 수 없" in t for t in texts):   # Claude 도 문서에서 근거를 못 찾음 → 답하지 않음
                 return self._abstain(question, top)
-            texts = self._clean_answer([" ".join(strip_marks(t).split("\n")) for t in texts], hits)
+            texts = [" ".join(strip_marks(t).split("\n")) for t in texts]
+            if mode == "llm":                              # Claude 가 쓴 문장은 그대로 (같은 문장만 하나로)
+                texts = list(dict.fromkeys(t for t in texts if t.strip()))
+            else:                                          # 문서에서 뽑은 문장: 표 칸이 뒤섞인 줄·거의 같은 문장 정리
+                texts = self._clean_answer(texts, hits)
             if not texts:
                 return self._abstain(question, top)
             answer_text = " ".join(texts)

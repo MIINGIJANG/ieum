@@ -331,7 +331,7 @@ class SafetyRAG:
         from . import guard
         if os.environ.get("ANTHROPIC_API_KEY") and guard.llm_budget():   # 하루 한도를 넘으면 추출식으로 (ksl/guard.py)
             try:
-                out = self._llm_answer(query, hits, max_sentences)
+                out = self._llm_answer(query, hits, max_sentences, rows)
                 LLM_STATUS["last"] = "정상"
                 LLM_STATUS["ok"] += 1
                 return out, "llm"
@@ -390,8 +390,12 @@ class SafetyRAG:
         top = [i for i in top if sc[i] >= 0.75 * sc[top[0]]]  # 1위보다 많이 낮은 문장은 버림
         return [sents[i] for i in top]
 
-    def _llm_answer(self, query, hits, n):
-        ctx = "\n".join(f"[{h['doc']} p.{h['page']}] {h['text']}" for h in hits)
+    def _llm_answer(self, query, hits, n, rows=None):
+        # 표는 글로 뽑으면 칸이 뒤섞임 → 표 줄을 문장으로 정리한 것(ksl/rowtext.py)을 같이 보냄 (내용은 표 그대로)
+        def block(h):
+            made = rows(h)[0] if rows else []
+            return f"[{h['doc']} p.{h['page']}] {h['text']}" + (f"\n(위 표를 줄마다 정리한 것: {' '.join(made)})" if made else "")
+        ctx = "\n".join(block(h) for h in hits)
         prompt = (
             "아래 산업안전 문서 내용만 근거로 질문에 답하세요. 문서에 없는 내용은 만들지 마세요.\n"
             f"- 수어로 번역할 것이므로 짧고 쉬운 평서문 {n}문장 이내\n"
