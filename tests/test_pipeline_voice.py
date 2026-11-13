@@ -52,8 +52,8 @@ def test_keypoints_short_answer_keeps_all_meaning(pipe):
     from ksl import keypoints
     a = "정화통은 6개월마다 교체해야 합니다."
     r = keypoints.rule_based(pipe, "정화통은 언제 교체해요?", a, [a])
-    assert [u["gloss"] for u in r["units"]] == ["6개월", "정화통", "바꾸다1", "필요1"]
-    assert [u["word"] for u in r["units"]] == ["6개월마다", "정화통은", "교체해야", "합니다"]   # 블록이 문장 어절 그대로
+    assert [u["gloss"] for u in r["units"]] == ["6개월", "마다", "정화통", "바꾸다1", "필요1"]
+    assert [u["word"] for u in r["units"]] == ["6개월", "마다", "정화통은", "교체해야", "합니다"]   # 블록이 문장 어절 그대로
     a = "보호구는 늘 사용할 수 있도록 관리하고 깨끗하게 유지해야 합니다. 사용하지 않을 때는 건조한 곳에 보관합니다."
     g = [u["gloss"] for u in keypoints.rule_based(pipe, "보호구는 어떻게 관리해요?", a, [a.split(". ")[0] + ".", a.split(". ")[1]])["units"]]
     assert "보호1" in g and "깨끗하다1" in g and "필요1" in g and not any(x.startswith("가능") for x in g)   # 첫 문장, '할 수 있도록'은 뺌
