@@ -203,6 +203,7 @@ class BM25:
         return out
 
 
+ROW_BONUS, LIST_BONUS = 0.08, 0.12   # 추출식: 표 줄로 만든 문장·종류 나열 문장의 가산점
 LLM_STATUS = {"last": None, "ok": 0, "fail": 0, "last_error": None, "last_error_at": None}  # Claude 호출 결과 (/llm_check 로 확인)
 _LLM_CACHE = {}               # (질문, 검색 결과) → Claude 답변
 _CLIENT = None                # Anthropic SDK 클라이언트 (연결 재사용)
@@ -372,7 +373,19 @@ class SafetyRAG:
         v = TfidfVectorizer(analyzer="char_wb", ngram_range=(2, 4)).fit(sents + [q])
         sc = (v.transform(sents) @ v.transform([q]).T).toarray().ravel()
         sc = sc + np.array([0.08 * (len(hits) - r) / len(hits) for _, r in cand])
-        sc = sc + np.array([0.08 if s_ in rowset else 0.0 for s_, _ in cand])   # 표 줄로 만든 문장은 완성된 문장 → 제목 줄보다 먼저
+        # 표 줄로 만든 문장은 완성된 문장 → 제목 줄보다 먼저. 단 '○○는 A, B, C가 있습니다'(종류 나열)는 종류를 물을 때만
+        asks_kinds = re.search(r"(종류|등급|몇\s*가지|어떤\s*(게|것|거)|뭐가\s*있|무엇이\s*있)", query) is not None
+        is_list = lambda s_: re.search(r", .*(이|가) 있습니다\.$", s_) is not None
+        sc = sc + np.array([((LIST_BONUS if asks_kinds else -0.15) if is_list(s_) else (ROW_BONUS if len(s_) <= 110 and "의 기호는" not in s_ else 0.0)) if s_ in rowset else 0.0 for s_, _ in cand])
+        # 표 줄 문장의 주어('화학물질용보호복 3형식', '용접용 안면보호구')에 질문의 낱말이 그대로 있으면 그 줄을 먼저
+        #  (글자 유사도만으로는 '3형식'과 '1b형식', '특급'과 '2급'을 가리지 못함)
+        toks = [re.sub(r"(하고|이랑|랑|은|는|이|가|을|를|에|의|도|과|와)$", "", t) for t in re.split(r"[\s,?.!]+", query)]
+        common = ("종류", "등급", "기호", "보호구", "마스크", "안전화", "안전모", "보안경", "장갑", "작업", "작업용", "보호복")
+        toks = [t for t in toks if t not in common and (len(t) >= 3 or re.search(r"[0-9A-Za-z]", t))]   # 흔한 말은 빼고, 그 줄만의 낱말로
+        def subj_hit(s_):
+            head = re.split(r"(?:은|는|의|:)\s", s_, maxsplit=1)[0].replace(" ", "")
+            return min(sum(t in head for t in toks), 2) * 0.07 if len(head) <= 30 else 0.0
+        sc = sc + np.array([subj_hit(s_) if s_ in rowset and not is_list(s_) else 0.0 for s_, _ in cand])
         top = np.argsort(-sc)[:n]
         top = [i for i in top if sc[i] >= 0.75 * sc[top[0]]]  # 1위보다 많이 낮은 문장은 버림
         return [sents[i] for i in top]
