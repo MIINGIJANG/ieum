@@ -525,7 +525,16 @@ class SafetySignPipeline:
         key = (hit["doc"], hit["page"])
         if key not in self._row_cache:
             tables = self.tables.get(*key)
-            self._row_cache[key] = [x for t in tables for x in row_sentences(t["rows"])]
+            made = []
+            for i, t in enumerate(tables):
+                rows = t["rows"]
+                if i == 0 and rows and not re.sub(r"\s", "", rows[0][0] or "") and hit["page"] > 1:
+                    # 앞 쪽에서 이어지는 표(머리글 없음): 앞 쪽 마지막 표의 머리글을 붙임 (제목·칸 수가 같을 때)
+                    before = self.tables.get(hit["doc"], hit["page"] - 1)
+                    if before and before[-1].get("caption") == t.get("caption") and len(before[-1]["rows"][0]) == len(rows[0]):
+                        rows = [before[-1]["rows"][0]] + rows
+                made += row_sentences(rows, t.get("caption"))
+            self._row_cache[key] = made
         # 그 쪽의 표 줄 중 이 문단에 실제로 들어 있는 줄만 (같은 쪽의 다른 표·다른 줄이 끼어들지 않게)
         flat = re.sub(r"\s", "", strip_marks(hit["text"]))
         def inside(src):                      # 줄의 글자(3글자씩)가 문단에 절반 넘게 있으면 들어 있는 것 (문단에서는 칸이 뒤섞여 있어 통째로는 못 찾음)
@@ -584,7 +593,9 @@ class SafetySignPipeline:
             if top < self.min_score:                       # 근거 약함 → 답하지 않음
                 # 단, 산업안전 핵심어가 있는 질문이고 Claude 를 쓸 수 있으면 Claude 에게 맡김: 말이 달라 점수만 낮은 질문
                 #  ('보호구 수리는 누가 해요?' ↔ 문서 '전문가에 의해서만')을 살림. Claude 가 근거를 못 찾으면 그대로 답하지 않음
-                if not (os.environ.get("ANTHROPIC_API_KEY") and self.in_domain(question) and top >= self.min_score * 0.3):
+                from . import guard
+                if not (os.environ.get("ANTHROPIC_API_KEY") and guard.llm_budget(spend=False)
+                        and self.in_domain(question) and top >= self.min_score * 0.3):
                     return self._abstain(question, top)
                 rescue = True
             texts, mode = self.rag.answer(question, hits, rows=self._rows)

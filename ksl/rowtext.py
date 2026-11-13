@@ -68,41 +68,173 @@ def term_desc(term, desc):
     return f"{josa(term, '은는')} {desc}입니다."
 
 
-def row_sentences(rows):
-    """표 하나(행·열, 병합 칸은 None) → [(문장, 그 줄의 원래 글자)] 목록. 모르는 모양의 표는 빈 목록.
-    원래 글자(띄어쓰기 뺀 것)는 '검색된 문단에 이 줄이 들어 있는지' 확인하는 데 씀."""
+def unspace(t):
+    """'벨 트 식', '할 로 겐 용' 처럼 글자를 벌려 쓴 말을 붙임 (한 글자짜리가 셋 이상 이어질 때만)."""
+    t = re.sub(r"(?<![가-힣])(?:[가-힣] ){2,}[가-힣](?![가-힣])", lambda m: m.group(0).replace(" ", ""), t or "")
+    m = re.fullmatch(r"((?:[가-힣] )+[가-힣])(\s*\(.*\))?", t)         # '상 체', '몸 체 (상·하체)' 처럼 전체가 벌려 쓴 말
+    return m.group(1).replace(" ", "") + (m.group(2) or "") if m else t
+
+
+def subject(caption):
+    """표 제목 → 무엇의 표인지: '방진마스크의 종류(등급)' → '방진마스크', '눈 보호구의 종류: 형태에 따른 종류' → '눈 보호구'."""
+    if not caption:
+        return ""
+    t = ""
+    for part in reversed(caption.split(": ")):               # 작은 제목에 이름이 있으면 그것 ('보호복의 종류: 방열복의 종류' → 방열복)
+        m = re.match(r"^(.+?)의 종류", part)
+        if m:
+            t = m.group(1)
+            break
+    t = re.sub(r"\(.*?\)", "", t).strip()
+    return t if 0 < len(t) <= 12 else ""
+
+
+def _items(cell):
+    """칸 안의 '․a ․b' 나열 → ['a', 'b']"""
+    parts = [x.strip(" ,") for x in re.split(r"\s*[․·•]\s*(?=[가-힣A-Za-z0-9])", cell or "") if x.strip(" ,")]
+    return parts or ([cell.strip()] if cell and cell.strip() else [])
+
+
+def row_sentences(rows, caption=None):
+    """표 하나(행·열, 병합 칸은 None) → [(문장, 그 줄의 원래 글자)] 목록. 문장으로 만들 수 없는 표는 빈 목록.
+    원래 글자(띄어쓰기 뺀 것)는 '검색된 문단에 이 줄이 들어 있는지' 확인하는 데 씀.
+    표의 모양(머리글)에 따라:
+      작업명·보호구            → '○○ 작업에는 △△를 착용합니다.'
+      종류·사용구분(성능·구조)  → '○○는 …것입니다.'
+      등급이 가로로 놓인 표      → '방진마스크 특급은 … 에서 사용합니다.'
+      종류·기호 / 착용부위 / 시험가스 → '○○의 기호는 H입니다.'
+      그 밖(칸 2개 이상)         → '송기마스크: 종류 호스 마스크, 등급 폐력흡인형, 구분 안면부.' (머리글과 칸을 그대로 이어 씀)
+    그리고 표마다 '○○에는 A, B, C가 있습니다.' 한 문장 (종류를 묻는 질문용)."""
     if not rows or len(rows) < 2:
         return []
+    if not _head(rows[0][0]) or sum(bool(_head(c)) for c in rows[0]) < 2:   # 머리글이 없는 표(앞 쪽에서 이어진 표 등)는 건드리지 않음
+        return []
+    if any(c is None for c in rows[0]):                      # 머리글이 병합된 칸(None): 그 칸의 값은 앞 칸에 붙임 ('송풍기형' + '전동')
+        keep = [i for i, c in enumerate(rows[0]) if c is not None]
+        fixed = []
+        for row in rows:
+            row = list(row) + [None] * (len(rows[0]) - len(row))
+            new = []
+            for i, c in enumerate(row[:len(rows[0])]):
+                if i in keep:
+                    new.append(c)
+                elif c and new:
+                    new[-1] = f"{new[-1]} {c}" if new[-1] else c
+            fixed.append(new)
+        rows = fixed
     head = [_head(c) for c in rows[0]]
-    out, carry = [], [None] * len(head)
-    body = []
+    subj = subject(caption)
+    out, carry, body = [], [None] * len(head), []
     for r in rows[1:]:
         r = list(r) + [None] * (len(head) - len(r))
-        for i, c in enumerate(r[:len(head)]):               # 병합된 칸(None)은 위 칸의 값
+        merged = [c is None for c in r[:len(head)]]
+        for i, c in enumerate(r[:len(head)]):               # 병합된 칸(None)은 위 칸의 값 (첫 칸, 그리고 그 밖의 표에서는 모든 칸)
             if c is None:
-                r[i] = carry[i] if i == 0 else None
+                r[i] = carry[i]
             else:
                 carry[i] = c
-        body.append(r)
+        body.append((r, merged))
     col = lambda *names: next((i for i, h in enumerate(head) if h in names), None)
+    named = lambda term: term if not subj or subj.replace(" ", "")[-2:] in term.replace(" ", "") else f"{subj} {term}"
+
+    def listing(terms, what=None):
+        terms = list(dict.fromkeys(t for t in terms if t and len(t) <= 24))
+        if len(terms) >= 2 and (subj or what):
+            name = what or f"{subj}"
+            out.append((f"{josa(name, '은는')} {', '.join(terms)}{'이' if has_final(terms[-1]) else '가'} 있습니다.", _head("".join(terms))))
+
     w, g = col("작업명"), col("보호구")
     if w is not None and g is not None:
-        return [(s, _head(r[w])) for r in body if (s := work_gear(r[w], r[g]))]
+        return [(s, _head(r[w])) for r, m in body if not m[w] or not m[g] if (s := work_gear(r[w], r[g]))]
+    # 등급이 가로로 놓인 표: ['등급', '특급', '1급', '2급'] / ['사용장소', …]
+    if head[0] == "등급" and len(head) >= 3 and all(re.fullmatch(r"(특|\d)급", h or "") for h in head[1:]):
+        listing([h for h in head[1:]], f"{subj} 등급" if subj else "등급")
+        for r, m in body:
+            label = _head(r[0])
+            if m[0] and any(not x for x in m[1:]):           # 여러 칸에 걸친 덧붙임 문장
+                note = clean(next(c for c, x in zip(r[1:], m[1:]) if not x))
+                if note:
+                    out.append((note if note.endswith(".") else note + ".", _head(note)))
+                continue
+            for j in range(1, len(head)):
+                if m[j] or not r[j]:
+                    continue
+                its = [clean(x) for x in _items(r[j])]
+                term = f"{subj} {head[j]}".strip()
+                if label == "사용장소":
+                    out.append((f"{josa(term, '은는')} {', '.join(its)}에서 사용합니다.", _head(r[j])))
+                else:
+                    out.append((f"{term}의 {clean(rows[0][0] and r[0])}: {', '.join(its)}.", _head(r[j])))
+        return out
     t = col("종류", "분류", "종류(기호)")
     d = col("사용구분", "성능구분", "구조특징", "성능")
     grade, code = col("등급"), col("기호")
     if t is not None and d is not None:
-        for r in body:
-            term = clean(r[t])
+        names = []
+        for r, m in body:
+            term = unspace(clean(r[t]))
+            names.append(term + ("형" if head[t] == "종류(기호)" and term else ""))
             if head[t] == "종류(기호)" and term:
                 term += "형"
             if grade is not None and r[grade] and clean(r[grade]) not in ("－", "-"):
                 term = f"{term} {clean(r[grade])}"
             if code is not None and code != t and r[code] and term:
                 term = f"{term}({clean(r[code])})"
-            s = term_desc(term, r[d] or "")
+            desc = clean(r[d] or "")
+            if m[t] and not m[d] and len(desc) <= 12:          # 한 종류 아래 여러 줄 ('안전그네식' 아래 '1개 걸이용'…) → 아래에서 묶음
+                continue
+            s = term_desc(named(term) if head[t] == "종류(기호)" else term, desc)
             if s:
                 out.append((s, _head(r[d])))
+            elif code is not None and r[code] and term:        # 설명 없이 기호만 있는 줄 ('귀덮개 － EM')
+                out.append((f"{josa(clean(r[t]), '의의')[:-1]}의 기호는 {clean(r[code])}입니다.", _head(r[t]) + _head(r[code])))
+        # 한 종류 아래 짧은 줄이 여러 개면 한 문장으로: '안전대 안전그네식에는 1개 걸이용, U자 걸이용…이 있습니다.'
+        groups = {}
+        for r, m in body:
+            if r[t] and r[d] and len(clean(r[d])) <= 12:
+                groups.setdefault(unspace(clean(r[t])), []).append(clean(r[d]))
+        for term, vals in groups.items():
+            if len(vals) >= 2:
+                out.append((f"{josa(named(term), '은는')} {', '.join(vals)}{'이' if has_final(vals[-1]) else '가'} 있습니다.", _head("".join(vals))))
+        listing(names)
+        return out
+    # 종류 + 값 하나 (기호·착용부위·시험가스…)
+    if len(head) == 2 and head[0] and head[1]:
+        h0, h1 = unspace(clean(rows[0][0])), unspace(clean(rows[0][1]))
+        terms = []
+        for r, m in body:
+            term, val = unspace(clean(r[0])), unspace(clean(r[1] or ""))
+            if not term or not val or m[1]:
+                continue
+            terms.append(term)
+            if h1 == "시험가스":
+                val = re.sub(r"\s*\([A-Za-z ]+\)\s*[\d ]*$", "", val)   # 화학식은 글로 뽑으면 깨져서 뺌 ('(C H ) 6 12')
+            if len(val) > 20:                                  # 값이 설명이면 '○○는 …입니다'
+                sent = term_desc(named(term), val)
+                if sent:
+                    out.append((sent, _head(r[0]) + _head(r[1])))
+                continue
+            who = f"{term} {subj}" if h1 == "시험가스" and subj else (f"{subj} {term}" if h1 == "기호" and subj else term)
+            out.append((f"{who}의 {h1.replace('시험가스', '시험 가스').replace('착용부위', '착용 부위')}{'은' if has_final(h1) else '는'} {val}입니다.", _head(r[0]) + _head(r[1])))
+        listing(terms, h0 if "따른" in h0 else None)
+        return out
+    # 그 밖의 표: 머리글과 칸을 그대로 이어 씀 (숫자만 있는 표는 뺌)
+    if len(head) >= 3 and all(head):
+        names = []
+        for r, m in body:
+            cells = [(unspace(clean(h)), unspace(clean(c or ""))) for h, c in zip(rows[0], r)]
+            cells = [(h, c) for h, c in cells if c and c not in ("－", "-")]
+            if len(cells) < 2 or sum(ch.isdigit() for _, c in cells for ch in c) > sum(len(c) for _, c in cells) / 2:
+                continue
+            if any(len(c) > 160 for _, c in cells):
+                continue
+            names.append(cells[0][1])
+            if len(cells) == 2:                              # '고글형 (1안식)의 특성: 1. … 2. …'
+                line = f"{cells[0][1]}의 {cells[1][0]}: {cells[1][1]}"
+            else:
+                line = f"{subj + ': ' if subj else ''}" + ", ".join(f"{h} {c}" for h, c in cells)
+            out.append((line.rstrip(".") + ".", _head("".join(c for _, c in cells[1:]))))
+        listing(names)
     return out
 
 

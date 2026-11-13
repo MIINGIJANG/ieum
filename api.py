@@ -97,14 +97,13 @@ def health():
             "motion_glosses": len(pipe.motion.index) if pipe.motion else 0}
 
 
-TOO_MANY = JSONResponse({"error": "too_many_requests"}, status_code=429, headers={"Retry-After": "60"})
-
-
 @app.post("/ask")
 def ask(req: Ask, request: Request):
-    if not guard.allow("ask", guard.who(request), 20):
-        return TOO_MANY
-    return pipe.ask(req.question[:guard.MAX_TEXT], min(max(req.beam, 1), 8))
+    q, beam = req.question[:guard.MAX_TEXT], min(max(req.beam, 1), 8)
+    if not guard.allow("ask", guard.who(request), 20):       # 한도를 넘으면 거절하지 않고 Claude 없이 답함 (비용 없음)
+        with guard.no_llm():
+            return pipe.ask(q, beam)
+    return pipe.ask(q, beam)
 
 
 class Query(BaseModel):
@@ -118,12 +117,10 @@ _QCACHE = {}                   # 답 캐시: (질문, beam) → (응답, 수어 
 _QCACHE_MAX = 300
 
 
-class TooMany(Exception):
-    pass
-
-
 def cached_query(text, beam=4, log=True, who=None):
-    """who 가 있으면(바깥에서 온 요청) 새 질문만 요청 한도에 셈 — 캐시에 있는 질문은 비용이 없으므로 세지 않음."""
+    """who 가 있으면(바깥에서 온 요청) 새 질문만 요청 한도에 셈 — 캐시에 있는 질문은 비용이 없으므로 세지 않음.
+    한도를 넘은 곳의 새 질문은 거절하지 않고 Claude 없이(문서 문장으로) 답함. 그 답은 캐시에 두지 않음
+    (다른 사람이 같은 질문을 하면 Claude 답을 받게)."""
     import contextlib
     from ksl.pipeline import clean_spoken
     text, beam = text[:guard.MAX_TEXT], min(max(beam, 1), 8)
@@ -131,7 +128,8 @@ def cached_query(text, beam=4, log=True, who=None):
     hit = _QCACHE.get(key)
     if hit is None:
         if who is not None and not guard.allow("query", who, 20):
-            raise TooMany()
+            with guard.no_llm():
+                return pipe.query(text, beam)
         cap = pipe.missing.capture() if pipe.missing is not None else contextlib.nullcontext([])
         with cap as calls:
             r = pipe.query(text, beam)
@@ -147,11 +145,8 @@ def cached_query(text, beam=4, log=True, who=None):
 @app.post("/query")
 def query(req: Query, request: Request):
     """검색창 하나: 모든 입력을 질문으로 보고 문서 검색 후 답변. 답하지 않으면 mode 가 none.
-    같은 곳에서 새 질문은 1분에 20개까지 (ksl/guard.py)."""
-    try:
-        r = cached_query(req.text, req.beam, log=not req.prefetch, who=guard.who(request))
-    except TooMany:
-        return TOO_MANY
+    같은 곳에서 새 질문이 1분에 20개를 넘으면 그동안은 Claude 없이 답함 (ksl/guard.py)."""
+    r = cached_query(req.text, req.beam, log=not req.prefetch, who=guard.who(request))
     return {"ok": True} if req.seen else r
 
 
@@ -384,13 +379,14 @@ def sos_nearest(request: Request, lat: float, lng: float, fresh: int = 0):
     from ksl import sos
     if not (-90 <= lat <= 90 and -180 <= lng <= 180):
         return JSONResponse({"error": "bad_location"}, status_code=422)
-    if not guard.allow("sos", guard.who(request), 12):       # 공공데이터·카카오 한도 보호: 같은 곳에서 1분에 12번까지
-        return TOO_MANY
+    # 공공데이터·카카오 한도 보호: 같은 곳에서 1분에 12번을 넘으면 방금(10분 안에) 찾아 둔 결과로 답함.
+    #  찾아 둔 것이 없으면 그대로 새로 찾음 (응급 정보는 거절하지 않음)
+    over = not guard.allow("sos", guard.who(request), 12)
     if not sos.configured()["er"]:
         sos.log_error("config", "DATA_GO_KR_KEY 없음")
         return JSONResponse({"error": "not_configured"}, status_code=503)
     try:
-        return sos.nearest(lat, lng, fresh=bool(fresh))
+        return sos.nearest(lat, lng, fresh=bool(fresh) and not over, max_age=600 if over else None)
     except Exception:            # 실패 내용은 sos.log_error 가 기록함 (/sos/status)
         return JSONResponse({"error": "failed"}, status_code=502)
 

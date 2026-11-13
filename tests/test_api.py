@@ -144,6 +144,19 @@ def test_guard_limits_and_budget(monkeypatch):
     monkeypatch.setitem(guard._day, "date", None)
     assert guard.llm_budget() and guard.llm_budget() and not guard.llm_budget()
     assert not guard.llm_budget(spend=False)
+    monkeypatch.setenv("LLM_DAILY_MAX", "100")
+    with guard.no_llm():                                             # 한도를 넘은 곳의 요청: Claude 를 쓰지 않음
+        assert not guard.llm_budget()
+    assert guard.llm_budget()
+
+
+def test_over_limit_still_answers(client, monkeypatch):
+    """한도를 넘어도 거절하지 않고 비용 없는 방식으로 답함."""
+    from ksl import guard
+    monkeypatch.setattr(guard, "allow", lambda *a, **k: False)
+    r = client.post("/query", json={"text": "귀마개 1종은 어떤 것인가요?"})
+    assert r.status_code == 200 and r.json()["mode"] == "ask" and r.json()["answer_mode"] != "llm"
+    assert client.post("/ask", json={"question": "정화통은 언제 교체해요?"}).status_code == 200
 
 
 def test_query_is_bounded(client):

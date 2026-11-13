@@ -1,4 +1,5 @@
-"""남용 막기: 누구나 부를 수 있는 주소가 비용(Claude)·외부 한도(공공데이터·카카오)를 쓰므로, 한 곳에서 너무 많이 부르면 잠깐 막음.
+"""남용 막기: 누구나 부를 수 있는 주소가 비용(Claude)·외부 한도(공공데이터·카카오)를 쓰므로, 한 곳에서 너무 많이 부르면
+거절하지 않고 **비용이 들지 않는 방식으로** 답함 (질문: Claude 없이 문서 문장으로, SOS: 방금 찾아 둔 결과로).
 
 - 요청 한도: 같은 곳(IP)에서 1분에 N번까지. IP 는 그대로 두지 않고 해시로만, 메모리에만 잠깐 둠 (기록·저장 안 함)
 - Claude 하루 한도: 하루에 새 질문 LLM_DAILY_MAX 개(기본 2000)까지만 Claude 로 답하고, 넘으면 문서 문장을 그대로 뽑는 방식으로 답함
@@ -12,9 +13,10 @@ import time
 from collections import deque
 
 _lock = threading.Lock()
+_tl = threading.local()            # 이 요청은 Claude 를 쓰지 않음 (한도를 넘은 곳의 요청)
 _hits = {}                         # (종류, IP 해시) → 최근 요청 시각들
 _day = {"date": None, "n": 0}
-BLOCKED = {"rate": 0, "llm_budget": 0}   # 막은 횟수 (/client/status)
+BLOCKED = {"rate": 0, "llm_budget": 0}   # 한도를 넘어 비용 없는 방식으로 답한 횟수 (/client/status)
 MAX_TEXT = 300                     # 질문 글자 수 (넘는 부분은 버림)
 MAX_GLOSSES = 200                  # 한 번에 요청하는 단어 수
 
@@ -43,8 +45,20 @@ def allow(kind, who_, limit, per=60.0):
         return True
 
 
+class no_llm:
+    """with guard.no_llm(): … 안에서는 Claude 를 부르지 않음 (문서 문장을 뽑는 방식으로 답함)."""
+
+    def __enter__(self):
+        _tl.off = getattr(_tl, "off", 0) + 1
+
+    def __exit__(self, *a):
+        _tl.off -= 1
+
+
 def llm_budget(spend=True):
-    """오늘 Claude 로 답해도 되는지. spend=True 면 질문 하나를 셈."""
+    """지금 Claude 로 답해도 되는지 (요청 한도를 넘은 곳의 요청이 아니고, 하루 한도가 남았는지). spend=True 면 질문 하나를 셈."""
+    if getattr(_tl, "off", 0):
+        return False
     limit = int(os.environ.get("LLM_DAILY_MAX", "2000"))
     today = time.strftime("%Y-%m-%d")
     with _lock:

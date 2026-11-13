@@ -275,12 +275,12 @@ def route(lat, lng, to_lat, to_lng):
     return {"distance": s.get("distance"), "duration": s.get("duration"), "path": path}
 
 
-def nearest(lat, lng, fresh=False):
+def nearest(lat, lng, fresh=False, max_age=None):
     """가까운 응급실 1·2순위(차로 빨리 닿는 순, 경로를 못 구하면 직선거리 순) + 경로 + 병상."""
     STATS["requests"] += 1
     key = (round(lat, 3), round(lng, 3))   # 약 100m 안의 같은 자리는 1분 동안 같은 답
     hit = _CACHE.get(key)
-    if hit and not fresh and time.time() - hit[0] < _TTL:   # fresh: SOS 팝업을 새로 열 때는 늘 새로 조회
+    if hit and not fresh and time.time() - hit[0] < (max_age or _TTL):   # fresh: SOS 팝업을 새로 열 때는 늘 새로 조회
         STATS["cache_hits"] += 1
         return hit[1]
     t0 = time.time()
