@@ -182,7 +182,7 @@ def test_team_3d_words():
         assert c and c["frames"], g
         f = next(x for x in c["frames"] if x.get("body") and x["body"][0] and x["body"][1])
         assert f["body"][0][1] < f["body"][1][1] - 0.2, g                     # 코가 목보다 위 (뒤집히지 않음)
-    assert md.get("문서1") is None and md.get("안전모1") is None and md.get("근로자1") is None and md.get("받다1") is None and md.get("물건1") is None              # 어색해서 뺀 단어, 검수에서 뺀 단어
+    assert md.get("문서1") is None and md.get("안전모1") is None and md.get("근로자1") is None and md.get("받다1") is None              # 어색해서 뺀 단어, 검수에서 뺀 단어
 
 
 def test_sign_pauses_and_compose_hold():
@@ -208,8 +208,21 @@ def test_team_3d_words_20261105():
     for g in ["환기1", "해체0", "청소1", "화상1", "재료0", "중요1"]:
         c = md.get(g)
         assert c and len(c["frames"]) >= 8, g
-    for g in ["밀폐0", "진동", "양1", "구멍0", "동시1"]:
+    for g in ["밀폐0", "양1", "구멍0", "동시1"]:
         assert md.get(g) is None, g
+
+
+def test_team_2d_words_20261113():
+    """2026-11-13 낱말 자료(2D 관절 점 → 깊이 추정): 물건·마다·바르다·바닥·진동. '후'는 이미 있던 동작 그대로."""
+    from ksl.motion import MotionDict
+    md = MotionDict(ROOT / "data/sign/motions")
+    for g in ["물건1", "마다1", "바르다1", "바닥1", "진동1"]:
+        c = md.get(g)
+        assert c and len(c["frames"]) >= 8 and "2D→3D" in c["source"], g
+        f = next(x for x in c["frames"] if x.get("body") and x["body"][0] and x["body"][1])
+        assert f["body"][0][1] < f["body"][1][1] - 0.2, g                     # 코가 목보다 위
+        assert all(len(p) == 3 for x in c["frames"] for p in (x.get("body") or []) if p), g   # 깊이가 채워짐
+    assert "팀원 3D처리본" in md.get("후1")["source"]
 
 
 def test_number_glosses_and_signbridge_words():

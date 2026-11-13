@@ -221,6 +221,8 @@ class SignWords:
                 lemma = t.form + ("다" if t.tag.startswith(("VV", "VA")) else "")
             elif t.tag == "MAG" and t.form in self.ADV:
                 lemma = t.form
+            elif t.tag == "JX" and t.form == "마다":                        # '6개월마다', '작업마다' 의 '마다' 는 수어가 있음
+                lemma = t.form
             if lemma and i + 1 < len(toks) and toks[i + 1].tag == "XSN" and eoj(toks[i + 1].start) == k:
                 if toks[i + 1].form != "들":                               # 방법 + 들 → 방법 (복수 표지는 수어로 따로 안 함)
                     lemma += toks[i + 1].form

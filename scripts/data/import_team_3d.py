@@ -17,7 +17,7 @@ python scripts/data/import_team_3d.py ~/Downloads/KOSHA_추가수어자료_3D형
   기존 3D 동작과 맞도록 깊이 배율을 클립마다 맞춤 (ksl/motion.py load_mediapipe_avatar 와 같은 방식)
 - MediaPipe·후처리본은 어깨가 좁게 잡혀 몸이 크게 나오므로 목→코 높이를 AI Hub 3D 중앙값에 맞춤
 - 앞뒤 손 내리고 쉬는 구간은 잘라냄 (trim_rest)
-- 검수에서 뺀 단어(ksl/motion.py REMOVED: 물건·때)와 이미 있는 단어(번호만 다른 것 포함)는 건드리지 않음
+- 검수에서 뺀 단어(ksl/motion.py REMOVED)와 이미 있는 단어(번호만 다른 것 포함)는 건드리지 않음
 """
 import argparse
 import csv
