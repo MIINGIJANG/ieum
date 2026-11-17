@@ -192,6 +192,11 @@ class SignWords:
         for word, exact, gloss in self.rules:
             if not exact and (lemma == word or lemma.startswith(word)):
                 return gloss
+        # 말이 갈래로만 구분되는 경우: 단어표의 말이 뽑은 말보다 길고 어절이 그 말로 시작할 때 ('상의해야' → 상의하·상의해 → 의논,
+        #  '방열상의는' 의 상의(윗옷)는 어절이 '상의하'로 시작하지 않아 그대로)
+        for word, exact, gloss in self.rules:
+            if not exact and len(word) > len(lemma) and word.startswith(lemma) and eojeol.startswith(word):
+                return gloss
         return lemma
 
     def analyze(self, sentence):
@@ -371,7 +376,7 @@ class SafetySignPipeline:
                 "method": "memory",                              # 검수된 확정 글로스 사용
                 "complete": hit.get("complete", True)}           # False: 일부 단어 동작만 확보
 
-    NUM_UNITS = {"": None, "미터": "미터0", "m": "미터0", "시간": "시간1"}   # 숫자 뒤 단위 → 수어 (수어가 있는 단위만)
+    NUM_UNITS = {"": None, "미터": "미터0", "m": "미터0", "시간": "시간1", "개월": "개월"}   # 숫자 뒤 단위 → 수어 (수어가 있는 단위만)
 
     def _expand_numbers(self, units):
         """'2미터'·'4시간' 같은 숫자 단어 → 숫자 수어(한국식 읽기: 342 → 삼 백 사 십 이) + 단위 수어.

@@ -249,3 +249,24 @@ def test_clean_clip_cache():
     fresh = M._relax_low_hands(M._one_euro(M._stabilize_fingers(M._smooth_hand_rot(M._despike(M._filter_face(
         M._fix_hands(clip["frames"]))), 30)), 30))
     assert json.dumps(a, sort_keys=True) == json.dumps(fresh, sort_keys=True)
+
+
+def test_team_3d_words_20261117():
+    """2026-11-17 웹사이트_신규수어자료(64단어): 점검을 통과한 61개는 동작이 있고, 뺀 3개(고정·도착·바람)는 없음."""
+    from ksl.motion import MotionDict
+    md = MotionDict(ROOT / "data/sign/motions")
+    for g in ["용접", "불꽃", "특성", "선택", "올바르다", "완벽", "그렇다", "상담0", "피1", "가죽", "고무", "개월", "즉시0", "탱크0", "황산"]:
+        c = md.get(g)
+        assert c and len(c["frames"]) >= 8, g
+    for g in ["고정0", "도착1", "바람1#"]:
+        assert md.get(g) is None, g
+
+
+def test_team_words_20261117_in_sentences(pipe):
+    """표기가 다른 말 연결: 상의해야 → 상담, 혈액 → 피, 가죽제 → 가죽, 6개월 → 6 + 개월. 윗옷 '상의'는 의논 수어로 가지 않음."""
+    g = lambda s: pipe.sign_sentence(s)["gloss"]
+    assert "상담0" in g("세정제 사용 시 제조자와 상의해야 합니다.")
+    assert "상담0" not in g("방열상의는 상체에 입습니다.")
+    assert "피1" in g("혈액이 분출될 가능성이 있는 작업입니다.")
+    assert "가죽" in g("가죽제안전화는 발을 보호합니다.")
+    assert g("정화통은 6개월마다 교체합니다.")[:3] == ["수:6", "개월", "마다"]
