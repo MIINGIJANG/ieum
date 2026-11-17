@@ -483,12 +483,16 @@ function locate() {
     const end = (f, v) => { if (done) return; done = true; ids.forEach((i) => g.clearWatch(i)); clearTimeout(t2); clearTimeout(t30); f(v); };
     cancelLocate = () => end(rej, new Error("cancelled"));
     const ok = (p) => { pos = { lat: p.coords.latitude, lng: p.coords.longitude }; end(res, pos); };
-    const bad = (e) => { if (e && e.code === 1) end(rej, e); };   // 거절만 멈춤, 나머지 오류는 계속 기다림
+    // 위치를 못 받은 이유를 서버에 남김 (좌표 없음, 오류 번호·끼워진 페이지인지만) → /client/status 의 sos 기록으로 원인 확인
+    //  1: 거절(사이트 권한·끼워진 페이지 정책), 2: 기기가 위치를 못 줌(컴퓨터 위치 서비스 꺼짐 등), 3: 시간 초과
+    const seen = new Set();
+    const note = (why) => { if (!seen.has(why)) { seen.add(why); window.clientLog?.("sos", `위치 ${why} · 끼워진 페이지 ${window.top !== window ? "예" : "아니오"}`); } };
+    const bad = (e) => { if (e) note(`오류 ${e.code}`); if (e && e.code === 1) end(rej, e); };   // 거절만 멈춤, 나머지 오류는 계속 기다림
     ids.push(g.watchPosition(ok, bad, { enableHighAccuracy: false, maximumAge: 60000 }));
     t2 = setTimeout(() => { if (!done) ids.push(g.watchPosition(ok, bad, { enableHighAccuracy: true, maximumAge: 0 })); }, 3000);
     t30 = setTimeout(async () => {
       const st = await navigator.permissions?.query({ name: "geolocation" }).catch(() => null);
-      if (pos && st?.state === "granted") end(res, pos); else end(rej, new Error("timeout"));
+      if (pos && st?.state === "granted") end(res, pos); else { note(`30초 안에 못 받음 (권한 ${st?.state || "?"})`); end(rej, new Error("timeout")); }
     }, 30000);
   });
 }
