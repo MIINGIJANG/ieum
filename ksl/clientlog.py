@@ -12,7 +12,7 @@ ERRORS = Counter()                 # (종류, 기기) → 건수
 RECENT = deque(maxlen=50)          # 최근 오류
 BOOT = {}                          # 기기 → {단계: [ms…]} (기기마다 최근 200번)
 STEPS = ("total", "avatar", "camera", "server", "examples", "answers", "fonts", "sos")
-KINDS = ("error", "promise", "camera", "avatar", "query", "offline")
+KINDS = ("error", "promise", "camera", "avatar", "query", "offline", "sos")   # sos: 위치를 못 받은 이유 (좌표 없음)
 
 
 def device(ua):

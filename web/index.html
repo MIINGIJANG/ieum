@@ -22,7 +22,7 @@
   //  위치·질문 내용은 보내지 않음. 권한 거절(사용자의 선택)은 오류가 아니므로 뺌. 한 화면에서 10번까지만
   let logLeft = 10;
   window.clientLog = (kind, msg, where) => {
-    if (!location.protocol.startsWith("http") || (kind !== "boot" && (logLeft-- <= 0 || /NotAllowed|Permission|denied/i.test(String(msg))))) return;
+    if (!location.protocol.startsWith("http") || (kind !== "boot" && (logLeft-- <= 0 || (kind !== "sos" && /NotAllowed|Permission|denied/i.test(String(msg)))))) return;
     try {
       const body = JSON.stringify(kind === "boot" ? { kind, times: msg } : { kind, msg: String(msg && msg.message || msg).slice(0, 200), where: String(where || "").slice(0, 80) });
       fetch("./client/log", { method: "POST", headers: { "Content-Type": "application/json" }, body, keepalive: true }).catch(() => {});
