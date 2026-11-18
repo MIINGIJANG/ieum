@@ -1,0 +1,49 @@
+{
+  "date": "2026-11-18",
+  "unit_tests_passed": 40,
+  "unit_tests_failed": 0,
+  "format": "ruff 0.17.5",
+  "signal_processing_tests": 19,
+  "relative3d_tests": 4,
+  "management_tests": 12,
+  "evaluation_2d": {
+    "clips": 70,
+    "clip_frames": 2006,
+    "unique_frames": 1949,
+    "source_videos": 23,
+    "raw_pck010": 93.40031936368293,
+    "post_pck010": 95.80609201289506,
+    "converted_pck010": 95.80609201289506
+  },
+  "evaluation_3d": {
+    "source_videos": 4,
+    "frames": 2549,
+    "chunks": 19,
+    "hands_mean_distance_shoulder_units": 2.3732120049161756,
+    "hands_pck3d_010": 1.121821816211773
+  },
+  "reference_rebuild": "70/70 reconstructed coordinate arrays match evaluation inputs",
+  "not_verified": [
+    "직접 촬영 영상",
+    "다른 촬영자·다른 환경",
+    "mm 단위 절대3D 오차",
+    "수어 의미·사용자 이해도",
+    "Windows 실행",
+    "외부 LLM 실제 API 호출"
+  ],
+  "depth_diagnostic_tests": 5,
+  "ruff_check": "passed: E4,E7,E9,F,I,E501; no ignores",
+  "ruff_format_check": "passed",
+  "regression_replay": {
+    "avatar_objects_exact": 89,
+    "raw_objects_exact": 3,
+    "scope": "2D/3D coordinates and playback provenance match before/after cleanup; primary predictions were not changed."
+  },
+  "3d_interpretation": "pending convention/scale and label-quality validation; diagnostic controls do not replace primary predictions",
+  "diagnostics": {
+    "signed_z_bias": 2.143456782537646,
+    "pearson_z": 0.015642224910715454,
+    "spearman_z": 0.4120716495146068,
+    "zero_baseline_distance": 0.9358704738652072
+  }
+}

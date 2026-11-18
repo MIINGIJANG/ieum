@@ -1,0 +1,705 @@
+{
+  "scope": "Local AIHub sample 2D evaluation; ranges only, no coordinates/video",
+  "clips": [
+    {
+      "word": "갑자기",
+      "source_id": "NIA_SL_G1_COLDWAVE000073_1_TW07",
+      "start_frame": 159,
+      "end_frame_exclusive": 177,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "갑자기1"
+    },
+    {
+      "word": "강하다",
+      "source_id": "NIA_SL_G1_COLDWAVE000119_1_TW07",
+      "start_frame": 255,
+      "end_frame_exclusive": 284,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "강하다1"
+    },
+    {
+      "word": "걱정",
+      "source_id": "NIA_SL_G1_COLDWAVE000073_1_TW07",
+      "start_frame": 264,
+      "end_frame_exclusive": 295,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "걱정1"
+    },
+    {
+      "word": "걷다",
+      "source_id": "NIA_SL_G1_COLDWAVE000076_1_TW07",
+      "start_frame": 475,
+      "end_frame_exclusive": 510,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "걷다1#"
+    },
+    {
+      "word": "검사",
+      "source_id": "NIA_SL_G1_COLDWAVE000070_1_TW07",
+      "start_frame": 351,
+      "end_frame_exclusive": 403,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "검사1"
+    },
+    {
+      "word": "경보",
+      "source_id": "NIA_SL_G1_COLDWAVE000079_1_TW07",
+      "start_frame": 221,
+      "end_frame_exclusive": 268,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "경보1"
+    },
+    {
+      "word": "계량기",
+      "source_id": "NIA_SL_G1_COLDWAVE000078_1_TW07",
+      "start_frame": 172,
+      "end_frame_exclusive": 189,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "계량기1#"
+    },
+    {
+      "word": "길",
+      "source_id": "NIA_SL_G1_COLDWAVE000054_1_TW07",
+      "start_frame": 225,
+      "end_frame_exclusive": 242,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "길1"
+    },
+    {
+      "word": "까지",
+      "source_id": "NIA_SL_G1_COLDWAVE000143_1_TW07",
+      "start_frame": 321,
+      "end_frame_exclusive": 348,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "까지1"
+    },
+    {
+      "word": "깨지다",
+      "source_id": "NIA_SL_G1_COLDWAVE000130_1_TW07",
+      "start_frame": 448,
+      "end_frame_exclusive": 475,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "깨지다2"
+    },
+    {
+      "word": "내일",
+      "source_id": "NIA_SL_G1_COLDWAVE000077_1_TW07",
+      "start_frame": 61,
+      "end_frame_exclusive": 80,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "내일1"
+    },
+    {
+      "word": "눈내리다",
+      "source_id": "NIA_SL_G1_COLDWAVE000145_1_TW07",
+      "start_frame": 109,
+      "end_frame_exclusive": 129,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "눈내리다1"
+    },
+    {
+      "word": "두껍다",
+      "source_id": "NIA_SL_G1_COLDWAVE000080_1_TW07",
+      "start_frame": 357,
+      "end_frame_exclusive": 385,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "두껍다1#"
+    },
+    {
+      "word": "따뜻하다",
+      "source_id": "NIA_SL_G1_COLDWAVE000024_1_TW07",
+      "start_frame": 469,
+      "end_frame_exclusive": 509,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "따뜻하다1"
+    },
+    {
+      "word": "뜨겁다",
+      "source_id": "NIA_SL_G1_COLDWAVE000119_1_TW07",
+      "start_frame": 483,
+      "end_frame_exclusive": 517,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "뜨겁다1"
+    },
+    {
+      "word": "막다",
+      "source_id": "NIA_SL_G1_COLDWAVE000119_1_TW07",
+      "start_frame": 435,
+      "end_frame_exclusive": 481,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "막다1"
+    },
+    {
+      "word": "멈추다",
+      "source_id": "NIA_SL_G1_COLDWAVE000118_1_TW07",
+      "start_frame": 291,
+      "end_frame_exclusive": 331,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "멈추다1"
+    },
+    {
+      "word": "몸",
+      "source_id": "NIA_SL_G1_COLDWAVE000135_1_TW07",
+      "start_frame": 301,
+      "end_frame_exclusive": 320,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "몸1"
+    },
+    {
+      "word": "문제",
+      "source_id": "NIA_SL_G1_COLDWAVE000131_1_TW07",
+      "start_frame": 257,
+      "end_frame_exclusive": 282,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "문제1"
+    },
+    {
+      "word": "물",
+      "source_id": "NIA_SL_G1_COLDWAVE000139_1_TW07",
+      "start_frame": 537,
+      "end_frame_exclusive": 565,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "물1"
+    },
+    {
+      "word": "물건",
+      "source_id": "NIA_SL_G1_COLDWAVE000119_1_TW07",
+      "start_frame": 508,
+      "end_frame_exclusive": 535,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "물건1"
+    },
+    {
+      "word": "미끄럽다",
+      "source_id": "NIA_SL_G1_COLDWAVE000054_1_TW07",
+      "start_frame": 272,
+      "end_frame_exclusive": 296,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "미끄럽다1"
+    },
+    {
+      "word": "바꾸다",
+      "source_id": "NIA_SL_G1_COLDWAVE000143_1_TW07",
+      "start_frame": 545,
+      "end_frame_exclusive": 572,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "바꾸다1"
+    },
+    {
+      "word": "바람",
+      "source_id": "NIA_SL_G1_COLDWAVE000025_1_TW07",
+      "start_frame": 235,
+      "end_frame_exclusive": 267,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "바람1#"
+    },
+    {
+      "word": "밖",
+      "source_id": "NIA_SL_G1_COLDWAVE000076_1_TW07",
+      "start_frame": 307,
+      "end_frame_exclusive": 327,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "밖1"
+    },
+    {
+      "word": "밤",
+      "source_id": "NIA_SL_G1_COLDWAVE000111_1_TW07",
+      "start_frame": 73,
+      "end_frame_exclusive": 92,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "밤1"
+    },
+    {
+      "word": "부족하다",
+      "source_id": "NIA_SL_G1_COLDWAVE000131_1_TW07",
+      "start_frame": 242,
+      "end_frame_exclusive": 267,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "부족하다1"
+    },
+    {
+      "word": "부탁",
+      "source_id": "NIA_SL_G1_COLDWAVE000024_1_TW07",
+      "start_frame": 761,
+      "end_frame_exclusive": 782,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "부탁1"
+    },
+    {
+      "word": "불",
+      "source_id": "NIA_SL_G1_COLDWAVE000118_1_TW07",
+      "start_frame": 436,
+      "end_frame_exclusive": 466,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "불1"
+    },
+    {
+      "word": "불타다",
+      "source_id": "NIA_SL_G1_COLDWAVE000139_1_TW07",
+      "start_frame": 737,
+      "end_frame_exclusive": 765,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "불타다1#"
+    },
+    {
+      "word": "빗자루",
+      "source_id": "NIA_SL_G1_COLDWAVE000055_1_TW07",
+      "start_frame": 619,
+      "end_frame_exclusive": 655,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "빗자루1"
+    },
+    {
+      "word": "사고",
+      "source_id": "NIA_SL_G1_COLDWAVE000078_1_TW07",
+      "start_frame": 280,
+      "end_frame_exclusive": 312,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "사고1"
+    },
+    {
+      "word": "사람",
+      "source_id": "NIA_SL_G1_COLDWAVE000079_1_TW07",
+      "start_frame": 304,
+      "end_frame_exclusive": 331,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "사람1"
+    },
+    {
+      "word": "사용",
+      "source_id": "NIA_SL_G1_COLDWAVE000073_1_TW07",
+      "start_frame": 385,
+      "end_frame_exclusive": 413,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "사용1"
+    },
+    {
+      "word": "수도관",
+      "source_id": "NIA_SL_G1_COLDWAVE000130_1_TW07",
+      "start_frame": 400,
+      "end_frame_exclusive": 433,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "수도관0"
+    },
+    {
+      "word": "수도꼭지",
+      "source_id": "NIA_SL_G1_COLDWAVE000141_1_TW07",
+      "start_frame": 335,
+      "end_frame_exclusive": 361,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "수도꼭지1"
+    },
+    {
+      "word": "수리",
+      "source_id": "NIA_SL_G1_COLDWAVE000141_1_TW07",
+      "start_frame": 487,
+      "end_frame_exclusive": 513,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "수리1"
+    },
+    {
+      "word": "시간",
+      "source_id": "NIA_SL_G1_COLDWAVE000058_1_TW07",
+      "start_frame": 556,
+      "end_frame_exclusive": 607,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "시간1"
+    },
+    {
+      "word": "시설",
+      "source_id": "NIA_SL_G1_COLDWAVE000111_1_TW07",
+      "start_frame": 487,
+      "end_frame_exclusive": 521,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "시설1"
+    },
+    {
+      "word": "시작",
+      "source_id": "NIA_SL_G1_COLDWAVE000025_1_TW07",
+      "start_frame": 110,
+      "end_frame_exclusive": 130,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "시작1"
+    },
+    {
+      "word": "신경쓰다",
+      "source_id": "NIA_SL_G1_COLDWAVE000078_1_TW07",
+      "start_frame": 333,
+      "end_frame_exclusive": 368,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "신경쓰다1"
+    },
+    {
+      "word": "실수",
+      "source_id": "NIA_SL_G1_COLDWAVE000056_1_TW07",
+      "start_frame": 366,
+      "end_frame_exclusive": 390,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "실수1"
+    },
+    {
+      "word": "아침",
+      "source_id": "NIA_SL_G1_COLDWAVE000077_1_TW07",
+      "start_frame": 117,
+      "end_frame_exclusive": 146,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "아침1"
+    },
+    {
+      "word": "알려주다",
+      "source_id": "NIA_SL_G1_COLDWAVE000058_1_TW07",
+      "start_frame": 501,
+      "end_frame_exclusive": 545,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "알려주다1"
+    },
+    {
+      "word": "약하다",
+      "source_id": "NIA_SL_G1_COLDWAVE000055_1_TW07",
+      "start_frame": 212,
+      "end_frame_exclusive": 236,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "약하다1"
+    },
+    {
+      "word": "어긋나다",
+      "source_id": "NIA_SL_G1_COLDWAVE000135_1_TW07",
+      "start_frame": 417,
+      "end_frame_exclusive": 436,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "어긋나다1"
+    },
+    {
+      "word": "얼음",
+      "source_id": "NIA_SL_G1_COLDWAVE000055_1_TW07",
+      "start_frame": 148,
+      "end_frame_exclusive": 179,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "얼음1"
+    },
+    {
+      "word": "없다",
+      "source_id": "NIA_SL_G1_COLDWAVE000070_1_TW07",
+      "start_frame": 691,
+      "end_frame_exclusive": 704,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "없다1"
+    },
+    {
+      "word": "오늘",
+      "source_id": "NIA_SL_G1_COLDWAVE000079_1_TW07",
+      "start_frame": 56,
+      "end_frame_exclusive": 83,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "오늘1"
+    },
+    {
+      "word": "온도내려가다",
+      "source_id": "NIA_SL_G1_COLDWAVE000024_1_TW07",
+      "start_frame": 130,
+      "end_frame_exclusive": 149,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "온도내려가다1"
+    },
+    {
+      "word": "올것이다",
+      "source_id": "NIA_SL_G1_COLDWAVE000077_1_TW07",
+      "start_frame": 201,
+      "end_frame_exclusive": 228,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "올것이다2"
+    },
+    {
+      "word": "운영",
+      "source_id": "NIA_SL_G1_COLDWAVE000143_1_TW07",
+      "start_frame": 493,
+      "end_frame_exclusive": 519,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "운영1"
+    },
+    {
+      "word": "운전",
+      "source_id": "NIA_SL_G1_COLDWAVE000054_1_TW07",
+      "start_frame": 403,
+      "end_frame_exclusive": 433,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "운전1"
+    },
+    {
+      "word": "원인",
+      "source_id": "NIA_SL_G1_COLDWAVE000058_1_TW07",
+      "start_frame": 82,
+      "end_frame_exclusive": 120,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "원인1"
+    },
+    {
+      "word": "위험",
+      "source_id": "NIA_SL_G1_COLDWAVE000056_1_TW07",
+      "start_frame": 380,
+      "end_frame_exclusive": 428,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "위험1"
+    },
+    {
+      "word": "있다",
+      "source_id": "NIA_SL_G1_COLDWAVE000111_1_TW07",
+      "start_frame": 528,
+      "end_frame_exclusive": 540,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "있다1"
+    },
+    {
+      "word": "작동",
+      "source_id": "NIA_SL_G1_COLDWAVE000139_1_TW07",
+      "start_frame": 717,
+      "end_frame_exclusive": 746,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "작동1"
+    },
+    {
+      "word": "잠그다",
+      "source_id": "NIA_SL_G1_COLDWAVE000080_1_TW07",
+      "start_frame": 460,
+      "end_frame_exclusive": 504,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "잠그다1"
+    },
+    {
+      "word": "잠기다",
+      "source_id": "NIA_SL_G1_COLDWAVE000118_1_TW07",
+      "start_frame": 383,
+      "end_frame_exclusive": 417,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "잠기다0"
+    },
+    {
+      "word": "장소",
+      "source_id": "NIA_SL_G1_COLDWAVE000058_1_TW07",
+      "start_frame": 405,
+      "end_frame_exclusive": 444,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "장소1"
+    },
+    {
+      "word": "저녁",
+      "source_id": "NIA_SL_G1_COLDWAVE000143_1_TW07",
+      "start_frame": 700,
+      "end_frame_exclusive": 727,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "저녁1"
+    },
+    {
+      "word": "조심",
+      "source_id": "NIA_SL_G1_COLDWAVE000025_1_TW07",
+      "start_frame": 258,
+      "end_frame_exclusive": 282,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "조심1"
+    },
+    {
+      "word": "조절",
+      "source_id": "NIA_SL_G1_COLDWAVE000070_1_TW07",
+      "start_frame": 334,
+      "end_frame_exclusive": 361,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "조절1"
+    },
+    {
+      "word": "지시",
+      "source_id": "NIA_SL_G1_COLDWAVE000056_1_TW07",
+      "start_frame": 698,
+      "end_frame_exclusive": 711,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "지시2#"
+    },
+    {
+      "word": "지역",
+      "source_id": "NIA_SL_G1_COLDWAVE000135_1_TW07",
+      "start_frame": 201,
+      "end_frame_exclusive": 220,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "지역1"
+    },
+    {
+      "word": "집",
+      "source_id": "NIA_SL_G1_COLDWAVE000055_1_TW07",
+      "start_frame": 531,
+      "end_frame_exclusive": 554,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "집1#"
+    },
+    {
+      "word": "청소",
+      "source_id": "NIA_SL_G1_COLDWAVE000145_1_TW07",
+      "start_frame": 362,
+      "end_frame_exclusive": 386,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "청소1"
+    },
+    {
+      "word": "춥다",
+      "source_id": "NIA_SL_G1_COLDWAVE000130_1_TW07",
+      "start_frame": 268,
+      "end_frame_exclusive": 294,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "춥다1"
+    },
+    {
+      "word": "피해",
+      "source_id": "NIA_SL_G1_COLDWAVE000077_1_TW07",
+      "start_frame": 371,
+      "end_frame_exclusive": 419,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "피해1"
+    },
+    {
+      "word": "행동",
+      "source_id": "NIA_SL_G1_COLDWAVE000145_1_TW07",
+      "start_frame": 463,
+      "end_frame_exclusive": 481,
+      "fps": 30.0,
+      "width": 1920,
+      "height": 1080,
+      "gloss": "행동1"
+    }
+  ]
+}
