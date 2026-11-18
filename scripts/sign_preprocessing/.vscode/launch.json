@@ -1,0 +1,29 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "수어 폴더 감시 시작",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/run.py",
+      "args": [
+        "watch"
+      ],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "justMyCode": true,
+      "python": "${workspaceFolder}/.venv/bin/python"
+    },
+    {
+      "name": "설치 상태 확인",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/run.py",
+      "args": [
+        "doctor"
+      ],
+      "console": "integratedTerminal",
+      "python": "${workspaceFolder}/.venv/bin/python"
+    }
+  ]
+}
