@@ -3,6 +3,7 @@
 python scripts/data/import_team_3d.py ~/Downloads/데이터_전달자료_3D처리본_20261103
 python scripts/data/import_team_3d.py ~/Downloads/KOSHA_추가수어자료_3D형식      (자료목록.json 이 있는 전달본, 2026-11-05)
 python scripts/data/import_team_3d.py ~/Downloads/웹사이트_신규수어자료            (같은 형식, 2026-11-17, 64단어)
+python scripts/data/import_team_3d.py "~/Downloads/추가 단어"                     (목록 파일 없이 좌표_3D·재생상태만, 2026-11-27, 8단어)
 
 폴더 구조 (README.md 참고)
   처리현황.csv                 단어마다 파일·출처·service_use_policy (review_only 는 가져오지 않음)
@@ -33,7 +34,9 @@ from ksl.motion import (HAND_BONES, REMOVED, MotionDict, _strip_num, bone_length
                         normalize, trim_rest)
 
 # 폴더의 단어 이름 → 글로스 (같은 뜻 두 이름이 묶인 것은 앞 이름)
-NAMES = {"근로자_직원": "근로자1", "작업_근무": "작업1", "늘, 항시": "항시1"}
+NAMES = {"근로자_직원": "근로자1", "작업_근무": "작업1", "늘, 항시": "항시1",
+         "아니다, 않다": "안하다", "아니다,않다": "안하다",   # 부정(~하지 않다): 어순 규칙이 쓰는 글로스 (ksl/order.py MARK_GLOSS)
+         "발": "발0"}
 # 가져오지 않는 단어 (아바타로 하나씩 재생해 보고 정함)
 SKIP = {
     "문서": "두 손이 머리 위로 크게 올라감 (깊이 추정 오차로 보임)",
@@ -66,6 +69,8 @@ SKIP = {
     "고정": "끝부분에서 몸 모양이 일그러짐 (팔 뼈 길이가 클립 중앙값의 9.8배로 튀는 프레임)",
     "도착": "앞 절반이 오른팔을 머리 옆으로 든 채 시작함 (문장에서 잘라 온 앞 동작이 붙은 것으로 보임)",
     "바람": "중간에 어깨선이 크게 틀어지고 손이 어깨너비 1.4배 옆으로 벌어짐 (기존 동작은 0.9 이하)",
+    # 2026-11-27 추가 단어 (8단어, 목록 파일 없음)
+    "고열": "앞부분에서 어깨선이 꼬이고 팔 뼈 길이가 클립 중앙값의 1.5배로 튐",
 }
 MIN_FRAMES = 8          # 앞뒤를 자른 뒤 이보다 짧으면 문장에서 잘라 온 조각으로 보고 가져오지 않음 (0.27초)
 MP_SOURCES = ("mediapipe_relative3d_estimate", "supplied_relative3d")      # 어깨가 좁게 잡힌 자료 (코 높이로 크기 맞춤)
@@ -220,10 +225,24 @@ def find(folder, rel):
 
 
 def read_rows(folder):
-    """처리현황.csv 또는 자료목록.json → 단어별 행 (word, file, playback_state, source_mode, source_id, service_use_policy, gloss_raw)."""
+    """처리현황.csv 또는 자료목록.json → 단어별 행 (word, file, playback_state, source_mode, source_id, service_use_policy, gloss_raw).
+    둘 다 없으면(2026-11-27 '추가 단어' 전달본) 좌표_3D/<단어>.json 과 재생상태/<단어>.json 을 짝지어 읽음
+    (MediaPipe 후처리본으로 봄: 재생상태의 input_kind 가 postprocessed_avatar)."""
     csv_p, json_p = find(folder, "처리현황.csv"), find(folder, "자료목록.json")
     if csv_p.exists():
         return list(csv.DictReader(open(csv_p, encoding="utf-8-sig")))
+    if not json_p.exists():
+        rows = []
+        for p in sorted(find(folder, "좌표_3D").glob("*.json")):
+            word = nfc(p.stem)
+            st = next((x for x in find(folder, "재생상태").iterdir() if nfc(x.stem).replace(" ", "") == word.replace(" ", "")), None)
+            if st is None:
+                continue
+            d = json.loads(p.read_text(encoding="utf-8"))
+            rows.append({"word": word, "file": f"좌표_3D/{p.name}", "playback_state": f"재생상태/{st.name}",
+                         "source_mode": "mediapipe_relative3d_estimate", "source_id": d.get("source_id", ""),
+                         "service_use_policy": "integration_candidate", "gloss_raw": ""})
+        return rows
     return [{k: (str(v) if not isinstance(v, str) else v) for k, v in it.items()} for it in json.loads(json_p.read_text(encoding="utf-8"))["items"]]
 
 
@@ -245,6 +264,8 @@ def main():
         if a.only and word not in a.only:
             continue
         g = NAMES.get(word) or nfc(row.get("gloss_raw") or "") or word + "1"
+        if word in NAMES and not row.get("gloss_raw"):
+            g = NAMES[word]
         if word in SKIP and not a.only:
             report.append(f"  {word:<8} 가져오지 않음: {SKIP[word]}")
             continue

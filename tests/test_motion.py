@@ -270,3 +270,18 @@ def test_team_words_20261117_in_sentences(pipe):
     assert "피1" in g("혈액이 분출될 가능성이 있는 작업입니다.")
     assert "가죽" in g("가죽제안전화는 발을 보호합니다.")
     assert g("정화통은 6개월마다 교체합니다.")[:3] == ["수:6", "개월", "마다"]
+
+
+def test_team_3d_words_20261127():
+    """2026-11-27 추가 단어(목록 파일 없음): 7개 추가, 고열은 뺌. '아니다, 않다' 는 부정 글로스(안하다)로 → '~하지 않다' 가 회색이 아님."""
+    from ksl.motion import MotionDict
+    md = MotionDict(ROOT / "data/sign/motions")
+    for g in ["안하다", "얼굴1", "목1", "발0", "깊이1", "냉방1", "자외선1"]:
+        c = md.get(g)
+        assert c and len(c["frames"]) >= 8, g
+    assert md.get("고열1") is None
+
+
+def test_negation_has_motion(pipe):
+    r = pipe.sign_sentence("보호구를 착용하지 않으면 다칠 수 있습니다.")
+    assert "안하다" in r["gloss"] and pipe.motion.get("안하다")
