@@ -1,0 +1,12 @@
+{
+  "metadata": {"id": "SYNTHETIC-001", "video_filename": "not_a_real_video.mp4"},
+  "korean_text": "합성 테스트 문장: 위험 여부를 확인하세요.",
+  "sign_script": {
+    "sign_gestures_strong": [
+      {"gloss_id": "위험1", "start": 1.0, "end": 1.5},
+      {"gloss_id": "확인1", "start": 1.6, "end": 2.1}
+    ]
+  },
+  "nms_script": {},
+  "fixture_notice": "파서 검사용 가상 자료. 실제 수어 번역·영상이 아님."
+}
