@@ -1,0 +1,21 @@
+{
+  "job": "20261125_122458_e17aec7d",
+  "hand_limit_seconds": 0.4,
+  "raw_reused": true,
+  "hands": {
+    "left_hand": {
+      "before_missing_frames": 16,
+      "after_missing_frames": 6,
+      "previous_finite_components_unchanged": true,
+      "interpolated_frames": 27
+    },
+    "right_hand": {
+      "before_missing_frames": 7,
+      "after_missing_frames": 0,
+      "previous_finite_components_unchanged": true,
+      "interpolated_frames": 26
+    }
+  },
+  "original_pipeline_unchanged": true,
+  "synthetic_rest_frames": 0
+}

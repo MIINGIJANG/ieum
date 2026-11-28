@@ -1,0 +1,212 @@
+{
+  "kind": "실제 보유 자료 검색",
+  "records_imported": 15834,
+  "index_seconds": 2.011239250015933,
+  "search_seconds": 5.0363555410003755,
+  "term_count": 20,
+  "mean_search_seconds": 0.2518177770500188,
+  "api_requests": 0,
+  "active_seconds": null,
+  "results": [
+    {
+      "word": "자외선",
+      "gloss_labels": [],
+      "metadata_rows_shown": 0,
+      "clip_candidate_rows_shown": 0,
+      "external_dictionary": "미확인",
+      "local_video_acquisition": "미확인",
+      "note": "최대 200행 표시. 미일치는 전체 자료의 수어 부재를 뜻하지 않음."
+    },
+    {
+      "word": "적외선",
+      "gloss_labels": [],
+      "metadata_rows_shown": 0,
+      "clip_candidate_rows_shown": 0,
+      "external_dictionary": "미확인",
+      "local_video_acquisition": "미확인",
+      "note": "최대 200행 표시. 미일치는 전체 자료의 수어 부재를 뜻하지 않음."
+    },
+    {
+      "word": "방사선",
+      "gloss_labels": [
+        "방사선"
+      ],
+      "metadata_rows_shown": 41,
+      "clip_candidate_rows_shown": 1,
+      "external_dictionary": "미확인",
+      "local_video_acquisition": "미확인",
+      "note": "최대 200행 표시. 미일치는 전체 자료의 수어 부재를 뜻하지 않음."
+    },
+    {
+      "word": "얼굴",
+      "gloss_labels": [
+        "얼굴1"
+      ],
+      "metadata_rows_shown": 1,
+      "clip_candidate_rows_shown": 1,
+      "external_dictionary": "미확인",
+      "local_video_acquisition": "미확인",
+      "note": "최대 200행 표시. 미일치는 전체 자료의 수어 부재를 뜻하지 않음."
+    },
+    {
+      "word": "안면",
+      "gloss_labels": [],
+      "metadata_rows_shown": 200,
+      "clip_candidate_rows_shown": 0,
+      "external_dictionary": "미확인",
+      "local_video_acquisition": "미확인",
+      "note": "최대 200행 표시. 미일치는 전체 자료의 수어 부재를 뜻하지 않음."
+    },
+    {
+      "word": "목",
+      "gloss_labels": [
+        "목",
+        "목0"
+      ],
+      "metadata_rows_shown": 200,
+      "clip_candidate_rows_shown": 19,
+      "external_dictionary": "미확인",
+      "local_video_acquisition": "미확인",
+      "note": "최대 200행 표시. 미일치는 전체 자료의 수어 부재를 뜻하지 않음."
+    },
+    {
+      "word": "대전",
+      "gloss_labels": [
+        "대전",
+        "대전1",
+        "대전2",
+        "대전3"
+      ],
+      "metadata_rows_shown": 200,
+      "clip_candidate_rows_shown": 200,
+      "external_dictionary": "미확인",
+      "local_video_acquisition": "미확인",
+      "note": "최대 200행 표시. 미일치는 전체 자료의 수어 부재를 뜻하지 않음."
+    },
+    {
+      "word": "정전기",
+      "gloss_labels": [],
+      "metadata_rows_shown": 0,
+      "clip_candidate_rows_shown": 0,
+      "external_dictionary": "미확인",
+      "local_video_acquisition": "미확인",
+      "note": "최대 200행 표시. 미일치는 전체 자료의 수어 부재를 뜻하지 않음."
+    },
+    {
+      "word": "감전",
+      "gloss_labels": [
+        "감전"
+      ],
+      "metadata_rows_shown": 200,
+      "clip_candidate_rows_shown": 181,
+      "external_dictionary": "미확인",
+      "local_video_acquisition": "미확인",
+      "note": "최대 200행 표시. 미일치는 전체 자료의 수어 부재를 뜻하지 않음."
+    },
+    {
+      "word": "절연",
+      "gloss_labels": [],
+      "metadata_rows_shown": 0,
+      "clip_candidate_rows_shown": 0,
+      "external_dictionary": "미확인",
+      "local_video_acquisition": "미확인",
+      "note": "최대 200행 표시. 미일치는 전체 자료의 수어 부재를 뜻하지 않음."
+    },
+    {
+      "word": "접지",
+      "gloss_labels": [],
+      "metadata_rows_shown": 69,
+      "clip_candidate_rows_shown": 0,
+      "external_dictionary": "미확인",
+      "local_video_acquisition": "미확인",
+      "note": "최대 200행 표시. 미일치는 전체 자료의 수어 부재를 뜻하지 않음."
+    },
+    {
+      "word": "보호구",
+      "gloss_labels": [],
+      "metadata_rows_shown": 0,
+      "clip_candidate_rows_shown": 0,
+      "external_dictionary": "미확인",
+      "local_video_acquisition": "미확인",
+      "note": "최대 200행 표시. 미일치는 전체 자료의 수어 부재를 뜻하지 않음."
+    },
+    {
+      "word": "안전모",
+      "gloss_labels": [],
+      "metadata_rows_shown": 0,
+      "clip_candidate_rows_shown": 0,
+      "external_dictionary": "미확인",
+      "local_video_acquisition": "미확인",
+      "note": "최대 200행 표시. 미일치는 전체 자료의 수어 부재를 뜻하지 않음."
+    },
+    {
+      "word": "안전장갑",
+      "gloss_labels": [],
+      "metadata_rows_shown": 0,
+      "clip_candidate_rows_shown": 0,
+      "external_dictionary": "미확인",
+      "local_video_acquisition": "미확인",
+      "note": "최대 200행 표시. 미일치는 전체 자료의 수어 부재를 뜻하지 않음."
+    },
+    {
+      "word": "보안경",
+      "gloss_labels": [],
+      "metadata_rows_shown": 0,
+      "clip_candidate_rows_shown": 0,
+      "external_dictionary": "미확인",
+      "local_video_acquisition": "미확인",
+      "note": "최대 200행 표시. 미일치는 전체 자료의 수어 부재를 뜻하지 않음."
+    },
+    {
+      "word": "유해물질",
+      "gloss_labels": [
+        "유해물질0"
+      ],
+      "metadata_rows_shown": 200,
+      "clip_candidate_rows_shown": 2,
+      "external_dictionary": "미확인",
+      "local_video_acquisition": "미확인",
+      "note": "최대 200행 표시. 미일치는 전체 자료의 수어 부재를 뜻하지 않음."
+    },
+    {
+      "word": "화학물질",
+      "gloss_labels": [
+        "화학물질"
+      ],
+      "metadata_rows_shown": 200,
+      "clip_candidate_rows_shown": 1,
+      "external_dictionary": "미확인",
+      "local_video_acquisition": "미확인",
+      "note": "최대 200행 표시. 미일치는 전체 자료의 수어 부재를 뜻하지 않음."
+    },
+    {
+      "word": "누전",
+      "gloss_labels": [
+        "누전0"
+      ],
+      "metadata_rows_shown": 200,
+      "clip_candidate_rows_shown": 11,
+      "external_dictionary": "미확인",
+      "local_video_acquisition": "미확인",
+      "note": "최대 200행 표시. 미일치는 전체 자료의 수어 부재를 뜻하지 않음."
+    },
+    {
+      "word": "과전류",
+      "gloss_labels": [],
+      "metadata_rows_shown": 0,
+      "clip_candidate_rows_shown": 0,
+      "external_dictionary": "미확인",
+      "local_video_acquisition": "미확인",
+      "note": "최대 200행 표시. 미일치는 전체 자료의 수어 부재를 뜻하지 않음."
+    },
+    {
+      "word": "화상",
+      "gloss_labels": [],
+      "metadata_rows_shown": 0,
+      "clip_candidate_rows_shown": 0,
+      "external_dictionary": "미확인",
+      "local_video_acquisition": "미확인",
+      "note": "최대 200행 표시. 미일치는 전체 자료의 수어 부재를 뜻하지 않음."
+    }
+  ]
+}

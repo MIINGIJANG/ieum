@@ -1,0 +1,56 @@
+[
+  {
+    "url": "https://sldict.korean.go.kr/robots.txt",
+    "checked_at": "2026-11-24T14:14:48.158847+00:00",
+    "http_status": 200,
+    "final_url": "https://sldict.korean.go.kr/robots.txt",
+    "content_type": "text/plain; charset=UTF-8",
+    "body_excerpt": "User-agent: Googlebot\nDisallow: /front/search/\nDisallow: /front/sign/\nDisallow: /front/museum/\nDisallow: /front/board/\nDisallow: /signhand/hand/\n",
+    "bytes": 145
+  },
+  {
+    "url": "https://ksldict.korean.go.kr/robots.txt",
+    "checked_at": "2026-11-24T14:14:48.163886+00:00",
+    "http_status": 404,
+    "final_url": "https://ksldict.korean.go.kr/robots.txt",
+    "content_type": "text/html; charset=iso-8859-1",
+    "body_excerpt": "<<404 error page>>",
+    "bytes": 18
+  },
+  {
+    "url": "https://kli.korean.go.kr/robots.txt",
+    "checked_at": "2026-11-24T14:14:48.166077+00:00",
+    "http_status": 200,
+    "final_url": "https://kli.korean.go.kr/robots.txt",
+    "content_type": "text/plain; charset=UTF-8",
+    "body_excerpt": "User-agent: Googlebot\nDisallow: /corpus/main/requestMain.do\nDisallow: /corpus/request/corpusRegist.do\nDisallow: /corpus/resultRequest/\nDisallow: /corpus/boards/noticeList.do\nDisallow: /benchmark/taskOrdtm/useTaskOrdtmList.do\nDisallow: /benchmark/taskNews/\nDisallow: /benchmark/taskBoardsOrdtm/noticeList.do\n\nUser-agent: *\nAllow: /\nsitemap: https://kli.korean.go.kr/sitemap.xml\n",
+    "bytes": 377
+  },
+  {
+    "url": "https://www.aihub.or.kr/robots.txt",
+    "checked_at": "2026-11-24T14:14:48.143327+00:00",
+    "http_status": 200,
+    "final_url": "https://www.aihub.or.kr/robots.txt",
+    "content_type": null,
+    "body_excerpt": "#_________________________________________________\r\n#     ___       __   __    __   __    __  .______   \r\n#    /   \\     |  | |  |  |  | |  |  |  | |   _  \\  \r\n#   /  ^  \\    |  | |  |__|  | |  |  |  | |  |_)  | \r\n#  /  /_\\  \\   |  | |   __   | |  |  |  | |   _  <  \r\n# /  _____  \\  |  | |  |  |  | |  `--'  | |  |_)  | \r\n#/__/     \\__\\ |__| |__|  |__|  \\______/  |______/  \r\n#_________________________________________________\r\n\r\nUser-agent: Googlebot\r\n\r\nDisallow: /list.do\r\nDisallow: /partcptnmlrd/inqry\r\n\r\n\r\n\r\n\r\n",
+    "bytes": 514
+  },
+  {
+    "url": "https://sldict.korean.go.kr/front/main/copyRightPolicy.do",
+    "checked_at": "2026-11-24T14:14:48.269789+00:00",
+    "http_status": 200,
+    "final_url": "https://sldict.korean.go.kr/front/main/copyRightPolicy.do",
+    "content_type": "text/html; charset=UTF-8",
+    "body_excerpt": "",
+    "bytes": 28548
+  },
+  {
+    "url": "https://ksldict.korean.go.kr/kslserv/search/korean.do",
+    "checked_at": "2026-11-24T14:14:48.258459+00:00",
+    "http_status": 200,
+    "final_url": "https://ksldict.korean.go.kr/kslserv/search/korean.do",
+    "content_type": "text/html;charset=UTF-8",
+    "body_excerpt": "",
+    "bytes": 11801
+  }
+]
