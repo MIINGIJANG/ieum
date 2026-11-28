@@ -19,7 +19,8 @@ from ksl_manager.coordinate_export import (
 )
 from ksl_manager.db import connect, rows
 from ksl_manager.delivery import delivery_archive, delivery_files, json_bytes
-from ksl_manager.documents import SEED_WORDS, candidates, input_rows
+from ksl_manager.document_batch import collect_document_candidates
+from ksl_manager.documents import SEED_WORDS, input_rows
 from ksl_manager.job_results import read_json as read_job_json
 from ksl_manager.job_results import result_items, review_bundle
 from ksl_manager.llm import enabled
@@ -229,19 +230,49 @@ def search_page(con):
         if st.button("입력 후보 읽기"):
 
             def read():
-                result = input_rows(upload.name, upload.getvalue()) if upload else []
-                texts = [r for r in result if not r["word"]]
-                terms = [r for r in result if r["word"]]
-                for r in texts:
-                    terms.extend(candidates(con, r["sentence"], r["source"], use_llm))
+                records = input_rows(upload.name, upload.getvalue()) if upload else []
                 if manual:
-                    terms.extend(candidates(con, manual, doc_source, use_llm))
-                return terms
+                    records.append({"word": "", "sentence": manual, "source": doc_source})
+                bar = st.progress(0.0, text="문서를 읽는 중입니다.")
 
-            st.session_state["input_candidates"] = perform(read) or []
-            st.session_state["candidate_revision"] = (
-                st.session_state.get("candidate_revision", 0) + 1
+                def update_progress(done, total, source):
+                    bar.progress(
+                        done / total if total else 1.0,
+                        text=f"문서 구간 {done}/{total} 처리 · {source}",
+                    )
+
+                try:
+                    result = collect_document_candidates(
+                        con, records, use_llm, DATA / "document_cache", update_progress
+                    )
+                    st.session_state["input_candidates"] = result["candidates"]
+                    st.session_state["input_candidate_notices"] = result["notices"]
+                    st.session_state["input_candidate_stats"] = result["stats"]
+                    return result["candidates"]
+                finally:
+                    bar.empty()
+
+            with st.spinner("문서에서 핵심어 후보를 읽고 원문과 대조하는 중입니다."):
+                loaded = perform(read)
+            if loaded is not None:
+                st.session_state["candidate_revision"] = (
+                    st.session_state.get("candidate_revision", 0) + 1
+                )
+        stats = st.session_state.get("input_candidate_stats")
+        if stats:
+            st.caption(
+                f"처리 완료 {stats['completed']}/{stats['total']}구간 · "
+                f"재사용 {stats['cache_hits']}회 · 미완료 {stats['failed']}구간. "
+                "다시 실행하면 완료한 구간은 재사용합니다."
             )
+        notices = st.session_state.get("input_candidate_notices", [])
+        if notices:
+            st.warning(
+                "원문에서 확인되는 후보만 표시합니다. 미완료 구간은 다시 시도할 수 있습니다."
+            )
+            with st.expander(f"처리 안내 {len(notices)}건"):
+                for notice in notices:
+                    st.write(notice)
         candidate_rows = st.session_state.get("input_candidates", [])
         if candidate_rows:
             frame = pd.DataFrame(candidate_rows)

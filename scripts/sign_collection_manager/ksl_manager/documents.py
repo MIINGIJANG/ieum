@@ -71,7 +71,20 @@ def input_rows(name, data):
     raise ValueError("CSV, XLSX, TXT, PDF를 선택하세요.")
 
 
-def candidates(con, text, source, use_llm=False):
+def original_excerpt(text, quote):
+    """공백 차이만 허용하고 반환 문장은 원문에서 직접 잘라낸다."""
+    if quote in text:
+        return quote
+    positions = [m.start() for m in re.finditer(r"\S", text)]
+    compact = "".join(text[i] for i in positions)
+    target = re.sub(r"\s+", "", quote)
+    start = compact.find(target) if target else -1
+    if start < 0:
+        return None
+    return text[positions[start] : positions[start + len(target) - 1] + 1]
+
+
+def candidates(con, text, source, use_llm=False, diagnostics=None):
     if not text.strip():
         return []
     if len(text) > 30000:
@@ -92,16 +105,37 @@ def candidates(con, text, source, use_llm=False):
         result = response.get("terms", [])
         if not isinstance(result, list) or len(result) > 100:
             raise ValueError("핵심어 출력 형식 오류")
+        valid = []
+        rejected = 0
         for r in result:
             if not isinstance(r, dict) or not all(
                 isinstance(r.get(k), str) and r[k].strip() for k in ["word", "sense", "sentence"]
             ):
-                raise ValueError("핵심어 필수 정보 누락")
-            if r["sentence"] not in text or r["word"] not in r["sentence"]:
+                rejected += 1
+                continue
+            sentence = original_excerpt(text, r["sentence"])
+            if sentence is None or re.sub(r"\s+", "", r["word"]) not in re.sub(
+                r"\s+", "", sentence
+            ):
+                rejected += 1
+                continue
+            valid.append(
+                {
+                    **r,
+                    "sentence": sentence,
+                    "source": source,
+                    "method": "AI 추출 후보 — 의미 확인 필요",
+                }
+            )
+        if rejected:
+            message = f"{source}: 원문에서 확인되지 않거나 형식이 잘못된 후보 {rejected}개 제외"
+            if diagnostics is not None:
+                diagnostics.append(message)
+            elif not valid:
                 raise ValueError(
-                    "원문에 없는 단어나 문장이 생성됐습니다. 결과를 저장하지 않았습니다."
+                    "원문에서 확인되는 핵심어 후보가 없습니다. 문장을 바꾸어 생성한 후보는 제외했습니다."
                 )
-        return [{**r, "source": source, "method": "AI 추출 후보 — 의미 확인 필요"} for r in result]
+        return valid
     known = {r[0] for r in con.execute("SELECT word FROM terms")} | set(SEED_WORDS)
     output = []
     for sentence in re.split(r"(?<=[.!?。])\s+|\n+", text):
